@@ -1,0 +1,22 @@
+{
+  "extends": "@walform/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "target": "ES2022",
+    "allowJs": true,
+    "noEmit": true,
+    "strict": false,
+    "noUncheckedIndexedAccess": false,
+    "skipLibCheck": true,
+    "rootDir": ".",
+    "baseUrl": "./",
+    "paths": {
+      "@lib/*": ["./lib/src/*"],
+      "@templates/*": ["./html_templates/*"]
+    },
+    "types": ["./lib/src/custom.d.ts", "@types/bun"]
+  },
+  "include": ["index.ts", "custom_logger.ts", "src/**/*", "lib/src/**/*", "html_templates/**/*"],
+  "exclude": ["node_modules", "dist", "lib/tests"]
+}

@@ -1,0 +1,8 @@
+build/*
+traces/*
+.trace
+.coverage*
+Pub.*.toml
+package_summaries
+.env.*
+!.env.example

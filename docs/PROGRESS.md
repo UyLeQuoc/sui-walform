@@ -1,0 +1,190 @@
+# Progress
+
+**Snapshot (as of 2026-05-07, PRD v2.0):** monorepo + form authoring + 8 Move modules deployed + Marketplace (multi-buyer + legacy 1-of-1 fallback) + dApp Kit/Seal wired + 4 access modes (Public/Private/Token/Paid) end-to-end + treasury withdraw + sealed schemas + Walrus cover/file uploads via SDK + upload-relay + AI generate (BYOK OpenRouter, free model default) + Mode B browser-side Walrus deploy + creator dashboard with stats/aggregates. **Every Sui tx is signed and paid by the user's connected wallet** — app-level transaction sponsorship has been removed. Typecheck + lint + Move tests all green.
+
+**Live testnet ids (post fresh re-publish 2026-04-26):**
+- `packageId` / `originalPackageId` = `0x2d8b918defc43b3b72afe63364f9b974c636b5820082d9a64b031e5e6d977289`
+- Note: **no longer stable across upgrades** — `c83d693` changed `allowlist::create` signature → `contracts:upgrade` rejected with `IncompatibleUpgrade` → forced fresh `contracts:publish`. All Seal-encrypted data from previous packageIds is now orphaned. Future upgrades require either reverting signature changes or accepting another fresh publish.
+
+**Nearest demo-able gate:** every demo scene works end-to-end on testnet today, including Mode B per-form Walrus Site deploy. Mode A (`/f/[id]` from the builder) and Mode B (`<base36>.wal.app/#/f/{formId}`) both render the form, accept submissions, encrypt via Seal, decrypt for creator/submitter — same code path through `<FormSubmissionView>`. Only operational items remain (Vercel deploy, demo video, smoke pass on 3 wallet types).
+
+---
+
+## Done
+
+| # | Work | PRD reference | Notes |
+| --- | --- | --- | --- |
+| 1 | Monorepo scaffold: Turborepo + Bun, 4 workspaces | §5.3, §5.4 | `apps/{builder,renderer,portal,contracts}` + `packages/core`. `bun install`, `bun run dev`, `bun run typecheck`, `bun run build` all green. |
+| 2 | `apps/builder` — Next.js 15, standard build, Vercel-bound | §5.1 | Mode A renderer at `/f/[id]`, dashboard, results, receipt. `/api/walrus/upload` is the sole server route. |
+| 3 | `apps/renderer` — Next.js 15 with `output: 'export'` | §5.1, §5.2 | Hash-routing shell at `#/f/{id}`. Placeholder content; waits on shared `<FormPreview>` + on-chain fetch. |
+| 4 | `apps/portal` — vendored + flattened from `MystenLabs/walrus-sites/portal` | §5.1, §7.5 | Cloudflare Worker flavor only. Serves :8080 locally. `common/` + `worker/` flattened into portal root (see `apps/portal/UPSTREAM.md`). `.env.local` pointed at Sui + Walrus testnet. Verified against live testnet site `0xe62b…ab18` via `{base36}.localhost:8080`. |
+| 5 | `apps/contracts` — Move 2024 package skeleton | §8.1 | 8 module stubs (`form`, `form_owner_cap`, `allowlist`, `submission`, `template`, `seal_policies`, `payment`, `events`). |
+| 6 | `packages/core` — single shared library | §5.3 | shadcn primitives (56), field renderers (18), `<FormPreview>` (schema-as-prop), Zod schema-gen, types, Sui RPC wrapper, Seal helpers, Tailwind preset. Zod 4, Tailwind 4. |
+| 7 | Form authoring UI migrated from `references/form-builder/` | §11 | Dashboard `/` + editor `/forms/[id]` + preview `/forms/[id]/preview`. Drag-drop canvas, block palette, inspector, undo/redo, JSON/TS/Zod export, IndexedDB drafts. |
+| 8 | Env file layout | §2 | Per-app `.env.example` (builder, renderer, portal, contracts). |
+| 9 | Decision log locked in PRD | Appendix A | v0.1 → v0.9. |
+| 10 | Move contracts implemented (8 modules, Seal whitelist, Kiosk + 10% royalty) | §8 | Initial 33 unit tests. |
+| 11 | dApp Kit + Enoki zkLogin + Seal wired (PRD v0.9) | §6, §9.3 | `SuiProviders` mounts QueryClient + `<SuiClientProvider>` + `EnokiRegistrar` (Google sign-in only) + `<WalletProvider>`. Custom shadcn wallet UI under `sui/wallet-ui/` (`<WalletConnectModal>`, `<WalletChip>`, `<WalletDropdown>` address+Copy+Disconnect, `<WalletButton>`, `<ConnectedIndicator>`). Seal helpers in `crypto/{seal-client,seal-identity,seal-session,seal-submission,seal-schema}.ts`. |
+| 12 | Publish UX + /forms reorg (PRD v0.9) | §4, §7.2 | `<PublishDialog>` two tiles: Publish on-chain (Public/Private + max_submissions + closes_at) OR Publish to Marketplace (Free shared / Paid listing). `<PublishFormButton>` per `FormCard`. Drafts (IDB) + My Forms (chain) + Marketplace (chain) tabs. |
+| 13 | Env config for Enoki zkLogin + Seal + Walrus admin payer | §6 | `apps/builder/.env.local` holds `NEXT_PUBLIC_ENOKI_PUBLIC_KEY`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_ENOKI_REDIRECT_URL`, `WALRUS_ADMIN_SECRET_KEY` (server-side WAL payer for `/api/walrus/upload` only — does not sign Sui txs). `.env.example` updated with feature flags. |
+| 14 | Contracts published + 2 upgrades on testnet | §8.1 | `originalPackageId = 0xc8ca8f47…47d67` (stable, Seal namespace). Current `packageId = 0x95d08ac2…a26726`. `deployed.json` tracks history (previousPackageId, lastUpgradeTxDigest). All 4 ids mirrored into `apps/{builder,renderer}/.env.local`. |
+| 15 | Seal v2 schema policies — deployed + client helpers wired | §9.3 | `seal_policies::seal_approve_read_form_schema(id, form, allowlist, ctx)` (owner or allowlist member can decrypt) + `seal_approve_read_template_schema(id, template, ctx)` (only template creator). 7 new tests (40/40 total pass). Client helpers: `sealEncryptSchema`, `sealDecryptFormSchema`, `sealDecryptTemplateSchema`. Feature flag `NEXT_PUBLIC_ENABLE_SEALED_SCHEMA` available; **publish flow does NOT yet encrypt schemas** — ready in helpers but not invoked. |
+| 16 | Marketplace clone/buy PTB builders | §7.2 | `sui/tx/clone-template.ts` + `sui/tx/clone-paid.ts` exposes `buildCloneFreeTx` + `buildPurchaseTemplateTx` (legacy Kiosk) + `buildPublishListingTx` + `buildClonePaidTx` + `computeRoyaltyMist`. |
+| 17 | **Multi-buyer paid templates** (PRD v0.9) | §7.2 | `template::TemplateListing` struct + `create_listing`/`create_listing_and_share` + `clone_paid`/`clone_paid_and_share` + `update_listing_price` shipped on-chain. Templates now stay alive after sale (clone_count++); N buyers can purchase. Legacy 1-of-1 Kiosk path kept as fallback. UI badges: Free / For sale / 1-of-1 / Not listed. |
+| 18 | **Marketplace browse + buy/clone tab** | §7.2 | Public `Marketplace` tab next to `Drafts`/`My Forms`. `useMarketplaceTemplates()` queries `TemplatePublished` events → `multiGetObjects` → wrapper-to-Kiosk lookup. `useTemplateListing(templateId)` resolves price for paid listings on-demand via `queryTransactionBlocks` filtered by `create_listing_and_share`. `useKioskListingPrice(kioskId, templateId)` for legacy Kiosk listings. Buy + Clone Free both signed by the buyer's wallet end-to-end. |
+| 19 | **My Forms fetched from chain (not IDB)** | §4, §7.2 | Drafts tab = IDB only; My Forms tab = `useOnChainForms()` queries owned `FormOwnerCap` + `FormTemplate` directly. Sub-tabs Running/Ended/Marketplace classified from chain stats + closed flag. Survives device/browser switches with the same wallet. |
+| 20 | **Auto-refresh after on-chain mutations** | §6 | `useInvalidateChainQueries()` hook waits for `digest` finality then invalidates dApp Kit query cache by `[network]` key prefix. Wired to publish/clone/buy. UI updates immediately without reload. |
+| 21 | **Drafts auto-clear on publish** | §4 | Successful publish → `formDb.delete(formId)` → `walform:forms-changed` event → `useForms()` re-loads. Single source of truth: Drafts ↔ IDB, My Forms ↔ chain, no overlap. |
+| 22 | **Suivision explorer links** | §6 | `suivisionUrl(network, kind, id)` helper (testnet/mainnet/devnet). Object + tx links on every on-chain form/template card. |
+| 23 | ~~Sponsor allowlist hardening~~ | — | Superseded by row #46 (sponsor transport removed in v2.0). |
+| 24 | **Token-gated + paid access modes (PRD v1.1 Sprint 2 #6)** | §7.2 | `<PublishDialog>` exposes 4 access tiles (Public/Private/Token/Paid). Token branch: required coin type + min balance, off-chain `getBalance` precheck on submit page. Paid branch: per-submit fee in MIST → two-step publish (form publish + `payment::create_and_share` follow-up tx) so the FormOwnerCap is available. Submit page resolves `FormTreasury` via `useFormTreasury` (queryTransactionBlocks index pattern), splits `Coin<SUI>` from user-owned coin, calls `submission::submit_paid_and_share`. |
+| 25 | **Treasury withdraw UI (creator)** | §7.2 | `WithdrawTreasuryButton` on Paid form cards in My Forms · On-chain. Resolves treasury via `useFormTreasury`, calls `payment::withdraw_all` + `transferObjects([coin], sender)` in a single PTB signed by the creator's wallet. Disabled when balance == 0 or treasury missing. |
+| 26 | **Cover image uploads via Walrus SDK (Sprint 2 #8)** | §7.4 | Server-side `@mysten/walrus` SDK at `apps/builder/app/api/walrus/upload/route.ts` — `WalrusClient.writeBlob` signed by an operator-controlled keypair (`WALRUS_ADMIN_SECRET_KEY`) so creators don't need to hold WAL. Browser POSTs raw bytes to `/api/walrus/upload` via `packages/core/src/walrus/upload.ts :: putBlob`. `<CoverImageUploader>` writes the cropped data URL optimistically, then uploads in the background and swaps the data URL for the aggregator URL — falls back to the data URL if upload fails. Aggregator URL configurable via `NEXT_PUBLIC_WALRUS_AGGREGATOR_URL`. |
+| 27 | **File upload field via Walrus (Sprint 2 #9)** | §7.4 | New `'file'` `FieldType` + `<FileField>` renderer that uploads on file selection via the same `/api/walrus/upload` route. Form value is the aggregator URL string (JSON-serializable, lands inside the encrypted submission body). 4 MiB cap matches the server route. Block palette + slash menu + field-edit preview + results download links wired. On-chain `submission.file_blob_ids` stays empty — the URL inside ciphertext is enough for v1; per-file `vector<vector<u8>>` mirroring deferred. |
+| 28 | **AI generate-from-prompt (Sprint 2 #10)** | §7.3 | `<AiGenerateDialog>` from FormBuilder toolbar. BYOK: OpenRouter key persisted in localStorage. `generateObject` from `ai` SDK (v4) → `@ai-sdk/openai` provider pointed at `https://openrouter.ai/api/v1` with `compatibility: 'compatible'`. Default model `google/gemini-2.0-flash-exp:free` (free OpenRouter tier). Output validated against a tight Zod schema (17 supported field types). `replaceSchema` action on the form-builder store applies the result while preserving theme + cover. Example prompt chips for one-click testing. |
+| 29 | **Mode B static shell scaffolded (Sprint 2 #7)** | §5.4, §6 | New `packages/walform-site/` Next.js app with `output: 'export'` — single hash-routed page (`#/f/{formId}`) that mounts `<FormSubmissionView>` from `@walform/core`. CORS on `/api/walrus/upload` allow-lists `*.wal.app` so the Walrus-hosted shell can call back into the builder. |
+| 30 | **Sealed-schema activation (Sprint 1 #3)** | §9.3 | Private form publish goes two-step when `NEXT_PUBLIC_ENABLE_SEALED_SCHEMA=true`: form publishes with a 1-byte placeholder, then `form::update_schema` overwrites with `sealEncryptSchema(formObjectId)` ciphertext. Submit page detects ciphertext (private + parse failed + non-trivial bytes) and gates with a `SealedSchemaGate` panel — connect → SessionKey personal-message sign → `sealDecryptFormSchema` → splice into the existing submit flow. Marketplace template encryption skipped (contract policy restricts decrypt to template creator only). |
+| 31 | **Walrus publish script for walform-site (legacy)** | §5.4, §7.4 | `packages/walform-site/scripts/publish-to-walrus.ts` (Bun). Walks `out/` recursively, uploads all files in **one Walrus Quilt** via `WalrusClient.writeFiles` signed by `WALRUS_ADMIN_SECRET_KEY` (single tx + one storage reservation, vs. N for per-file `writeBlob`). Kept for admin-paid bundle uploads; the default Mode B flow is now browser-side (row #42). |
+| 32 | **Treasury retry button on paid form cards** | §7.2 | When the publish-time `payment::create_and_share` follow-up fails, `WithdrawTreasuryButton` now exposes a "Create treasury" button (instead of just "Treasury missing") that re-fires the same PTB. Closes the documented "publishable-but-not-submittable" gap. |
+| 33 | **Creator dashboard polish — stats + aggregate charts** | §7.2 | Results page now leads with 4 summary cards (total / decrypted X/Y · pct% / unique submitters / latest "Xm ago"). Below the action bar, an `AggregateCharts` card renders a small recharts `BarChart` per choice/rating/scale field — `single_choice`, `multiple_choice`, `select`, `yes_no`, `rating`, `linear_scale` — bucketed by option label. Empty buckets are pre-seeded from the field definition so distributions stay readable across submissions. |
+| 34 | **AI generate hardening for free OpenRouter models** | §7.3 | Switched from `generateObject` (relies on tool calls / OpenAI JSON mode that free models don't reliably support) to `generateText` + manual JSON parse + Zod validate. Robust extractor strips ` ```json ``` ` fences and trims to first `{`…last `}` window. Default model now `minimax/minimax-m2.5:free`. Errors surface first 200 chars of model output for debug. |
+| 35 | ~~Sponsor allowlist gap fixed~~ | — | Superseded by row #46 (sponsor transport removed in v2.0). |
+| 36 | **Cover image flow refactor: draft = base64, publish = Walrus** | §7.4 | Drafts hold cover as `data:` URL in IDB (fast, offline, no network on edit). At publish time, `runPublish` decodes the data URL → `putBlob` → swap schema.coverImage to aggregator URL → persist back to IDB (so retry skips re-upload) → build create-form tx with the small URL string. Optimistic background upload removed — single source of truth. Closes "schema bytes blow past 100 KB cap when cover is base64" gap. |
+| 37 | **WASM resolution + Walrus upload relay** | §7.4 | Server-side `@mysten/walrus` SDK was failing with `ENOENT /ROOT/...walrus_wasm_bg.wasm` (Turbopack rewrites `import.meta.url` to a placeholder). Fix: `serverExternalPackages: ['@mysten/walrus', '@mysten/walrus-wasm']` in `next.config.ts` so Node `require` resolves the WASM via Bun's `.bun/` paths. Upload route now configures `WalrusClient.uploadRelay` pointing at public testnet `https://upload-relay.testnet.walrus.space` with `sendTip: { max: 1_000_000 }` (1M MIST cap) — SDK auto-discovers tip strategy via `/v1/tip-config`. Override via `WALRUS_UPLOAD_RELAY_HOST` + `WALRUS_UPLOAD_RELAY_TIP_MAX_MIST`. |
+| 38 | **Storage cost preview in PublishDialog** | §7.4 | New `useStorageCost(bytes, epochs)` hook (browser-side `WalrusClient.storageCost` via React Query, 5-min staleTime). PublishDialog shows a row above the Publish button when the form has a cover image: `Cover image · X.X KB → Walrus  N.NNNNN WAL (5 epochs)` with a breakdown of `storage` + `write` cost in FROST. `formatWal(frost)` helper handles 1 WAL = 1e9 FROST conversion + trim trailing zeros. |
+| 39 | **Mode B Walrus Sites integration (Sprint 2 #7 finished)** | §5.4, §6 | Full per-form Walrus Site deploy. Three pieces shipped: (1) per-file SHA-256 → u256 LE decimal (`blob_hash` for `site::new_resource`) computed at deploy time. (2) New `buildCreateWalrusSiteTx` (`packages/core/src/sui/tx/walrus-site.ts`) — single PTB calls `metadata::new_metadata` + `site::new_site` + per-file (`new_range_option` + `new_resource` + headers + `add_resource`) + `transferObjects([site], creator)`. (3) `<DeployToWalrusSiteButton>` on every On-chain form card: build manifest in browser → run site-create tx → extract Site object id → call `form::set_site_object_id` → build `https://<base36(siteId)>.wal.app/#/f/{formId}` URL. `NEXT_PUBLIC_WALRUS_SITE_PACKAGE_ID` defaults to canonical testnet `0x22b8c1…8dcb`. Base36 encoding matches the portal's algorithm. |
+| 40 | **Walrus Site manage dialog — edit metadata** | §5.4 | After deploy, the form card branches: instead of "Deploy" it shows "Open on Walrus" + "Manage site". `<WalrusSiteManageDialog>` reads the live Site object via `useFormSite(siteObjectId)` (parses `name` + 5 metadata fields), pre-fills the form, and on Save runs a 2-call PTB (`metadata::new_metadata` + `site::update_metadata`) signed by the creator's wallet to overwrite all metadata atomically. URL + site object id are copy-able from the dialog header. `useOnChainForms` now surfaces `siteObjectId` per-form so the card knows whether to render Deploy vs Manage. |
+| 41 | **Walrus Site flow verification: blob id format + ownership model** | §5.4 | Two latent bugs caught during verification: (1) **blob id format mismatch** — `WalrusClient.writeFiles` returns `blobId` as URL-safe base64; Walrus Sites Move expects `blob_id: u256` decimal. Fix: import `blobIdToInt` from `@mysten/walrus`, compute decimal once, stash as `quiltBlobIdU256`. (2) **shared Site lets anyone edit metadata** — `update_metadata(&mut Site)` is `public` with no auth. Fix: deploy PTB now `transferObjects([site], recipient)` so only the form creator owns the Site → only they can call `update_metadata`. Portal still serves owned Sites fine. |
+| 42 | **Mode B browser-side Walrus push** | §5.4 | (1) New `scripts/mirror-bundle.ts` (Bun) — copies `out/` into `apps/builder/public/walform-site-bundle/` + writes a lightweight `index.json` ({path, contentType, sizeBytes} only, no blob ids). Wired as `bundle:mirror`. (2) New `WalrusWalletSigner` (`packages/core/src/sui/wallet-signer.ts`) — extends `@mysten/sui` `Signer`, only implements `toSuiAddress` + `signAndExecuteTransaction` (delegates to dApp Kit's `useSignAndExecuteTransaction`); `sign` / `getKeyScheme` / `getPublicKey` throw because the SDK's `writeFiles` only calls the two we implement. (3) `<DeployToWalrusSiteButton>` fetches `/walform-site-bundle/index.json` → fetches each file → SHA-256 via Web Crypto → `WalrusClient.writeFiles({signer: walletSigner, epochs, deletable: false})` with upload-relay tip cap → composes manifest in memory → site PTB (signed by user's wallet) + form mirror (signed by user's wallet). User: 1 wallet popup for the Walrus registration tx (pays WAL + ≤1M MIST relay tip), 1–2 wallet popups for the Sui txs. |
+| 43 | **Quilt patch internal id header format fix** | §5.4 | Portal's `QuiltPatch.derive_id()` reads the `x-wal-quilt-patch-internal-id` resource header as a 5-byte hex string (10 chars) — `version_byte + startIdx_LE + endIdx_LE`. Our `quiltPatchInternalHex(fullPatchIdBase64)` helper decodes base64url → slices bytes[32..37] → hex-encodes. |
+| 44 | **Robust tx propagation wait in WalrusWalletSigner** | §5.4 | Wallets broadcast via their own RPC; our fullnode lags. `waitForTxIndexed` helper polls our fullnode AND Mysten's public testnet RPC in sequence — relays trust the public node, so once it sees the tx the relay accepts the upload. |
+| 45 | **Walrus Site PTB parity with upstream site-builder** | §5.4 | (1) Always add `content-encoding: identity` per resource. (2) `x-wal-quilt-patch-internal-id` value is `"0x" + 10 hex chars`. (3) Hardcoded canonical Walrus Sites testnet packageId fallback so a missing/stale env doesn't silently route deploys to the older package. |
+| 46 | **Removed app-level transaction sponsorship (PRD v2.0)** | §7.1 | Pivoted from a 3-tier sponsor ladder (Enoki → admin keypair → user wallet) to user-paid every time. Deleted `/api/sponsor` + `/api/sponsor/execute` + sponsor allowlist + admin-sponsor + `SponsorTarget` union. Replaced with a single `useExecuteTransaction` hook (`packages/core/src/sui/use-execute-transaction.ts`) wrapping dApp Kit's `useSignAndExecuteTransaction` with a pinned `chain: 'sui:${network}'`. Migrated callers: `usePublishForm`, `useFormSubmission`, `useTreasuryActions`, `useCloseForm`, `useTemplatePurchase`. Marketplace flows (clone-free + clone-paid + legacy Kiosk purchase) likewise signed and paid by the buyer's wallet. Renamed `SPONSOR_ADMIN_SECRET_KEY` → `WALRUS_ADMIN_SECRET_KEY` since the server-side keypair now strictly pays Walrus storage for `/api/walrus/upload` (cover images + file attachments). Enoki is retained only for `registerEnokiWallets` (Google sign-in). |
+| 43 | **Quilt patch internal id header format fix** | §5.4 | Discovered after first end-to-end deploy: portal's `QuiltPatch.derive_id()` reads the `x-wal-quilt-patch-internal-id` resource header as a **5-byte hex string** (10 chars) — `version_byte + startIdx_LE + endIdx_LE` — via `DataView`. We were storing the SDK's full 37-byte base64url patch id (~50 chars) → portal `hexToBuffer()` parsed base64 chars as hex → garbage indices → resource resolution failed. Fix: new `quiltPatchInternalHex(fullPatchIdBase64)` helper (also exposed in publish-to-walrus.ts) decodes base64url → slices bytes[32..37] → hex-encodes. Manifest now carries both `patchId` (full base64, for aggregator `/by-quilt-patch-id/{patchId}` URLs) and `quiltPatchInternalIdHex` (10-char hex, for the on-chain header). Re-deploy any Sites created before this fix — their on-chain Resources have garbage internal ids. |
+| 44 | **Robust tx propagation wait in WalrusWalletSigner** | §5.4 | Wallets broadcast via their own RPC; our fullnode lags a few hundred ms. dApp Kit's `useSignAndExecuteTransaction` returns digest immediately on broadcast, then our adapter calls `client.core.waitForTransaction({digest})` — which sometimes errors `Could not find the referenced transaction [TransactionDigest(…)]` before propagation completes. Fix: new `waitForTxIndexed` helper polls with backoff (250ms → 3s steps), 60s total timeout. Initial version only waited on our local fullnode but the **Walrus upload-relay** (which independently queries chain to verify tip payment) ran on a different RPC and the same error surfaced from the relay's side. Updated helper now polls our fullnode AND Mysten's public testnet RPC (`fullnode.testnet.sui.io`) in sequence — relays trust the public node, so once it sees the tx the relay accepts the upload. |
+| 45 | **Walrus Site PTB parity with upstream site-builder** | §5.4 | Researched canonical `MystenLabs/walrus-sites` site-builder Rust source. Two gaps + one safety: (1) Upstream **always** adds `content-encoding: identity` per resource (`resource.rs` L442-448) — added to our PTB. (2) `x-wal-quilt-patch-internal-id` value is `"0x" + 10 hex chars` (`quilts.rs` L102-123) — added the `0x` prefix to match byte-for-byte (portal accepts either, but matching upstream removes a class of "is the format right?" debugging). (3) Hardcoded canonical Walrus Sites testnet packageId fallback `0x22b8c1…8dcb` so a missing/stale `NEXT_PUBLIC_WALRUS_SITE_PACKAGE_ID` env doesn't silently route deploys to the older `0xf99aee…` package. Verified Site object DFs are populated correctly (`suix_getDynamicFields` on a deployed site returns N `Resource`-typed children keyed by `ResourcePath{path}`). Confirmed PTB shape: metadata → new_site → per-file (range_option + new_resource + 3× add_header + add_resource) → transferObjects. No `create_routes`/`create_redirects` for a routes-less site (matches upstream skip-when-empty). |
+
+---
+
+## Wired vs stubbed
+
+| Surface | State | Next action (PRD ref) |
+| --- | --- | --- |
+| Monorepo build loop | ✅ wired | — |
+| Builder UI (create / edit / preview / IDB save) | ✅ wired | — |
+| Move contracts | ✅ deployed (testnet, 2 upgrades) | Maintenance — keep `originalPackageId` stable. |
+| User-paid tx transport (`useExecuteTransaction`) | ✅ wired | Wraps `useSignAndExecuteTransaction` from dApp Kit. Every WalForm Sui tx flows through this. |
+| `/api/walrus/upload` (cover + file uploads) | ✅ wired | Sole server route. Pays Walrus storage from `WALRUS_ADMIN_SECRET_KEY`; does not sign Sui txs. |
+| dApp Kit + Enoki zkLogin sign-in | ✅ wired | — |
+| Custom wallet UI | ✅ wired | — |
+| Publish UX (on-chain + marketplace) | ✅ wired | Sealed-schema encryption at publish time activates when `NEXT_PUBLIC_ENABLE_SEALED_SCHEMA=true` for Private forms. |
+| `/forms` Drafts / My Forms / Marketplace tabs | ✅ wired | — |
+| Marketplace browse + buy/clone | ✅ wired | Buyer's wallet signs + pays for clone-free, clone-paid, and legacy Kiosk purchase flows. |
+| Seal helpers (submission + schema) | ✅ wired | — |
+| Auto-refresh after on-chain mutations | ✅ wired | — |
+| **`/f/[id]` built-in submission page** (Mode A) | ✅ wired | All four access modes end-to-end. |
+| **Results dashboard (creator decrypt)** | ✅ wired | List `Submission` objects, Seal whitelist decrypt UI, table + CSV export, aggregate charts. |
+| Form lifecycle on My Forms cards (close, share link, view responses) | ✅ wired | — |
+| Token-gated + paid access modes | ✅ wired (Sprint 2 #6) | — |
+| Creator treasury withdraw | ✅ wired | — |
+| Walrus uploads | ✅ wired | Cover image + FILE_UPLOAD field both upload to Walrus via SDK on the server. Submission body still stays inline in Sui (just a URL is stored per file). |
+| Mode B Walrus-Site per-form deploy | ✅ wired (browser-side) | Static shell + bundle mirror + browser-side Walrus push + per-form Site object PTB + manage dialog. User wallet signs Walrus registration AND the Sui Site PTB. Resolves at `<base36(siteId)>.wal.app/#/f/{formId}`. |
+| AI "generate form from prompt" | ✅ wired (Sprint 2 #10) | BYOK OpenRouter key in localStorage, `generateObject` against `openai/gpt-4o-mini` by default. |
+| Theme editor + thank-you-page | ✅ wired (Sprint 2 #11) | Theme via `FormSettingsPanel`. Thank-you-page customization deferred. |
+| Storage cost preview at publish | ✅ wired | `useStorageCost` browser hook + WAL row in `PublishDialog` when cover present. |
+| Walrus upload-relay routing | ✅ wired | Public testnet relay `upload-relay.testnet.walrus.space` with auto-discovered tip (max 1M MIST). |
+
+---
+
+## Next up — ordered queue (Sprint 1, demo-critical)
+
+Updated 2026-04-26. **Sprint 1 is shipped end-to-end** for the demo loop (publish, submit, results, receipt, close, share link, marketplace browse/clone/buy). Remaining work is contract upgrade + sealed-schema activation + Token/Paid access modes + Mode B static shell.
+
+### 0. **USER ACTION** — upgrade contracts to v1.1 (`AllowlistCreated` event + by-value publish)
+
+```bash
+bun run contracts:upgrade
+# Then mirror the new packageId from apps/contracts/deployed.json into:
+#   apps/builder/.env.local :: NEXT_PUBLIC_PACKAGE_ID
+# originalPackageId stays the same (no env change needed).
+```
+
+Until this runs, the new publish PTB calls `form::create_form` + `allowlist::create + add_many + share` against the existing testnet code that already has those entry points (no breaking change). The only NEW behaviour the upgrade unlocks is the `AllowlistCreated` event so `useFormAllowlist` can resolve allowlists via event index. Pre-upgrade, Private forms publish but `useFormAllowlist` returns null and the submit page falls back to "no allowlist found, re-publish" message — Public forms keep working via the global throwaway.
+
+### 1. ~~`/f/[id]` Mode A submit page~~ ✅ done (Public + Private)
+
+### 2. ~~Results dashboard + Submitter Receipt~~ ✅ done
+
+**Why next:** demo Scenes 5 ("creator views results") + 6 ("submitter receipt"). Without it, the encrypted-submission story has nothing visible to the creator/respondent.
+
+- `/forms/[id]/results` route in builder. Tab on the existing form editor or a new top-level page.
+- `useFormSubmissions(formObjectId)` hook — `client.queryEvents({ MoveEventType: '${origPkg}::events::SubmissionCreated' })` filtered by form_id, then `multiGetObjects` to fetch `Submission` objects (ciphertext inline in `encrypted_body`).
+- One-time per session: prompt user to sign Seal SessionKey via `useSignPersonalMessage` → cache via React Query.
+- For each submission row: call `sealDecryptSubmission({ seal, sessionKey, formObjectId, submissionObjectId, ciphertext, nonce })` lazy when the row is expanded. Cache decrypted plaintext in component state.
+- Render decoded form responses in a table grouped by question. Add CSV export button (recharts already in deps if charts wanted).
+- Submitter receipt at `/f/[id]/receipt?digest=...`: same SessionKey flow, decrypts the connected wallet's own `Submission`. Seal `seal_approve_read_submission` policy passes for `caller == submitter`.
+
+### 3. ~~Sealed-schema activation in publish flow~~ ✅ done (PRD v1.1)
+
+**Why now:** Seal v2 contracts shipped, helpers exist, but `<PublishFormButton>` doesn't actually call `sealEncryptSchema` when access is Private or when listing to Marketplace. Wiring this completes the Privacy story.
+
+- In `runPublish` for `mode==='on-chain' && access==='private'` and for `mode==='marketplace'`:
+  - If `process.env.NEXT_PUBLIC_ENABLE_SEALED_SCHEMA === 'true'`, call `sealEncryptSchema({ seal: getSealClient(suiClient), packageId: originalPackageId, objectId: <pre-derived form id?>, plaintext: schemaBytes })`. Identity layout = first 32 bytes of objectId.
+  - Catch: we don't know the formObjectId before the tx executes. Either (a) bind identity to the creator's address instead — simpler; (b) two-step publish (create → encrypt → update_schema). Default to (a) for v1 — encrypt against `creator_address || nonce`, store nonce in form's `theme` blob so reader can reconstruct identity.
+- For decrypt at render time in `/f/[id]`:
+  - Read theme JSON from Form, extract sealNonce.
+  - Call `sealDecryptFormSchema({ seal, sessionKey, packageId, formObjectId, allowlistObjectId, ciphertext: form.schema })` → JSON-parse → render.
+- Marketplace clone path: when buyer clones, contract copies the (encrypted) schema bytes into the new Form. Buyer is now the new Form's owner → buyer's allowlist seal-decrypt works. Optional: re-encrypt with buyer's address to make it self-decryptable; for v1 we leave as-is.
+
+### 4. ~~Form lifecycle actions on My Forms cards~~ ✅ done (Close + Copy link + View responses + Open public link)
+
+`Update settings` deferred (out of scope for sprint 1).
+
+---
+
+## Sprint 2 (differentiation)
+
+5. ~~**Per-form Allowlist on publish + Private submit gating.**~~ ✅ done (PRD v1.1)
+6. ~~**Token-gated + paid access modes.**~~ ✅ done (PRD v1.1) — including creator treasury withdraw button on My Forms cards.
+7. ~~**Mode B shared shell — `packages/walform-site/`.**~~ ✅ done. Next-export shell + Quilt push script + per-form `site::Site` PTB + DeployToWalrusSiteButton end-to-end. Resolves at `<base36(siteId)>.wal.app`.
+8. ~~**Cover image upload via Walrus.**~~ ✅ done (PRD v1.1 Sprint 2 #8). On-chain `set_cover_blob_id` mirroring deferred — schema URL is enough for renderer; the on-chain field is for indexers.
+9. ~~**File upload via Walrus.**~~ ✅ done (PRD v1.1 Sprint 2 #9). Single-file per field, URL stored inside ciphertext. Quilt batching + on-chain `file_blob_ids` mirroring deferred — single-blob upload covers the demo.
+10. ~~**AI generate-from-prompt.**~~ ✅ done (PRD v1.1 Sprint 2 #10). Vercel AI SDK v4 + OpenRouter via `@ai-sdk/openai` (compatible mode). BYOK in localStorage. IndexedDB-backed key store deferred — localStorage covers the demo.
+11. ~~**Theme editor.**~~ ✅ already shipped in `FormSettingsPanel` (display mode + font family + border radius + primary color swatches), wired into the right sidebar. Thank-you-page customization (`successMessage` text + optional redirect URL) deferred.
+
+---
+
+## Buffer / cleanup before submission
+
+12. ~~README polish.~~ ✅ done — root `README.md` rewritten with current testnet ids, accurate workspace layout, working features list, Mode B deploy instructions, and judge verification steps. Demo video + Vercel deploy still pending.
+13. Final smoke pass: each of the 3 wallet types (Slush, Sui Wallet, Sign in with Google) does Publish → Submit → View Results end-to-end.
+
+---
+
+## Known issues & deferred items
+
+- **Marketplace listing discovery is stop-gap.** `useTemplateListing` walks recent `create_listing_and_share` txs; will need a proper indexer or registry shared object at scale. Acceptable for hackathon.
+- **`useTemplateListing` won't find listings older than 50 txs.** Bump limit + paginate when needed.
+- **Sealed schema active for Private forms.** Set `NEXT_PUBLIC_ENABLE_SEALED_SCHEMA=true` in `apps/builder/.env.local`. Marketplace templates still publish with plaintext schemas — the contract's `seal_approve_read_template_schema` policy restricts decrypt to the template creator only, so encryption would prevent buyers from previewing pre-clone (deferred until policy v3).
+- **Pre-republish forms are orphaned.** A fresh `contracts:publish` on 2026-04-26 (forced because `c83d693` changed public function signatures, so `contracts:upgrade` rejected with `IncompatibleUpgrade`) reset `originalPackageId`. Seal identity namespace is keyed on `originalPackageId` — every form/submission published under earlier packageIds can no longer decrypt. The fix for future upgrades: revert public-fn signature changes, add `_v2` variants instead. Until then, every breaking Move change forces a fresh publish.
+- **`allowlist::create` + `allowlist::create_and_share` signature drift.** Commit `c83d693` added `clock: &Clock` parameter mid-stream — non-backwards-compatible per Sui upgrade rules. Documented above; fix is to keep the original signatures and add `create_with_clock` / `create_and_share_with_clock` variants emitting the event.
+- **Mode B deploy assumes the publish-site manifest is already mirrored.** `<DeployToWalrusSiteButton>` fetches `/walform-site-manifest.json` from the builder's `/public`. Run `bun run --cwd packages/walform-site walrus:publish-site` first — the script now writes both `out/walrus-manifest.json` and `apps/builder/public/walform-site-manifest.json`. If the file is missing, the button shows a clear error pointing at the script.
+- **Mode B PTB size limit.** A single deploy tx contains 1 metadata + 1 new_site + 4 calls per file + 1 share = 4N + 3 commands. For typical Next.js exports (~20-30 files) this stays well under Sui's per-tx limit. If the bundle exceeds ~80 files, the PTB will need chunking — site-builder Rust CLI handles this; TS port deferred.
+- **Marketplace clones don't get a per-form Allowlist.** `template::mint_from_template` mints the cloned Form without creating an Allowlist. Cloned forms default to ACCESS_PUBLIC and use the global throwaway. Private cloned forms would need a contract change (mint_from_template + create_allowlist) — deferred.
+- **Token-gating is honor-system on-chain.** `submission::submit` doesn't enforce `ACCESS_TOKEN` balance — the contract comment explicitly defers to client-side checks. A motivated user could submit by bypassing the UI. Acceptable for v1; production would need a `submit_token<T>` entry fn parameterised by coin type.
+- **Paid form publish is a two-step tx.** The publish PTB transfers `FormOwnerCap` to the sender, so `payment::create_and_share` can't fold into the same tx. If the second tx fails, the form is publishable-but-not-submittable (treasury missing). The Paid form card on My Forms shows a "Create treasury" button that re-fires the same PTB to recover.
+- **Paid submit needs ≥ fee in a single SUI coin (or merges from up to 5 dust coins).** Wallets with many tiny coins won't auto-merge beyond 5; they'll see "Need at least X SUI". Production fix: full coin selection + iterative merges.
+- **Upstream TS error in portal** (`lib/src/redirects.ts:45`) — patched locally with `typeof` guard. Re-sync procedure in `apps/portal/UPSTREAM.md`.
+- **Mode B deploy assumes the bundle is mirrored.** `<DeployToWalrusSiteButton>` fetches `/walform-site-bundle/index.json` from the builder's `/public`. Run `bun run --cwd packages/walform-site bundle:mirror` (and `next build` first) before opening the deploy dialog.
+- **Time-locked reveal / reader allowlist / public-after-close** visibility modes deferred post-MVP.
+- **No anonymous submissions** in v1 — closest surface is fresh Google zkLogin.
+
+---
+
+## How to add to this file
+
+When you finish a step from "Next up":
+1. Move its row out of **Next up** and into **Done** with the PRD section it implements.
+2. Flip the corresponding **Wired vs stubbed** row.
+3. If the work added new deferrals or risks, drop them into **Known issues**.
+4. Don't rewrite history — preserve the ordering of "Done" rows so the evolution is scannable.

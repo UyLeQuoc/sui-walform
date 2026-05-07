@@ -1,0 +1,224 @@
+'use client';
+
+import { useCallback, useState } from 'react';
+import { toast } from 'sonner';
+import { getSealClient, sealEncryptSchema } from '../../crypto';
+import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
+import { extractPublishIds } from '../../sui/tx/extract-form-ids';
+import { buildCreateTreasuryTx } from '../../sui/tx/create-treasury';
+import { buildUpdateSchemaTx } from '../../sui/tx/update-schema';
+import { useExecuteTransaction } from '../../sui/use-execute-transaction';
+import { useInvalidateChainQueries } from '../../sui/use-invalidate-chain';
+import { useSuiClient } from '@mysten/dapp-kit';
+import { buildPublishTx } from '../lib/build-publish-tx';
+import { uploadCoverImageIfNeeded } from '../lib/upload-cover-on-publish';
+import type { PublishOptions } from '../components/publish/PublishDialog';
+import { formDb } from '../services/form-db';
+import { usePublishStore } from '../store/publish-store';
+
+export interface UsePublishFormInput {
+  formId: string;
+}
+
+export interface UsePublishFormResult {
+  isSubmitting: boolean;
+  publish: (options: PublishOptions) => Promise<void>;
+  /** True iff the active network has a deployed walform package. */
+  isReady: boolean;
+}
+
+/**
+ * End-to-end publish orchestration. Owns:
+ *   1. Walrus cover-image upload (rewrites schema before tx).
+ *   2. Main publish PTB (on-chain or marketplace).
+ *   3. Sealed-schema follow-up (private + flag enabled).
+ *   4. Treasury follow-up (paid forms).
+ *   5. IDB cleanup + dApp Kit query invalidation + success toast.
+ *
+ * Failure semantics: tier-1 (cover upload) failure aborts the whole publish.
+ * Tier-2 (main tx) failure aborts. Tier-3 (sealed schema or treasury follow-up)
+ * failures only toast — the main form already exists on-chain and the user
+ * can retry the follow-up later.
+ */
+export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormResult {
+  const packageId = useActivePackageId();
+  const originalPackageId = useOriginalPackageId();
+  const suiClient = useSuiClient();
+  const { execute, sender } = useExecuteTransaction();
+  const invalidateChain = useInvalidateChainQueries();
+  const setPublishState = usePublishStore((s) => s.setPublishState);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const publish = useCallback(
+    async (options: PublishOptions) => {
+      if (!sender || !packageId) {
+        toast.error('Connect a wallet on a network with a deployed walform package.');
+        return;
+      }
+      setIsSubmitting(true);
+      setPublishState(formId, 'publishing');
+      try {
+        const stored = await formDb.getById(formId);
+        if (!stored) throw new Error('Form not found locally');
+
+        const publishSchema = await uploadCoverImageIfNeeded(stored);
+
+        const { tx, needsSealedSchemaFollowUp } = buildPublishTx({
+          sender,
+          packageId,
+          schema: publishSchema,
+          options,
+        });
+
+        const { digest } = await execute({ transaction: tx });
+
+        const ids = await extractPublishIds(suiClient, digest, originalPackageId ?? packageId);
+        if (!ids.formObjectId || !ids.formOwnerCapId) {
+          throw new Error('Publish succeeded but Form/FormOwnerCap ids missing from effects');
+        }
+
+        if (needsSealedSchemaFollowUp && originalPackageId) {
+          await runSealedSchemaFollowUp({
+            formId,
+            packageId,
+            originalPackageId,
+            formObjectId: ids.formObjectId,
+            formOwnerCapId: ids.formOwnerCapId,
+            suiClient,
+            execute,
+          });
+        }
+
+        if (options.mode === 'on-chain' && options.access === 'paid') {
+          await runTreasuryFollowUp({
+            packageId,
+            formOwnerCapId: ids.formOwnerCapId,
+            execute,
+          });
+        }
+
+        // Draft has been promoted to an on-chain Form — chain is the source
+        // of truth now. Drop the IDB entry so it disappears from Drafts and
+        // won't drift as the creator edits the on-chain form later.
+        try {
+          await formDb.delete(formId);
+        } catch (e) {
+          console.warn('Failed to delete draft from IDB after publish', e);
+        }
+        usePublishStore.getState().clearPublished(formId);
+        await invalidateChain(digest);
+
+        toast.success(buildSuccessMessage(options));
+      } catch (err) {
+        setPublishState(formId, 'error');
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(`Publish failed: ${msg}`);
+        console.error(err);
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [
+      sender,
+      packageId,
+      originalPackageId,
+      suiClient,
+      execute,
+      invalidateChain,
+      setPublishState,
+      formId,
+    ],
+  );
+
+  return {
+    isSubmitting,
+    publish,
+    isReady: Boolean(packageId),
+  };
+}
+
+interface SealedSchemaFollowUpInput {
+  formId: string;
+  packageId: string;
+  originalPackageId: string;
+  formObjectId: string;
+  formOwnerCapId: string;
+  suiClient: ReturnType<typeof useSuiClient>;
+  execute: ReturnType<typeof useExecuteTransaction>['execute'];
+}
+
+/**
+ * The publish PTB wrote a 1-byte placeholder schema. Now that formObjectId
+ * exists, encrypt the real schema (Seal identity = formObjectId.bytes32) and
+ * rewrite the schema field via update_schema. Failure leaves the form
+ * publishable-but-unreadable; recoverable by re-running.
+ */
+async function runSealedSchemaFollowUp(input: SealedSchemaFollowUpInput): Promise<void> {
+  const { formId, packageId, originalPackageId, formObjectId, formOwnerCapId, suiClient, execute } =
+    input;
+  try {
+    const seal = getSealClient(suiClient);
+    const stored = await formDb.getById(formId);
+    if (!stored) throw new Error('Draft missing — cannot encrypt schema');
+    const plaintext = new TextEncoder().encode(JSON.stringify(stored.schema));
+    const { ciphertext } = await sealEncryptSchema({
+      seal,
+      // Seal identity namespace is stable — must match the original package
+      // address even after upgrades.
+      packageId: originalPackageId,
+      objectId: formObjectId,
+      plaintext,
+    });
+    const tx = buildUpdateSchemaTx({
+      packageId,
+      formObjectId,
+      formOwnerCapId,
+      schemaBytes: ciphertext,
+    });
+    await execute({ transaction: tx });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    toast.error(
+      `Form published with placeholder schema — encryption step failed: ${m}. The form will not render until you retry.`,
+    );
+    console.error('sealed-schema follow-up failed', e);
+  }
+}
+
+interface TreasuryFollowUpInput {
+  packageId: string;
+  formOwnerCapId: string;
+  execute: ReturnType<typeof useExecuteTransaction>['execute'];
+}
+
+/**
+ * Paid forms need a follow-up tx: mint + share a FormTreasury bound to the
+ * cap. Can't fold into the publish PTB because create_and_share
+ * transferObjects-es the cap to the sender — once it's transferred, the PTB
+ * can't borrow it again as an arg. Two-step is acceptable; failure here
+ * leaves the form publishable-but-not-submittable, recoverable by re-running.
+ */
+async function runTreasuryFollowUp(input: TreasuryFollowUpInput): Promise<void> {
+  const { packageId, formOwnerCapId, execute } = input;
+  try {
+    const tx = buildCreateTreasuryTx({ packageId, formOwnerCapId });
+    await execute({ transaction: tx });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    toast.error(
+      `Form published but treasury creation failed: ${m}. Submissions will reject until you retry.`,
+    );
+    console.error('treasury creation failed', e);
+  }
+}
+
+function buildSuccessMessage(options: PublishOptions): string {
+  if (options.mode === 'on-chain') {
+    if (options.access === 'paid') return 'Paid form published — treasury created';
+    if (options.access === 'token') return 'Token-gated form published';
+    if (options.access === 'private') return 'Private form published';
+    return 'Form published on-chain';
+  }
+  return options.pricing === 'paid' ? `Listed at ${options.priceSui} SUI` : 'Template shared free';
+}

@@ -1,0 +1,8 @@
+node_modules
+dist
+.turbo
+coverage
+html_templates
+*.min.js
+*.min.css
+bun.lock

@@ -1,0 +1,92 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+WalForm — decentralized form builder on Sui. Stack lives end-to-end on testnet:
+
+- **Sui Move contracts** (`apps/contracts/sources/*.move`) own form schemas, submissions, allowlists, templates, Kiosk royalty, Seal policies.
+- **Seal** encrypts submission bodies + (post-upgrade) form schemas client-side; key servers via the Mysten testnet committee + aggregator.
+- **Wallet model** — every WalForm tx (creator publish/update/close, respondent submit, marketplace clone/buy, Mode B deploy) is signed and paid by the user's connected wallet via dApp Kit's `useSignAndExecuteTransaction`. No app-level transaction sponsorship; Enoki is used only for `registerEnokiWallets` (Google sign-in).
+- **Walrus** is opt-in only (cover images, FILE_UPLOAD, Mode B site shell) — base flow is zero WAL by storing schema + ciphertext inline in Sui objects.
+
+Read [`docs/PRD.md`](docs/PRD.md) for binding architectural decisions (Appendix A is the authoritative log) and [`docs/PROGRESS.md`](docs/PROGRESS.md) for current implementation state + ordered next-up queue.
+
+**Before writing any code, read [`docs/CODE_RULES.md`](docs/CODE_RULES.md) — binding rules for component/hook split, state buckets, memoization, file layout, TypeScript, and async patterns. New code that conflicts with CODE_RULES is wrong even if surrounding code drifted from it.**
+
+## Workspace layout
+
+| Workspace | What it is |
+| --- | --- |
+| `apps/builder` | Next.js 15 SSR on Vercel. Creator dashboard, authoring canvas, `/forms` list (Drafts / My Forms / Marketplace tabs), Mode A renderer at `/f/[id]`, Results dashboard at `/forms/[id]/results`, submitter receipt at `/f/[id]/receipt`. Holds `/api/walrus/upload` (server-side WAL payer for cover images + file attachments). |
+| `apps/contracts` | Move 2024 package + publish/upgrade/codegen scripts. `deployed.json` tracks `packageId` (bumps on upgrade) and `originalPackageId` (stays stable — Seal identity namespace). |
+| `apps/portal` | Vendored from `MystenLabs/walrus-sites/portal`. **Local dev only** — production uses public `wal.app`. Resolves `{base36}.localhost:8080` to testnet Walrus blobs. |
+| `packages/core` | Single shared library. Imports from any app. Holds shadcn primitives (`src/ui/*`), all forms code (`src/forms/*` — components, hooks, IDB drafts, store), Sui wiring (`src/sui/*` — providers, `useExecuteTransaction` helper, wallet UI, codegen bindings, tx builders), Seal helpers (`src/crypto/*`). |
+| `packages/{eslint-config,prettier-config,tsconfig}` | Shared dev configs. |
+| `packages/walform-site` | Mode B static shell. The builder's Deploy button bundles + pushes per form via the user's connected wallet (`WalrusWalletSigner`); Sui `site::Site` PTB also signed by user. |
+
+## Commands
+
+Bun + Turborepo. Always run from repo root unless a script says otherwise.
+
+```bash
+bun install                                  # workspace setup
+bun run dev                                  # boots builder :3000 + portal :8080
+bun run dev --filter=builder                 # just builder
+bun run typecheck                            # MUST stay green before any merge
+bun run build                                # MUST stay green before any merge
+bun run lint                                 # eslint across workspaces
+bun run format                               # prettier write
+
+# Move contracts
+bun run contracts:test                       # sui move test
+bun run contracts:publish                    # first-time deploy → writes deployed.json
+bun run contracts:upgrade                    # subsequent upgrades — preserves originalPackageId
+bun run contracts:codegen                    # regenerate TS bindings into packages/core/src/sui/gen/
+bun run contracts:setup-public-allowlist     # one-off: shares a global throwaway Allowlist for public submits
+
+# Lower-level Move
+cd apps/contracts && sui move build          # quick compile check (not part of turbo)
+cd apps/contracts && sui move test            # 40+ unit tests across modules
+```
+
+## Big-picture architecture
+
+### Three architectural pillars (they all interact)
+
+1. **User-paid transaction transport (every on-chain action)** — `packages/core/src/sui/use-execute-transaction.ts :: useExecuteTransaction` is the single hook every action goes through. It wraps dApp Kit's `useSignAndExecuteTransaction` with a pinned `chain: 'sui:${network}'`. The user's wallet signs and pays gas. There is NO server-side signing route. Adding a new MoveCall is purely a client-side change to a tx builder under `packages/core/src/sui/tx/*.ts` plus the hook that calls `execute({ transaction })`.
+
+2. **Source of truth split: IDB ↔ chain** — Drafts live in IndexedDB (`packages/core/src/forms/services/form-db.ts`), surfaced via `useForms()`. My Forms + Marketplace fetch from chain via `useOnChainForms()` / `useMarketplaceTemplates()` / `useFormOnChain()` / `useFormSubmissions()`. After every successful on-chain mutation, callers MUST `await invalidateChain(digest)` (`packages/core/src/sui/use-invalidate-chain.ts`) — it waits for finality then invalidates dApp Kit's `[network]` query key prefix. After publish, `formDb.delete(formId)` clears the draft so it disappears from the Drafts tab. `formDb` mutations dispatch a `walform:forms-changed` window event that `useForms()` listens for.
+
+3. **Two packageId concepts** — `packageId` (current, bumps on every `contracts:upgrade`) is for MoveCall targets. `originalPackageId` (stable across upgrades) is the Seal identity namespace AND the type prefix Sui uses in `objectType`. Use `useActivePackageId()` for tx builders, `useOriginalPackageId()` for `seal.encrypt({packageId})` and for matching object types in `extractPublishIds`. Object types in Sui RPC always use `originalPackageId`, regardless of which version performed the create.
+
+### Marketplace flow (multi-buyer paid templates)
+
+Sui Kiosk's `purchase` consumes the listed item — fine for NFTs, wrong for cloneable templates. The contract's `template::TemplateListing` + `clone_paid_and_share` path solves this: shared `FormTemplate` stays alive after each clone, `clone_count` bumps, payment routes to creator + 10% royalty to `PlatformTreasury`. Legacy 1-of-1 Kiosk path is kept for templates published before the upgrade. `useMarketplaceTemplates` does a 2-hop lookup to detect Kiosk-listed (template ObjectOwner is a `dynamic_field::Field` wrapper, not the Kiosk itself — walk up one level). `useTemplateListing(templateId)` queries `create_listing_and_share` tx history to resolve the per-template price.
+
+### Seal flow
+
+Submission body encryption is wired and shipping. Identity layout = `form.id_address(32) || nonce(16)` = 48 bytes (matches `seal_policies.move`). Schema-level encryption (Seal v2) has on-chain entry fns + client helpers (`crypto/seal-schema.ts`) but the Publish flow doesn't invoke `sealEncryptSchema` yet — gated behind `NEXT_PUBLIC_ENABLE_SEALED_SCHEMA`. SessionKey lives in `useSealSession()` — first decrypt pops one `signPersonalMessage` prompt then caches for 30 min in component state (no persistence).
+
+### Mode A vs Mode B (PRD v1.0)
+
+`apps/builder/app/f/[id]/page.tsx` is the always-on Mode A renderer + in-builder preview. Mode B (Walrus Site per form) will be a single shared `packages/walform-site/` static shell pushed to Walrus once — per-form deploy is just a `site_object::create` PTB pointing at the shared blob, no per-form WAL spend. This supersedes the dropped `apps/renderer` per-form-export design (PRD v1.0 Appendix A 2026-04-26).
+
+## Conventions baked into the codebase
+
+- **Sui SDK 2.0 names everywhere.** Use `SuiJsonRpcClient` / `getJsonRpcFullnodeUrl` from `@mysten/sui/jsonRpc`. The old `SuiClient` / `getFullnodeUrl` from `@mysten/sui/client` are the v1 names — only the codegen consumes `@mysten/sui/client` for type imports (`ClientWithCoreApi`, `SuiClientTypes`). Never import `SuiClient` for client construction.
+- **Sui addresses must be normalized before equality.** `0x2` and `0x0000…0002` look different to a naive string comparison — `normalizeSuiAddress` from `@mysten/sui/utils` handles this. Apply it on both sides of any address comparison (object types, package ids, owner addresses).
+- **Pass a `Transaction` instance to wallet-signing hooks** (not a base64 string) so dApp Kit can serialise the full tx including any gas overrides. `useExecuteTransaction` already does this.
+- **Wallet UI is shadcn-native, not dApp Kit's defaults.** `<WalletButton>`, `<WalletConnectModal>`, `<WalletDropdown>`, `<WalletChip>` live under `packages/core/src/sui/wallet-ui/`. Dropdown is intentionally minimal: address + Copy, Disconnect. No network switcher in the dropdown — network is env-driven.
+- **Move codegen is checked in.** `packages/core/src/sui/gen/walform/*.ts` is regenerated by `bun run contracts:codegen`. The util file at `gen/utils/index.ts` has manual non-null patches for `noUncheckedIndexedAccess: true` strict mode — re-apply if codegen overwrites them.
+- **Address normalization.** `normalizeSuiAddress` from `@mysten/sui/utils` converts `0x2` → `0x0000000000000000000000000000000000000000000000000000000000000002`. Use it before any string equality on Sui addresses.
+- **Drafts only carry IDB metadata.** The `publishedMeta` field on `StoredForm` is dead — drafts get deleted on successful publish, on-chain forms render from chain. Don't add per-form on-chain state to IDB.
+
+## Hackathon target
+
+**Sui Overflow 2026 — testnet only.** `apps/contracts/deployed.json` is the live testnet record (current `packageId`, `originalPackageId`, `transferPolicy`, `platformTreasury`). After every `contracts:upgrade`, mirror `packageId` into `apps/builder/.env.local :: NEXT_PUBLIC_PACKAGE_ID`. `originalPackageId` only moves on a fresh `contracts:publish` (never), so it stays in env across upgrades.
+
+## Memory-system note
+
+User-specific memories live at `/Users/uydev/.claude/projects/-Users-uydev-code-WalForm/memory/`. Read those before assuming user preferences (communication style, minimalist wallet UI, etc.).

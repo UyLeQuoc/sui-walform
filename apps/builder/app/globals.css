@@ -1,0 +1,10 @@
+@import '../../../packages/core/src/ui/globals.css';
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}

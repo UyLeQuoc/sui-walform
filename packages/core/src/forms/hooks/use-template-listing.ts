@@ -1,0 +1,133 @@
+'use client';
+
+import { useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
+import { useOriginalPackageId } from '../../sui/package-id';
+
+export interface TemplateListing {
+  listingId: string;
+  templateId: string;
+  creator: string;
+  priceMist: bigint;
+}
+
+/**
+ * Look up the pay-to-clone listing bound to a given template (if any).
+ * Creators publish a `TemplateListing` shared object alongside the template;
+ * this hook queries `queryEvents` on the creator's publish tx history to
+ * find matching listings. React Query deduplicates so multiple cards asking
+ * for the same `templateId` hit the cache.
+ *
+ * NOTE: this is a stop-gap for v1 — a proper indexer or a shared registry
+ * object would be cheaper. Contract exposes `listing_template_id` but there's
+ * no reverse index.
+ */
+export function useTemplateListing(templateId: string | undefined): {
+  listing: TemplateListing | null;
+  isLoading: boolean;
+  error: Error | null;
+} {
+  const originalPackageId = useOriginalPackageId();
+  const { network } = useSuiClientContext();
+
+  // For each candidate template, find listings whose template_id matches by
+  // querying the creator's owned/shared objects of type TemplateListing.
+  // Simpler path: query ALL TemplateListing shared objects on testnet via
+  // multiGetObjects isn't feasible without enumeration. Use
+  // `queryTransactionBlocks` filtered by function call as a lightweight
+  // index — every `create_listing_and_share` tx emits a created Listing
+  // object whose id we can correlate.
+  const txQuery = useSuiClientQuery(
+    'queryTransactionBlocks',
+    {
+      filter: originalPackageId
+        ? {
+            MoveFunction: {
+              package: originalPackageId,
+              module: 'template',
+              function: 'create_listing_and_share',
+            },
+          }
+        : ({} as never),
+      options: { showObjectChanges: true, showInput: true },
+      order: 'descending',
+      limit: 50,
+    },
+    { enabled: !!originalPackageId && !!templateId },
+  );
+
+  // Collect Listing object ids created in those txs. React Compiler memoizes.
+  const listingIds: string[] = [];
+  if (templateId) {
+    const txs = txQuery.data?.data ?? [];
+    for (const t of txs) {
+      const changes = (t.objectChanges ?? []) as Array<{
+        type?: string;
+        objectType?: string;
+        objectId?: string;
+      }>;
+      for (const c of changes) {
+        if (
+          c.type === 'created' &&
+          c.objectType?.endsWith('::template::TemplateListing') &&
+          c.objectId
+        ) {
+          listingIds.push(c.objectId);
+        }
+      }
+    }
+  }
+
+  const objectsQuery = useSuiClientQuery(
+    'multiGetObjects',
+    {
+      ids: listingIds,
+      options: { showContent: true, showType: true },
+    },
+    { enabled: listingIds.length > 0 },
+  );
+
+  const listing = resolveListing(templateId, objectsQuery.data);
+
+  void network;
+  return {
+    listing,
+    isLoading: txQuery.isPending || (listingIds.length > 0 && objectsQuery.isPending),
+    error: (txQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null,
+  };
+}
+
+type MultiGetObjectsData = ReturnType<typeof useSuiClientQuery<'multiGetObjects'>>['data'];
+
+function resolveListing(
+  templateId: string | undefined,
+  data: MultiGetObjectsData,
+): TemplateListing | null {
+  if (!templateId) return null;
+  const normalizedTarget = normalizeSuiAddress(templateId);
+  const results = data ?? [];
+  for (const entry of results) {
+    const obj = entry.data;
+    if (!obj?.objectId) continue;
+    const content = obj.content as unknown as
+      | {
+          dataType: 'moveObject';
+          fields: {
+            template_id?: string;
+            creator?: string;
+            price_mist?: string | number;
+          };
+        }
+      | undefined;
+    const fields = content?.fields;
+    if (!fields?.template_id) continue;
+    if (normalizeSuiAddress(fields.template_id) !== normalizedTarget) continue;
+    return {
+      listingId: obj.objectId,
+      templateId: normalizedTarget,
+      creator: fields.creator ? normalizeSuiAddress(fields.creator) : '',
+      priceMist: fields.price_mist ? BigInt(fields.price_mist) : 0n,
+    };
+  }
+  return null;
+}

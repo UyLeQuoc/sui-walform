@@ -1,0 +1,61 @@
+{
+  "name": "@walform/portal",
+  "private": true,
+  "description": "Vendored MystenLabs/walrus-sites/portal — server flavor (Bun HTTP), flattened. Resolves {subdomain}.{our-domain} requests into Walrus blob fetches + Sui Site-object lookups. Configured for Sui + Walrus testnet.",
+  "keywords": [
+    "walrus",
+    "sui",
+    "sui-ns",
+    "sites",
+    "vendored"
+  ],
+  "author": "Mysten Labs (upstream) / WalForm (local config)",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "bun --hot run index.ts",
+    "start": "bun --hot run index.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@logtape/logtape": "^0.11.0",
+    "@mysten/bcs": "^2.0.3",
+    "@mysten/sui": "^2.8.0",
+    "@mysten/suins": "^1.0.2",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-prometheus": "^0.200.0",
+    "@opentelemetry/sdk-metrics": "^2.1.0",
+    "@vercel/edge-config": "^1.4.0",
+    "base-x": "^4.0.1",
+    "cookie": "^1.0.2",
+    "https-browserify": "^1.0.0",
+    "pako": "^2.1.0",
+    "parse-domain": "8.2.2",
+    "picomatch": "^4.0.3",
+    "psl": "^1.15.0",
+    "redis": "^4.7.0",
+    "stream-browserify": "^3.0.0",
+    "stream-http": "^3.2.0",
+    "ua-parser-js": "^2.0.1",
+    "url": "^0.11.4",
+    "util": "^0.12.5",
+    "yaml": "^2.7.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.21",
+    "@types/node": "^20.16.11",
+    "@types/pako": "^2.0.4",
+    "@types/picomatch": "^4.0.2",
+    "@types/psl": "^1.11.0",
+    "@walform/eslint-config": "workspace:*",
+    "@walform/prettier-config": "workspace:*",
+    "@walform/tsconfig": "workspace:*",
+    "eslint": "^9",
+    "prettier": "latest",
+    "typescript": "^5.6.3"
+  }
+}

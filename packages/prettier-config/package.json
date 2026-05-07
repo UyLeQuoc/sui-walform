@@ -1,0 +1,20 @@
+{
+  "name": "@walform/prettier-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./base": "./base.js",
+    "./tailwind": "./tailwind.js"
+  },
+  "files": [
+    "base.js",
+    "tailwind.js"
+  ],
+  "peerDependencies": {
+    "prettier": ">=3"
+  },
+  "dependencies": {
+    "prettier-plugin-tailwindcss": "^0.6.14"
+  }
+}

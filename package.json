@@ -1,0 +1,32 @@
+{
+  "name": "walform",
+  "private": true,
+  "packageManager": "bun@1.3.9",
+  "workspaces": [
+    "apps/builder",
+    "apps/portal",
+    "apps/contracts",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "format": "turbo run format",
+    "format:check": "turbo run format:check",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules .turbo apps/*/node_modules apps/portal/*/node_modules packages/*/node_modules",
+    "contracts:publish": "bun run --cwd apps/contracts publish",
+    "contracts:upgrade": "bun run --cwd apps/contracts upgrade",
+    "contracts:setup-public-allowlist": "bun run --cwd apps/contracts setup-public-allowlist",
+    "contracts:codegen": "bun run --cwd apps/contracts codegen",
+    "contracts:test": "bun run --cwd apps/contracts test"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0"
+  }
+}

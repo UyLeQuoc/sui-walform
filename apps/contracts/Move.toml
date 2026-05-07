@@ -1,0 +1,17 @@
+[package]
+name = "walform"
+edition = "2024"
+license = "Apache-2.0"
+authors = ["Uy Le <lequocuyit@gmail.com>"]
+
+[dependencies]
+# Sui framework is auto-resolved from the locally-installed `sui` binary
+# (Move 2024 package-management). Pin an explicit revision here later if
+# we ever need reproducible builds across machines.
+
+[addresses]
+walform = "0x0"
+
+[dev-dependencies]
+
+[dev-addresses]

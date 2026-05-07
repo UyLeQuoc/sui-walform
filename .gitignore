@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# builds
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# Move / Sui
+apps/contracts/build/
+apps/contracts/Move.lock
+
+# environment
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.*.example
+
+# editor / os
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.log
+
+# bun
+.bun/
+
+# tsconfig.tsbuildinfo
+**/tsconfig.tsbuildinfo
