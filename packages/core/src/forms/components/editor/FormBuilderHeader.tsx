@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button } from '../../../ui/button';
 import type { SaveStatus } from '../../hooks/use-auto-save';
 import type { RightSidebarMode } from '../../hooks/use-right-sidebar-mode';
+import { EditorPublishButton } from './EditorPublishButton';
 import { ExportButton } from './ExportButton';
 import { SaveStatusBadge } from './SaveStatusBadge';
 import { ThemeToggle } from './ThemeToggle';
@@ -84,12 +85,14 @@ export function FormBuilderHeader({
           <ThemeToggle />
           <ExportButton />
 
-          <Button variant="default" asChild>
+          <Button variant="outline" asChild>
             <Link href={`/forms/${formId}/preview`}>
               <Eye className="h-4 w-4" />
               Preview
             </Link>
           </Button>
+
+          <EditorPublishButton formId={formId} />
         </div>
       </div>
     </header>

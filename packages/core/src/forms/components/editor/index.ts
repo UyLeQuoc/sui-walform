@@ -1,6 +1,7 @@
 export * from './BlockPalette';
 export * from './Canvas';
 export * from './CanvasViewport';
+export * from './EditorPublishButton';
 export * from './ExportButton';
 export * from './FieldBlock';
 export * from './FieldBlockGhost';
