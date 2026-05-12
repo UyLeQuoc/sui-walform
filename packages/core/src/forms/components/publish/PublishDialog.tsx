@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Lock, Globe, Store, Send, Coins, ImageIcon, Wallet } from 'lucide-react';
 import {
   Dialog,
@@ -13,6 +13,7 @@ import {
 import { Button } from '../../../ui/button';
 import { Input } from '../../../ui/input';
 import { Label } from '../../../ui/label';
+import { Switch } from '../../../ui/switch';
 import { Textarea } from '../../../ui/textarea';
 import { Separator } from '../../../ui/separator';
 import { cn } from '../../../lib/utils';
@@ -52,6 +53,10 @@ interface PublishDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   formTitle: string;
+  /** Seeds the marketplace tab's description field. */
+  formDescription?: string;
+  /** Seeds the marketplace tab's tags input (joined by commas). */
+  formTags?: string[];
   /**
    * Cover image as a `data:` URL (draft-state). When present, the dialog
    * shows a Walrus storage-cost estimate so the creator knows what the
@@ -74,13 +79,17 @@ export function PublishDialog({
   open,
   onOpenChange,
   formTitle,
+  formDescription,
+  formTags,
   coverImageDataUrl,
   isSubmitting,
   onSubmit,
 }: PublishDialogProps) {
   const [mode, setMode] = useState<PublishMode>('on-chain');
   const [access, setAccess] = useState<PublishAccess>('public');
-  const [maxSubmissions, setMaxSubmissions] = useState<string>('0');
+  const [limitEnabled, setLimitEnabled] = useState<boolean>(false);
+  const [maxSubmissions, setMaxSubmissions] = useState<string>('100');
+  const [deadlineEnabled, setDeadlineEnabled] = useState<boolean>(false);
   const [closesAt, setClosesAt] = useState<string>('');
   const [allowlistRaw, setAllowlistRaw] = useState<string>('');
   const [tokenType, setTokenType] = useState<string>('0x2::sui::SUI');
@@ -88,11 +97,23 @@ export function PublishDialog({
   const [feeSui, setFeeSui] = useState<string>('0.1');
 
   const [title, setTitle] = useState<string>(formTitle || 'Untitled template');
-  const [description, setDescription] = useState<string>('');
+  const [description, setDescription] = useState<string>(formDescription ?? '');
   const [category, setCategory] = useState<number>(0);
-  const [tagsRaw, setTagsRaw] = useState<string>('');
+  const [tagsRaw, setTagsRaw] = useState<string>((formTags ?? []).join(', '));
   const [pricing, setPricing] = useState<MarketplacePricing>('free');
   const [priceSui, setPriceSui] = useState<string>('2');
+
+  // Re-seed marketplace fields each time the dialog opens. Mid-edit prop
+  // changes don't clobber the user's in-flight values.
+  const wasOpenRef = useRef(open);
+  useEffect(() => {
+    if (!wasOpenRef.current && open) {
+      setTitle(formTitle || 'Untitled template');
+      setDescription(formDescription ?? '');
+      setTagsRaw((formTags ?? []).join(', '));
+    }
+    wasOpenRef.current = open;
+  }, [open, formTitle, formDescription, formTags]);
 
   const allowlist = useMemo(
     () =>
@@ -125,8 +146,9 @@ export function PublishDialog({
 
   const handleSubmit = () => {
     if (mode === 'on-chain') {
-      const max = Number(maxSubmissions);
-      const closesAtMs = closesAt ? new Date(closesAt).getTime() : null;
+      const parsedMax = Number(maxSubmissions);
+      const max = limitEnabled && Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : 0;
+      const closesAtMs = deadlineEnabled && closesAt ? new Date(closesAt).getTime() : null;
       // Token: amount stored in u64 base units (assume the user enters whole
       // units and the contract treats it raw — caller is responsible for the
       // display↔base conversion since we don't fetch coin metadata in the
@@ -136,7 +158,7 @@ export function PublishDialog({
       void onSubmit({
         mode: 'on-chain',
         access,
-        maxSubmissions: Number.isFinite(max) ? max : 0,
+        maxSubmissions: max,
         closesAtMs,
         allowlistAddresses: allowlist,
         tokenType: tokenType.trim(),
@@ -190,8 +212,12 @@ export function PublishDialog({
           <OnChainFields
             access={access}
             setAccess={setAccess}
+            limitEnabled={limitEnabled}
+            setLimitEnabled={setLimitEnabled}
             maxSubmissions={maxSubmissions}
             setMaxSubmissions={setMaxSubmissions}
+            deadlineEnabled={deadlineEnabled}
+            setDeadlineEnabled={setDeadlineEnabled}
             closesAt={closesAt}
             setClosesAt={setClosesAt}
             allowlistRaw={allowlistRaw}
@@ -281,8 +307,12 @@ function ModeTile({
 function OnChainFields({
   access,
   setAccess,
+  limitEnabled,
+  setLimitEnabled,
   maxSubmissions,
   setMaxSubmissions,
+  deadlineEnabled,
+  setDeadlineEnabled,
   closesAt,
   setClosesAt,
   allowlistRaw,
@@ -297,8 +327,12 @@ function OnChainFields({
 }: {
   access: PublishAccess;
   setAccess: (v: PublishAccess) => void;
+  limitEnabled: boolean;
+  setLimitEnabled: (v: boolean) => void;
   maxSubmissions: string;
   setMaxSubmissions: (v: string) => void;
+  deadlineEnabled: boolean;
+  setDeadlineEnabled: (v: boolean) => void;
   closesAt: string;
   setClosesAt: (v: string) => void;
   allowlistRaw: string;
@@ -416,26 +450,57 @@ function OnChainFields({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="max-submissions">Max submissions</Label>
-          <Input
-            id="max-submissions"
-            type="number"
-            min={0}
-            value={maxSubmissions}
-            onChange={(e) => setMaxSubmissions(e.target.value)}
-            placeholder="0 = unlimited"
-          />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2 rounded-md border p-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="limit-toggle" className="cursor-pointer">
+              Limit submissions
+            </Label>
+            <Switch
+              id="limit-toggle"
+              checked={limitEnabled}
+              onCheckedChange={setLimitEnabled}
+            />
+          </div>
+          {limitEnabled ? (
+            <Input
+              id="max-submissions"
+              type="number"
+              min={1}
+              value={maxSubmissions}
+              onChange={(e) => setMaxSubmissions(e.target.value)}
+              placeholder="100"
+            />
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              Off — accepts unlimited submissions until you close the form.
+            </p>
+          )}
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="closes-at">Closes at (optional)</Label>
-          <Input
-            id="closes-at"
-            type="datetime-local"
-            value={closesAt}
-            onChange={(e) => setClosesAt(e.target.value)}
-          />
+
+        <div className="flex flex-col gap-2 rounded-md border p-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="deadline-toggle" className="cursor-pointer">
+              Set a deadline
+            </Label>
+            <Switch
+              id="deadline-toggle"
+              checked={deadlineEnabled}
+              onCheckedChange={setDeadlineEnabled}
+            />
+          </div>
+          {deadlineEnabled ? (
+            <Input
+              id="closes-at"
+              type="datetime-local"
+              value={closesAt}
+              onChange={(e) => setClosesAt(e.target.value)}
+            />
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              Off — form stays open indefinitely until you close it manually.
+            </p>
+          )}
         </div>
       </div>
 

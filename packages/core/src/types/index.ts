@@ -166,4 +166,10 @@ export interface FormSchema {
    * defined in globals.css), displayed wider than the form card.
    */
   coverImage?: string;
+  /**
+   * Suggested tags surfaced when publishing to Marketplace. Populated by AI
+   * generation; user can edit in PublishDialog. Persisted in IDB with the
+   * rest of the draft.
+   */
+  tags?: string[];
 }

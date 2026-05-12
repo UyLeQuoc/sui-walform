@@ -15,9 +15,16 @@ interface EditorPublishButtonProps {
   formId: string;
 }
 
+// Stable empty array so the Zustand selector returns referentially-equal
+// snapshots on every render when schema.tags is undefined. A fresh `[]`
+// literal inside the selector triggers React's getSnapshot infinite loop.
+const EMPTY_TAGS: string[] = [];
+
 export function EditorPublishButton({ formId }: EditorPublishButtonProps) {
   const router = useRouter();
   const formTitle = useFormBuilderStore((s) => s.schema.title);
+  const formDescription = useFormBuilderStore((s) => s.schema.description ?? '');
+  const formTags = useFormBuilderStore((s) => s.schema.tags ?? EMPTY_TAGS);
   const { isConnected } = useCurrentWallet();
   const { coverDataUrl, refresh: refreshCover } = useDraftCoverDataUrl(formId);
   const { isSubmitting, publish, isReady } = usePublishForm({ formId });
@@ -69,6 +76,8 @@ export function EditorPublishButton({ formId }: EditorPublishButtonProps) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         formTitle={formTitle}
+        formDescription={formDescription}
+        formTags={formTags}
         coverImageDataUrl={coverDataUrl}
         isSubmitting={isSubmitting}
         onSubmit={handleSubmit}

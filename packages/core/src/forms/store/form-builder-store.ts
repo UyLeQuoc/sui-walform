@@ -199,7 +199,7 @@ interface FormBuilderActions {
    * generate flow.
    */
   replaceSchema: (
-    next: { title: string; description: string; fields: FormField[] },
+    next: { title: string; description: string; fields: FormField[]; tags?: string[] },
     label?: string,
   ) => void;
 }
@@ -525,6 +525,7 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
         title: next.title,
         description: next.description,
         fields: next.fields,
+        ...(next.tags !== undefined ? { tags: next.tags } : {}),
       },
       past: pushHistory(state.past, state.schema, state.currentLabel),
       future: [],
