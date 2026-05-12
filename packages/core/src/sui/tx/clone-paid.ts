@@ -88,6 +88,13 @@ export function buildPublishListingTx(input: BuildPublishListingTxInput): Transa
     arguments: [templateArg, tx.pure.u64(input.priceMist)],
   });
 
+  // voting::init_template_votes → creates the upvote/downvote tracker.
+  // Creator-gated; ctx.sender matches template.creator here.
+  tx.moveCall({
+    target: `${input.packageId}::voting::init_template_votes`,
+    arguments: [templateArg],
+  });
+
   // Share the template as a shared object so clone_paid callers can take it by &mut.
   tx.moveCall({
     target: '0x2::transfer::public_share_object',

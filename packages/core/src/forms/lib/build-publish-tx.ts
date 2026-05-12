@@ -120,7 +120,6 @@ export function buildPublishTx(input: BuildPublishTxInput): BuildPublishTxResult
     schemaBytes,
     themeBytes,
     template: templateMeta,
-    priceMist: undefined,
   });
   return { tx, needsSealedSchemaFollowUp: false };
 }

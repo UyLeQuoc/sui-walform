@@ -14,9 +14,20 @@ import {
 import { Button } from '../../../ui/button';
 import { Input } from '../../../ui/input';
 import { Label } from '../../../ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../ui/select';
 import { Textarea } from '../../../ui/textarea';
 import { Spinner } from '../../../ui/spinner';
-import { DEFAULT_AI_MODEL, generateFormFromPrompt } from '../../lib/ai-generate';
+import {
+  DEFAULT_AI_MODEL,
+  FREE_MODEL_OPTIONS,
+  generateFormFromPrompt,
+} from '../../lib/ai-generate';
 import { useFormBuilderStore } from '../../store/form-builder-store';
 import { getOpenRouterKey, setOpenRouterKey } from '../../services/ai-key-store';
 
@@ -26,10 +37,10 @@ interface AiGenerateDialogProps {
 }
 
 const EXAMPLE_PROMPTS = [
-  'Customer NPS survey for a SaaS product',
-  'Hackathon team sign-up form',
-  'Wedding RSVP with dietary preferences',
-  'Job application — frontend engineer',
+  'Bug report — title, severity, repro steps',
+  'Feature request with impact rating',
+  'Quick 3-question NPS survey',
+  'Hackathon team application',
 ];
 
 export function AiGenerateDialog({ open, onOpenChange }: AiGenerateDialogProps) {
@@ -38,6 +49,7 @@ export function AiGenerateDialog({ open, onOpenChange }: AiGenerateDialogProps) 
   const [prompt, setPrompt] = useState('');
   const [apiKey, setApiKeyLocal] = useState(() => getOpenRouterKey() ?? '');
   const [showKey, setShowKey] = useState(false);
+  const [model, setModel] = useState<string>(DEFAULT_AI_MODEL);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerate = async () => {
@@ -56,7 +68,7 @@ export function AiGenerateDialog({ open, onOpenChange }: AiGenerateDialogProps) 
 
     setIsGenerating(true);
     try {
-      const generated = await generateFormFromPrompt({ prompt, apiKey });
+      const generated = await generateFormFromPrompt({ prompt, apiKey, model });
       replaceSchema(
         {
           title: generated.title,
@@ -118,6 +130,25 @@ export function AiGenerateDialog({ open, onOpenChange }: AiGenerateDialogProps) 
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ai-model">Model</Label>
+            <Select value={model} onValueChange={setModel} disabled={isGenerating}>
+              <SelectTrigger id="ai-model">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FREE_MODEL_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-muted-foreground text-xs">
+              Free OpenRouter models can rate-limit or go offline. Switch models if one fails.
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="ai-key">OpenRouter API key</Label>
             <div className="flex gap-1.5">
               <Input
@@ -150,7 +181,7 @@ export function AiGenerateDialog({ open, onOpenChange }: AiGenerateDialogProps) 
               >
                 openrouter.ai/keys
               </a>
-              . Free model: <code className="font-mono">{DEFAULT_AI_MODEL}</code>.
+              .
             </span>
           </div>
         </div>

@@ -47,18 +47,32 @@ const aiFieldSchema = z.object({
 const aiFormSchema = z.object({
   title: z.string(),
   description: z.string().optional(),
-  fields: z.array(aiFieldSchema).min(1).max(40),
+  fields: z.array(aiFieldSchema).min(1).max(8),
 });
 
 export type AiFormPayload = z.infer<typeof aiFormSchema>;
 
 /**
- * OpenRouter free model used by default. The `:free` suffix routes the
- * request through OpenRouter's free tier (rate-limited but no per-token
- * charge). Override per-call via `GenerateOptions.model` for a paid model
- * if higher reliability is needed.
+ * OpenRouter free model used by default. MiniMax M2.5 is fast on the free
+ * tier and reliably emits raw JSON. The `:free` suffix routes the request
+ * through OpenRouter's free tier — no per-token charge, light rate limits.
+ * Override per-call via `GenerateOptions.model` for a paid model if higher
+ * reliability is needed.
  */
 export const DEFAULT_AI_MODEL = 'minimax/minimax-m2.5:free';
+
+/**
+ * Curated free-tier OpenRouter models that have been verified to emit clean
+ * JSON for this prompt shape. The dialog renders this list so users can swap
+ * when one model is rate-limited or offline (free tier is best-effort).
+ */
+export const FREE_MODEL_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'minimax/minimax-m2.5:free', label: 'MiniMax M2.5 (free)' },
+  { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (free)' },
+  { value: 'deepseek/deepseek-chat-v3-0324:free', label: 'DeepSeek v3 (free)' },
+  { value: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B (free)' },
+  { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 (free)' },
+];
 
 export interface GenerateOptions {
   prompt: string;
@@ -76,31 +90,34 @@ export interface GeneratedForm {
 
 const FIELD_TYPES_LIST = FIELD_TYPES.join(' | ');
 
-const SYSTEM_PROMPT = `You are a forms expert. Given a short prompt, design a clean, well-labeled form and return ONLY valid JSON matching this schema — no markdown fences, no commentary, no leading text:
+const SYSTEM_PROMPT = `You are a form-design assistant. Output ONLY a JSON object — no markdown fences, no commentary, no text before or after the object.
 
+Schema:
 {
   "title": string,
-  "description": string (optional),
+  "description"?: string,
   "fields": [
     {
       "type": "${FIELD_TYPES_LIST}",
       "label": string,
-      "required": boolean (optional, default false),
-      "placeholder": string (optional),
-      "helpText": string (optional),
-      "options": string[] (only for single_choice / multiple_choice / select)
+      "required"?: boolean,
+      "placeholder"?: string,
+      "helpText"?: string,
+      "options"?: string[]
     }
   ]
 }
 
-Rules:
-- Pick the smallest set of fields that captures the intent (5-10 typical).
-- Use the most specific field type available — prefer email/phone/url over short_text when applicable.
-- Use single_choice (radio) for ≤5 options, select (dropdown) for >5.
-- For linear_scale or rating, no options array is needed — the renderer handles the scale.
-- Add helpText only when the label is ambiguous.
-- Group related questions; lead with a "heading" field when the form has multiple sections.
-- Output JSON only. Do NOT wrap in \`\`\`json fences. Do NOT add any text before or after the JSON object.`;
+Rules — keep the form MINIMAL:
+1. 3 to 6 fields. HARD MAX 8. Fewer is better.
+2. NO "heading" or "description" layout fields. Skip them entirely.
+3. Use the most specific type. email / phone / url / number > short_text. rating or linear_scale > radio options for 1-N scoring.
+4. single_choice for ≤5 options; select for 6+. MAX 6 options per field.
+5. OMIT helpText, placeholder, and the form description unless they're strictly necessary to disambiguate. Default to omitting all three.
+6. NO filler fields the user didn't ask for. NO "Any other feedback?", NO "Is there anything else?".
+7. Labels are short and direct. "Email", not "What is your email address?".
+
+Output the JSON object now.`;
 
 export async function generateFormFromPrompt(opts: GenerateOptions): Promise<GeneratedForm> {
   const { prompt, apiKey, model = DEFAULT_AI_MODEL, signal } = opts;
@@ -120,15 +137,67 @@ export async function generateFormFromPrompt(opts: GenerateOptions): Promise<Gen
   // support OpenAI-style tool calls or response_format=json_object reliably,
   // which is what generateObject's default mode expects. Asking for plain
   // text + parsing manually works across every model the catalog offers.
-  const { text } = await generateText({
-    model: provider(model),
-    system: SYSTEM_PROMPT,
-    prompt,
-    abortSignal: signal,
-  });
+  let text: string;
+  try {
+    const result = await generateText({
+      model: provider(model),
+      system: SYSTEM_PROMPT,
+      prompt,
+      abortSignal: signal,
+    });
+    text = result.text;
+  } catch (err) {
+    throw rewriteProviderError(err, model);
+  }
 
   const parsed = parseAndValidate(text);
   return materialize(parsed);
+}
+
+/**
+ * The AI SDK wraps provider failures in `AI_RetryError` whose `.message` is
+ * just "Failed after 3 attempts. Last error: …" — the actual HTTP body from
+ * OpenRouter (rate-limit, model offline, bad key) gets buried. Dig it out so
+ * the toast actually tells the user what went wrong.
+ */
+interface ProviderErrorShape {
+  responseBody?: unknown;
+  message?: unknown;
+  statusCode?: unknown;
+  lastError?: ProviderErrorShape;
+}
+
+function rewriteProviderError(err: unknown, model: string): Error {
+  if (!(err instanceof Error)) return new Error(String(err));
+  const record = err as unknown as ProviderErrorShape;
+  const inner: ProviderErrorShape = record.lastError ?? record;
+  const status =
+    typeof inner.statusCode === 'number' || typeof inner.statusCode === 'string'
+      ? String(inner.statusCode)
+      : null;
+  const body =
+    typeof inner.responseBody === 'string'
+      ? inner.responseBody
+      : typeof inner.message === 'string'
+        ? inner.message
+        : err.message;
+
+  // OpenRouter "no endpoints" = model unreachable on free tier.
+  if (typeof body === 'string' && /no endpoints found/i.test(body)) {
+    return new Error(
+      `Model "${model}" is offline on OpenRouter right now. Pick another model from the dropdown.`,
+    );
+  }
+  if (status === '429' || (typeof body === 'string' && /rate.?limit/i.test(body))) {
+    return new Error(
+      `Rate-limited by OpenRouter on "${model}". Wait a moment or pick another free model.`,
+    );
+  }
+  if (status === '401' || (typeof body === 'string' && /invalid.?api.?key|unauthorized/i.test(body))) {
+    return new Error('OpenRouter rejected the API key. Paste a fresh one from openrouter.ai/keys.');
+  }
+  const detail = status ? `${status} ${body ?? ''}`.trim() : (body ?? err.message);
+  return new Error(`OpenRouter (${model}): ${detail}`);
 }
 
 function parseAndValidate(text: string): AiFormPayload {
