@@ -159,9 +159,10 @@ public fun publish_template(
     template
 }
 
-/// Place an already-minted FormTemplate into a kiosk and list it at the
-/// given price. Two-step so the caller retains control of the template id
-/// (returned by `publish_template`).
+/// DEPRECATED — kept only for Sui upgrade compatibility. The active paid
+/// marketplace path is `create_listing_and_share` + `clone_paid_and_share`
+/// (TemplateListing). Do not call from new code; the TS client no longer
+/// has a publish-via-Kiosk path. See PRD Appendix A 2026-05-12.
 public fun place_and_list(
     kiosk: &mut Kiosk,
     kiosk_cap: &KioskOwnerCap,
@@ -357,15 +358,14 @@ public fun clone_free_and_share(
     transfer::public_transfer(cap, ctx.sender());
 }
 
-// === Paid clone path (Kiosk purchase + royalty) ===
+// === Paid clone path (Kiosk purchase + royalty) — DEPRECATED ===
+//
+// Kept only for Sui upgrade compatibility (public function signatures cannot
+// be removed under `compatible` upgrades). The active paid path is
+// `clone_paid_and_share` above — see PRD Appendix A 2026-05-12. No TS client
+// code calls `purchase_template*` anymore.
 
-/// Buyer calls this end-to-end:
-///   1. kiosk::purchase — pays the listed price, gets the template and a TransferRequest.
-///   2. royalty payment — deposits 10% (or the floor) into PlatformTreasury, adds receipt.
-///   3. transfer_policy::confirm_request — finalises the transfer.
-///   4. Mint a fresh Form from the template schema and return (Form, cap) to caller.
-/// The buyer is expected to then `transfer::share_object(form)` and transfer the cap
-/// or use `purchase_template_and_share` below.
+/// DEPRECATED — see section header. Use `clone_paid_and_share` instead.
 public fun purchase_template(
     seller_kiosk: &mut Kiosk,
     template_id: address,
@@ -441,6 +441,7 @@ public fun purchase_template(
     (form, cap)
 }
 
+/// DEPRECATED — see section header. Use `clone_paid_and_share` instead.
 public fun purchase_template_and_share(
     seller_kiosk: &mut Kiosk,
     template_id: address,

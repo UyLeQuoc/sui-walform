@@ -1,7 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Copy, LogOut } from 'lucide-react';
+import Link from 'next/link';
+import { Copy, LogOut, ShieldCheck } from 'lucide-react';
 import { useDisconnectWallet } from '@mysten/dapp-kit';
 import { toast } from 'sonner';
 import {
@@ -11,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../ui/dropdown-menu';
+import { useIsPlatformAdmin } from '../use-platform-admin';
 import { useWalletAddress } from './useWalletAddress';
 
 interface WalletDropdownProps {
@@ -21,6 +23,7 @@ interface WalletDropdownProps {
 export function WalletDropdown({ align = 'end', children }: WalletDropdownProps) {
   const { address, short } = useWalletAddress();
   const { mutate: disconnect } = useDisconnectWallet();
+  const { isAdmin } = useIsPlatformAdmin();
 
   if (!address || !short) return null;
 
@@ -45,6 +48,17 @@ export function WalletDropdown({ align = 'end', children }: WalletDropdownProps)
           <code className="flex-1 font-mono text-xs">{short}</code>
           <Copy className="text-muted-foreground h-3.5 w-3.5" />
         </DropdownMenuItem>
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/admin" className="flex items-center gap-2">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Platform admin</span>
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"

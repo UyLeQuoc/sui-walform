@@ -28,6 +28,12 @@ import type { OnChainForm } from '../../hooks/use-on-chain-forms';
 import { useCloseForm } from '../../hooks/use-close-form';
 import { useSeededSubmissions } from '../../hooks/use-seeded-submissions';
 import { useSubmissionDecryption } from '../../hooks/use-submission-decryption';
+import { useSubmissionTags } from '../../hooks/use-submission-tags';
+import {
+  DEFAULT_SUBMISSION_FILTERS,
+  SubmissionsFilterBar,
+  type SubmissionsFilterState,
+} from './SubmissionsFilterBar';
 import { isInputField } from '../../lib/field-types';
 import { shortAddr } from '../../lib/format-address';
 import { buildSubmissionsCsv, downloadCsv } from '../../lib/export-submissions-csv';
@@ -80,9 +86,13 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     rawNetwork === 'mainnet' || rawNetwork === 'devnet' ? rawNetwork : 'testnet';
 
   const decryption = useSubmissionDecryption({ formId });
+  const tags = useSubmissionTags(formId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [tab, setTab] = useState<ResultsTab>('summary');
   const [shareOpen, setShareOpen] = useState(false);
+  const [submissionFilters, setSubmissionFilters] = useState<SubmissionsFilterState>(
+    DEFAULT_SUBMISSION_FILTERS,
+  );
 
   const isOwner = !!account && !!form && account.address === form.owner;
   const ownerForm = isOwner
@@ -164,6 +174,32 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       </Card>
     );
   }
+
+  const filteredRows = rows.filter((row) => {
+    const tag = tags.tagFor(row.submissionId);
+    if (submissionFilters.statuses.size > 0 && !submissionFilters.statuses.has(tag.status)) {
+      return false;
+    }
+    if (submissionFilters.priorities.size > 0 && !submissionFilters.priorities.has(tag.priority)) {
+      return false;
+    }
+    if (submissionFilters.decryptedOnly && !decryptedById[row.submissionId]) {
+      return false;
+    }
+    const needle = submissionFilters.search.trim().toLowerCase();
+    if (needle) {
+      const submitterMatch = row.submitter.toLowerCase().includes(needle);
+      const decrypted = decryptedById[row.submissionId];
+      const bodyMatch = decrypted
+        ? Object.values(decrypted).some((v) => {
+            if (v === null || v === undefined) return false;
+            return String(v).toLowerCase().includes(needle);
+          })
+        : false;
+      if (!submitterMatch && !bodyMatch) return false;
+    }
+    return true;
+  });
 
   const decryptedCount = Object.keys(decryptedById).length;
   const uniqueSubmitters = new Set(rows.map((r) => r.submitter)).size;
@@ -310,26 +346,41 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
           )}
         </TabsContent>
 
-        <TabsContent value="individual" className="mt-4 flex flex-col gap-2">
+        <TabsContent value="individual" className="mt-4 flex flex-col gap-3">
           {rowsLoading && <div className="bg-muted h-24 animate-pulse rounded-xl" />}
           {!rowsLoading && rows.length === 0 && <EmptyResponses formId={formId} />}
-          {rows.map((row) => (
-            <SubmissionRowCard
-              key={row.submissionId}
-              row={row}
-              decrypted={decryptedById[row.submissionId]}
-              error={decryption.errorById[row.submissionId]}
-              isExpanded={expandedId === row.submissionId}
-              onToggle={() =>
-                setExpandedId(expandedId === row.submissionId ? null : row.submissionId)
-              }
-              onDecrypt={() => void decryption.decryptOne(row)}
-              isPending={decryption.pendingId === row.submissionId}
-              canDecrypt={canDecrypt}
-              fields={inputFields}
-              network={network}
+          {!rowsLoading && rows.length > 0 && (
+            <SubmissionsFilterBar
+              value={submissionFilters}
+              onChange={setSubmissionFilters}
+              total={rows.length}
+              visible={filteredRows.length}
             />
-          ))}
+          )}
+          {filteredRows.map((row) => {
+            const tag = tags.tagFor(row.submissionId);
+            return (
+              <SubmissionRowCard
+                key={row.submissionId}
+                row={row}
+                decrypted={decryptedById[row.submissionId]}
+                error={decryption.errorById[row.submissionId]}
+                isExpanded={expandedId === row.submissionId}
+                onToggle={() =>
+                  setExpandedId(expandedId === row.submissionId ? null : row.submissionId)
+                }
+                onDecrypt={() => void decryption.decryptOne(row)}
+                isPending={decryption.pendingId === row.submissionId}
+                canDecrypt={canDecrypt}
+                fields={inputFields}
+                network={network}
+                status={tag.status}
+                priority={tag.priority}
+                onStatusChange={(next) => void tags.setStatus(row.submissionId, next)}
+                onPriorityChange={(next) => void tags.setPriority(row.submissionId, next)}
+              />
+            );
+          })}
         </TabsContent>
 
         {ownerForm && (

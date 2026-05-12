@@ -1,17 +1,37 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { Store } from 'lucide-react';
-import { useMarketplaceTemplates } from '../../hooks/use-marketplace-templates';
+import {
+  useMarketplaceTemplates,
+  type MarketplaceTemplate,
+} from '../../hooks/use-marketplace-templates';
+import {
+  useMarketplaceVotes,
+  type TemplateVoteCounts,
+} from '../../hooks/use-marketplace-votes';
 import { EmptyState } from '../list/list-shared';
 import { MarketplaceCard } from './MarketplaceCard';
+import {
+  DEFAULT_FILTERS,
+  MarketplaceFilters,
+  type MarketplaceFilterState,
+} from './MarketplaceFilters';
 
 /**
- * Marketplace tab body. All purchase flow logic (free clone, paid multi-buyer,
- * legacy 1-of-1 kiosk) lives in `useTemplatePurchase`; this just routes
- * loading/error/empty states and lays out the card grid.
+ * Marketplace tab body. Owns filter/sort state + client-side filtering. Pulls
+ * templates + vote counts in parallel; cards receive their votes via prop so
+ * we don't fan out N more queries from the cards themselves.
  */
 export function MarketplaceBrowse() {
   const { templates, isLoading, error, packageMissing } = useMarketplaceTemplates();
+  const { byTemplate: votesByTemplate } = useMarketplaceVotes();
+  const [filters, setFilters] = useState<MarketplaceFilterState>(DEFAULT_FILTERS);
+
+  const filtered = useMemo(
+    () => applyFilters(templates, votesByTemplate, filters),
+    [templates, votesByTemplate, filters],
+  );
 
   if (packageMissing) {
     return (
@@ -24,10 +44,13 @@ export function MarketplaceBrowse() {
   }
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-muted h-40 animate-pulse rounded-xl" />
-        ))}
+      <div className="flex flex-col gap-4">
+        <MarketplaceFilters value={filters} onChange={setFilters} resultCount={0} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-muted h-44 animate-pulse rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -49,10 +72,82 @@ export function MarketplaceBrowse() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {templates.map((t) => (
-        <MarketplaceCard key={t.templateId} template={t} />
-      ))}
+    <div className="flex flex-col gap-5">
+      <MarketplaceFilters value={filters} onChange={setFilters} resultCount={filtered.length} />
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={<Store className="text-muted-foreground h-8 w-8" />}
+          title="No matches"
+          description="Try widening the filters or clearing the search."
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((t) => (
+            <MarketplaceCard
+              key={t.templateId}
+              template={t}
+              votes={votesByTemplate.get(t.templateId) ?? null}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+function applyFilters(
+  templates: MarketplaceTemplate[],
+  votesByTemplate: Map<string, TemplateVoteCounts>,
+  filters: MarketplaceFilterState,
+): MarketplaceTemplate[] {
+  const needle = filters.search.trim().toLowerCase();
+  const matchesSearch = (t: MarketplaceTemplate) => {
+    if (!needle) return true;
+    return (
+      t.title.toLowerCase().includes(needle) ||
+      t.description.toLowerCase().includes(needle) ||
+      t.tags.some((tag) => tag.toLowerCase().includes(needle))
+    );
+  };
+  const matchesCategory = (t: MarketplaceTemplate) =>
+    filters.category === -1 || t.category === filters.category;
+  const matchesStatus = (t: MarketplaceTemplate) => {
+    if (filters.status === 'all') return t.status !== 'owned';
+    if (filters.status === 'free') return t.status === 'free';
+    if (filters.status === 'paid') return t.status === 'paid';
+    return true;
+  };
+
+  const filtered = templates.filter(
+    (t) => matchesSearch(t) && matchesCategory(t) && matchesStatus(t),
+  );
+
+  const upvotesOf = (t: MarketplaceTemplate) => votesByTemplate.get(t.templateId)?.upvotes ?? 0;
+  const scoreOf = (t: MarketplaceTemplate) => {
+    const v = votesByTemplate.get(t.templateId);
+    return v ? v.upvotes - v.downvotes : 0;
+  };
+
+  const sorted = [...filtered];
+  switch (filters.sort) {
+    case 'newest':
+      sorted.sort((a, b) => b.createdAtMs - a.createdAtMs);
+      break;
+    case 'oldest':
+      sorted.sort((a, b) => a.createdAtMs - b.createdAtMs);
+      break;
+    case 'most-cloned':
+      sorted.sort((a, b) => b.cloneCount - a.cloneCount);
+      break;
+    case 'least-cloned':
+      sorted.sort((a, b) => a.cloneCount - b.cloneCount);
+      break;
+    case 'most-upvoted':
+      sorted.sort((a, b) => upvotesOf(b) - upvotesOf(a));
+      break;
+    case 'top-rated':
+      sorted.sort((a, b) => scoreOf(b) - scoreOf(a));
+      break;
+  }
+  return sorted;
 }

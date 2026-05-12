@@ -11,7 +11,12 @@ import { shortAddr } from '../../lib/format-address';
 import { formatCell } from '../../lib/format-submission-cell';
 import type { SubmissionRow } from '../../hooks/use-form-submissions';
 import type { DecryptedRow } from '../../hooks/use-submission-decryption';
+import type {
+  SubmissionPriority,
+  SubmissionStatus,
+} from '../../services/submission-tags-db';
 import type { FormField } from '../../../types';
+import { PriorityPill, StatusPill } from './SubmissionTagPills';
 
 interface SubmissionRowCardProps {
   row: SubmissionRow;
@@ -25,6 +30,11 @@ interface SubmissionRowCardProps {
   canDecrypt: boolean;
   fields: FormField[];
   network: ExplorerNetwork;
+  /** Creator-local triage state. */
+  status: SubmissionStatus;
+  priority: SubmissionPriority;
+  onStatusChange: (next: SubmissionStatus) => void;
+  onPriorityChange: (next: SubmissionPriority) => void;
 }
 
 /**
@@ -42,6 +52,10 @@ export function SubmissionRowCard({
   canDecrypt,
   fields,
   network,
+  status,
+  priority,
+  onStatusChange,
+  onPriorityChange,
 }: SubmissionRowCardProps) {
   return (
     <Card className="hover:bg-muted/30 transition-colors">
@@ -65,6 +79,8 @@ export function SubmissionRowCard({
             {new Date(row.submittedAtMs).toLocaleString()}
           </span>
           <span className="ml-auto flex items-center gap-1.5">
+            <PriorityPill value={priority} onChange={onPriorityChange} />
+            <StatusPill value={status} onChange={onStatusChange} />
             {decrypted ? (
               <Badge variant="default">Decrypted</Badge>
             ) : error ? (

@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { useSuiClient } from '@mysten/dapp-kit';
 import { sealDecryptSubmission, getSealClient } from '../../crypto';
 import { useOriginalPackageId } from '../../sui/package-id';
+import { decodeBodyPointer, fetchWalrusBlob } from '../../walrus';
 import { useSealSession } from './use-seal-session';
 import type { SubmissionRow } from './use-form-submissions';
 
@@ -57,6 +58,11 @@ export function useSubmissionDecryption(
       try {
         const sessionKey = await sealSession.ensureSession();
         const seal = getSealClient(suiClient);
+        // If the stored body is a Walrus pointer (post-2026-05-12 submissions),
+        // fetch the real Seal ciphertext from the aggregator. Legacy inline
+        // ciphertexts skip this step.
+        const blobId = decodeBodyPointer(row.ciphertext);
+        const ciphertext = blobId ? await fetchWalrusBlob(blobId) : row.ciphertext;
         const plaintextBytes = await sealDecryptSubmission({
           seal,
           sessionKey,
@@ -64,7 +70,7 @@ export function useSubmissionDecryption(
           packageId: originalPackageId,
           formObjectId: formId,
           submissionObjectId: row.submissionId,
-          ciphertext: row.ciphertext,
+          ciphertext,
           nonce: row.nonce,
         });
         const text = new TextDecoder().decode(plaintextBytes);

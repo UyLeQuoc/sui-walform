@@ -15,6 +15,7 @@ import { buildSubmitTx } from '../../sui/tx/submit';
 import { buildPaidSubmitTx, InsufficientSuiError } from '../../sui/tx/submit-paid';
 import { useExecuteTransaction } from '../../sui/use-execute-transaction';
 import { useInvalidateChainQueries } from '../../sui/use-invalidate-chain';
+import { encodeBodyPointer, useWalrusWalletUpload } from '../../walrus';
 import { formatSui } from '../lib/sui-amount';
 import { useFormAllowlist } from './use-form-allowlist';
 import { useFormTreasury } from './use-form-treasury';
@@ -85,6 +86,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
 
   const { execute } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
+  const { uploadBlob, isReady: walrusReady } = useWalrusWalletUpload();
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -141,6 +143,13 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         return;
       }
 
+      if (!walrusReady) {
+        toast.error(
+          'Walrus storage requires a wallet on testnet or mainnet. Switch networks and try again.',
+        );
+        return;
+      }
+
       setIsSubmitting(true);
       try {
         const seal = getSealClient(suiClient);
@@ -153,13 +162,26 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           plaintext,
         });
 
+        // Walrus body pivot (hackathon spec compliance): the Seal ciphertext
+        // lives on Walrus; the Sui Submission stores only a short pointer in
+        // `encrypted_body`. The submitter's wallet pays SUI gas for the
+        // Walrus registration tx + WAL for storage.
+        toast.loading('Uploading encrypted response to Walrus…', {
+          id: 'walrus-body',
+        });
+        const { blobId } = await uploadBlob(ciphertext, { epochs: 53 });
+        toast.success('Stored on Walrus — broadcasting Sui receipt…', {
+          id: 'walrus-body',
+        });
+        const bodyPointer = encodeBodyPointer(blobId);
+
         const tx =
           form.accessMode === 3
             ? await buildPaid({
                 packageId,
                 form,
                 treasuryId: treasuryQuery.treasury!.treasuryId,
-                ciphertext,
+                ciphertext: bodyPointer,
                 nonce,
                 ownerAddress: account.address,
                 suiClient,
@@ -168,7 +190,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
                 packageId,
                 formObjectId: form.formObjectId,
                 allowlistObjectId: allowlistId,
-                encryptedBody: ciphertext,
+                encryptedBody: bodyPointer,
                 fileBlobIds: [],
                 nonce,
                 share: true,
@@ -181,6 +203,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         );
         setPendingSubmission(null);
       } catch (err) {
+        toast.dismiss('walrus-body');
         if (err instanceof InsufficientSuiError) {
           toast.error(`Need at least ${formatSui(err.required)} SUI to pay the submission fee.`);
         } else {
@@ -215,6 +238,8 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       suiClient,
       execute,
       invalidateChain,
+      uploadBlob,
+      walrusReady,
     ],
   );
 
