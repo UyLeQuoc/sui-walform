@@ -5,6 +5,7 @@ import { Spinner } from '../../../ui/spinner';
 import { WalletButton } from '../../../sui/wallet-ui/WalletButton';
 import { WalletConnectModal } from '../../../sui/wallet-ui/WalletConnectModal';
 import { CoverImageView } from '../editor/CoverImage';
+import { ThemeToggle } from '../editor/ThemeToggle';
 import { FormPreview } from '../preview/FormPreview';
 import { useFormSubmission } from '../../hooks/use-form-submission';
 import { usePrefillFromHash } from '../../hooks/use-prefill-from-hash';
@@ -31,8 +32,8 @@ const ACCESS_MODE_LABEL: Record<0 | 1 | 2 | 3, (form: FormOnChainDetail) => stri
 
 /**
  * Authenticated submit shell — renders the form preview, access banner, and
- * connect modal. All flow logic (encryption, paid coin selection, sponsor
- * dispatch) lives in `useFormSubmission`.
+ * connect modal. All flow logic (encryption, paid coin selection, wallet
+ * sign-and-execute) lives in `useFormSubmission`.
  */
 export function SubmitForm({ form }: SubmitFormProps) {
   const submission = useFormSubmission(form);
@@ -61,7 +62,10 @@ export function SubmitForm({ form }: SubmitFormProps) {
         <span className="text-muted-foreground text-xs">
           {ACCESS_MODE_LABEL[form.accessMode](form)}
         </span>
-        <WalletButton />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <WalletButton />
+        </div>
       </div>
       <div className="flex w-full max-w-4xl flex-col items-center" style={formAreaStyle}>
         {form.schema.coverImage && (

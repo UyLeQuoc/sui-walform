@@ -1,6 +1,9 @@
 'use client';
 
-import { notFound } from 'next/navigation';
+import { notFound, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useFormOnChain } from '../../hooks/use-form-on-chain';
 import { useStoredForm } from '../../hooks/use-stored-form';
 import { SCHEMA_VERSION } from '../../lib/schema-version';
 import { FormBuilder } from './FormBuilder';
@@ -9,10 +12,33 @@ interface FormEditorClientProps {
   id: string;
 }
 
+/**
+ * Editor entry point. Three paths:
+ *  - id matches an IDB draft → render the FormBuilder.
+ *  - id matches an on-chain Form → redirect: owner goes to /results
+ *    (no editing post-publish), anyone else goes to /f/[id] to submit.
+ *  - neither → notFound.
+ */
 export function FormEditorClient({ id }: FormEditorClientProps) {
+  const router = useRouter();
+  const account = useCurrentAccount();
   const state = useStoredForm(id);
+  const draftMissing = state.status === 'not-found';
 
-  if (state.status === 'not-found') notFound();
+  const { form: onChainForm, isLoading: chainLoading } = useFormOnChain(draftMissing ? id : undefined);
+
+  useEffect(() => {
+    if (!draftMissing || !onChainForm) return;
+    const isOwner = !!account && account.address === onChainForm.owner;
+    router.replace(isOwner ? `/forms/${id}/results` : `/f/${id}`);
+  }, [draftMissing, onChainForm, account, id, router]);
+
+  if (draftMissing) {
+    if (chainLoading || onChainForm) {
+      return <div className="bg-muted/30 min-h-screen animate-pulse" />;
+    }
+    notFound();
+  }
 
   if (state.status === 'loading') {
     return <div className="bg-muted/30 min-h-screen animate-pulse" />;
@@ -32,8 +58,6 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
     );
   }
 
-  // FormBuilder only mounts after the store has been populated, so
-  // useAutoSave inside it subscribes after the initial load — no spurious write.
   return (
     <FormBuilder formId={id} createdAt={state.form.createdAt} initialRev={state.form.rev ?? 0} />
   );

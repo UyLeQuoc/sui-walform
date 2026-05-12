@@ -1,9 +1,9 @@
 /**
- * Env shim — declares the NEXT_PUBLIC_* + server-side env vars we read in
- * `@walform/core` so TypeScript doesn't require `@types/node` on a client
- * library. At runtime, Next.js replaces `process.env.NEXT_PUBLIC_X` at build
- * time; server-only reads (sponsor admin key) only ever fire from Next's
- * server runtime, which has the real `process` global.
+ * Env shim — declares the NEXT_PUBLIC_* env vars we read in `@walform/core`
+ * so TypeScript doesn't require `@types/node` on a client library. At runtime
+ * Next.js inlines `process.env.NEXT_PUBLIC_X` at build time. WalForm has no
+ * server-side signing or sponsorship — every Sui tx is signed and paid by
+ * the user's connected wallet.
  */
 declare const process: {
   env: {

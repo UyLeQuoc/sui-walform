@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Send } from 'lucide-react';
 import { useCurrentWallet } from '@mysten/dapp-kit';
 import { Button } from '../../../ui/button';
@@ -20,6 +21,7 @@ interface PublishFormButtonProps {
  * Pre-publish cover capture lives in `useDraftCoverDataUrl`.
  */
 export function PublishFormButton({ formId, formTitle }: PublishFormButtonProps) {
+  const router = useRouter();
   const { isConnected } = useCurrentWallet();
   const { coverDataUrl, refresh: refreshCover } = useDraftCoverDataUrl(formId);
   const { isSubmitting, publish, isReady } = usePublishForm({ formId });
@@ -71,8 +73,11 @@ export function PublishFormButton({ formId, formTitle }: PublishFormButtonProps)
         coverImageDataUrl={coverDataUrl}
         isSubmitting={isSubmitting}
         onSubmit={async (options) => {
-          await publish(options);
+          const result = await publish(options);
           setDialogOpen(false);
+          if (result?.mode === 'on-chain') {
+            router.push(`/forms/${result.formObjectId}/results`);
+          }
         }}
       />
     </>

@@ -27,6 +27,8 @@ export * from './use-form-submissions';
 export * from './use-seal-session';
 export * from './use-close-form';
 export * from './use-create-draft';
+export * from './use-document-title';
+export * from './use-seeded-submissions';
 export * from './use-draft-cover-data-url';
 export * from './use-form-submission';
 export * from './use-publish-form';

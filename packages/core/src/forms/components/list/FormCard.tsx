@@ -16,6 +16,7 @@ import {
 import { Card, CardAction, CardDescription, CardHeader, CardTitle } from '../../../ui/card';
 import { FORM_COLORS } from '../../lib/form-appearance';
 import { getFormFont } from '../../lib/form-fonts';
+import { FormStatusBadge } from './FormStatusBadge';
 import type { StoredForm } from '../../../types';
 
 interface FormCardProps {
@@ -87,15 +88,18 @@ export function FormCard({ form, onDelete }: FormCardProps) {
             {fieldCount} {fieldCount === 1 ? 'field' : 'fields'} ·{' '}
             {formatDistanceToNow(new Date(form.updatedAt), { addSuffix: true })}
           </CardDescription>
-          {showColorDot && (
-            <CardAction>
-              <span
-                className="inline-block size-3 rounded-full ring-1 ring-black/10 ring-inset"
-                style={{ backgroundColor: color!.hex }}
-                aria-hidden
-              />
-            </CardAction>
-          )}
+          <CardAction>
+            <div className="flex items-center gap-1.5">
+              <FormStatusBadge status="draft" />
+              {showColorDot && (
+                <span
+                  className="inline-block size-3 rounded-full ring-1 ring-black/10 ring-inset"
+                  style={{ backgroundColor: color!.hex }}
+                  aria-hidden
+                />
+              )}
+            </div>
+          </CardAction>
         </CardHeader>
       </Card>
 

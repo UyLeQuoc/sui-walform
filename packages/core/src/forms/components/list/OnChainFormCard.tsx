@@ -1,129 +1,128 @@
 'use client';
 
-import { useState } from 'react';
-import { X } from 'lucide-react';
-import { toast } from 'sonner';
-import { useSuiClientContext } from '@mysten/dapp-kit';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../../../ui/alert-dialog';
+import Link from 'next/link';
+import { BarChart3, CalendarClock, ChevronRight, Coins, Globe, Lock, Users } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '../../../ui/badge';
-import { Button } from '../../../ui/button';
 import { Card, CardContent } from '../../../ui/card';
-import { useCloseForm } from '../../hooks/use-close-form';
-import { copyFormShareLink } from '../../lib/share-link';
+import { cn } from '../../../lib/utils';
+import { deriveOnChainStatus, type FormStatus } from '../../lib/form-status';
 import type { OnChainForm } from '../../hooks/use-on-chain-forms';
-import { DeployToWalrusSiteButton } from './DeployToWalrusSiteButton';
-import { ExplorerLink } from './list-shared';
-import { WithdrawTreasuryButton } from './WithdrawTreasuryButton';
-
-const ACCESS_LABELS: Record<number, string> = {
-  0: 'Public',
-  1: 'Allowlist',
-  2: 'Token-gated',
-  3: 'Paid',
-};
+import { FormStatusBadge } from './FormStatusBadge';
 
 interface OnChainFormCardProps {
   form: OnChainForm;
 }
 
+const ACCESS_META: Record<number, { label: string; icon: LucideIcon }> = {
+  0: { label: 'Public', icon: Globe },
+  1: { label: 'Allowlist', icon: Users },
+  2: { label: 'Token-gated', icon: Lock },
+  3: { label: 'Paid', icon: Coins },
+};
+
+const STRIPE_BY_STATUS: Record<FormStatus, string> = {
+  live: 'from-emerald-500/30 via-emerald-500/10 to-transparent',
+  full: 'from-amber-500/30 via-amber-500/10 to-transparent',
+  closed: 'from-red-500/25 via-red-500/10 to-transparent',
+  ended: 'from-muted-foreground/20 via-muted-foreground/5 to-transparent',
+  draft: 'from-muted-foreground/15 via-muted-foreground/5 to-transparent',
+};
+
+/**
+ * On-chain form card: header banner shows the response metric over a
+ * status-tinted gradient; body lists access mode + deadline; footer carries
+ * the status pill + chevron. Whole card is a link to /forms/[id]/results.
+ */
 export function OnChainFormCard({ form }: OnChainFormCardProps) {
-  const { network } = useSuiClientContext();
-  const closeForm = useCloseForm({ formId: form.formId, capId: form.capId });
-  const [closeOpen, setCloseOpen] = useState(false);
-
-  const deadlineLabel =
-    form.closesAtMs === 0 ? 'No deadline' : new Date(form.closesAtMs).toLocaleString();
-
-  const handleCopyShareLink = async () => {
-    if (await copyFormShareLink(form.formId)) {
-      toast.success('Share link copied');
-    }
-  };
-
-  const handleConfirmClose = async () => {
-    if (await closeForm.close()) setCloseOpen(false);
-  };
+  const status = deriveOnChainStatus(form);
+  const capLabel = form.maxSubmissions === 0 ? '∞' : form.maxSubmissions;
+  const access = ACCESS_META[form.accessMode] ?? { label: 'Unknown', icon: Globe };
+  const AccessIcon = access.icon;
+  const deadline =
+    form.closesAtMs === 0
+      ? 'No deadline'
+      : `Closes ${formatDistanceToNow(form.closesAtMs, { addSuffix: true })}`;
+  const fill =
+    form.maxSubmissions > 0
+      ? Math.min(100, Math.round((form.submissionCount / form.maxSubmissions) * 100))
+      : null;
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="line-clamp-1 min-w-0 flex-1 truncate text-sm font-semibold">
-            {form.title}
-          </h3>
-          {form.closed && <Badge variant="destructive">Closed</Badge>}
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline">{ACCESS_LABELS[form.accessMode] ?? 'Unknown'}</Badge>
-          <Badge variant="outline">
-            {form.submissionCount}/{form.maxSubmissions === 0 ? '∞' : form.maxSubmissions} subs
-          </Badge>
-          <Badge variant="outline">{deadlineLabel}</Badge>
-        </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-          <ExplorerLink network={network} kind="object" id={form.formId} label="Form" />
-          <ExplorerLink network={network} kind="object" id={form.capId} label="Cap" />
-        </div>
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button asChild variant="default">
-            <a href={`/forms/${form.formId}/results`}>View responses</a>
-          </Button>
-          <Button asChild variant="outline">
-            <a href={`/f/${form.formId}`} target="_blank" rel="noopener noreferrer">
-              Open public link
-            </a>
-          </Button>
-          <Button variant="ghost" onClick={() => void handleCopyShareLink()}>
-            Copy share link
-          </Button>
-          {!form.closed && (
-            <Button
-              variant="ghost"
-              className="text-destructive hover:text-destructive"
-              onClick={() => setCloseOpen(true)}
+    <Link
+      href={`/forms/${form.formId}/results`}
+      aria-label={`Open analytics for ${form.title}`}
+      className="focus-visible:ring-ring group block rounded-4xl focus-visible:ring-2 focus-visible:outline-none"
+    >
+      <Card className="cursor-pointer pt-0 transition-shadow hover:shadow-lg">
+        <div className="relative flex h-28 items-center justify-between overflow-hidden px-5">
+          {form.coverImage ? (
+            <>
+              <img
+                src={form.coverImage}
+                alt=""
+                aria-hidden
+                className="absolute inset-0 size-full object-cover"
+              />
+              {/* Fade the image out from right to left so the metric text on
+                  the left sits over the card background, while the image
+                  remains crisp on the right. */}
+              <div className="from-card via-card/80 absolute inset-0 bg-gradient-to-r to-transparent" />
+            </>
+          ) : (
+            <div
+              aria-hidden
+              className={cn('absolute inset-0 bg-gradient-to-br', STRIPE_BY_STATUS[status])}
+            />
+          )}
+          <div className="relative flex flex-col">
+            <span className="text-muted-foreground inline-flex items-center gap-1 text-[11px] font-medium tracking-wide uppercase">
+              <BarChart3 className="h-3 w-3" />
+              Responses
+            </span>
+            <span className="text-foreground text-3xl font-semibold tabular-nums">
+              {form.submissionCount}
+              <span className="text-muted-foreground ml-1 text-base font-normal">
+                / {capLabel}
+              </span>
+            </span>
+          </div>
+          {fill !== null && !form.coverImage && (
+            <div
+              className="relative flex flex-col items-end gap-1"
+              aria-label={`${fill}% of capacity used`}
             >
-              <X className="mr-1 h-3.5 w-3.5" />
-              Close form
-            </Button>
+              <span className="text-muted-foreground text-[11px] font-medium tabular-nums">
+                {fill}%
+              </span>
+              <div className="bg-background/60 h-1.5 w-16 overflow-hidden rounded-full">
+                <div
+                  className="bg-foreground/70 h-full rounded-full"
+                  style={{ width: `${fill}%` }}
+                />
+              </div>
+            </div>
           )}
         </div>
-        {form.accessMode === 3 && <WithdrawTreasuryButton form={form} />}
-        <DeployToWalrusSiteButton form={form} />
-      </CardContent>
-      <AlertDialog open={closeOpen} onOpenChange={setCloseOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Close form?</AlertDialogTitle>
-            <AlertDialogDescription>
-              &quot;{form.title}&quot; will stop accepting new submissions. Existing responses stay
-              decryptable. This is on-chain and cannot be undone — re-opening requires a fresh
-              publish.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={closeForm.isClosing}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={closeForm.isClosing}
-              onClick={(e) => {
-                e.preventDefault();
-                void handleConfirmClose();
-              }}
-            >
-              {closeForm.isClosing ? 'Closing…' : 'Close form'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Card>
+        <CardContent className="flex flex-col gap-3 px-5">
+          <h3 className="line-clamp-2 text-base font-semibold">{form.title}</h3>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="outline" className="gap-1">
+              <AccessIcon className="h-3 w-3" />
+              {access.label}
+            </Badge>
+            <Badge variant="outline" className="gap-1">
+              <CalendarClock className="h-3 w-3" />
+              {deadline}
+            </Badge>
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <FormStatusBadge status={status} />
+            <ChevronRight className="text-muted-foreground h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }

@@ -3,6 +3,7 @@
 import { DndContext, DragOverlay, closestCenter } from '@dnd-kit/core';
 import { useCallback, useMemo, useState } from 'react';
 import { useAutoSave } from '../../hooks/use-auto-save';
+import { useDocumentTitle } from '../../hooks/use-document-title';
 import { useEditorShortcuts } from '../../hooks/use-editor-shortcuts';
 import { useFormBuilderDnd } from '../../hooks/use-form-builder-dnd';
 import { useMounted } from '../../hooks/use-mounted';
@@ -28,6 +29,8 @@ interface FormBuilderProps {
 }
 
 export function FormBuilder({ formId, createdAt, initialRev }: FormBuilderProps) {
+  const title = useFormBuilderStore((s) => s.schema.title);
+  useDocumentTitle(title || 'Untitled form');
   const fontFamily = useFormBuilderStore((s) => s.schema.settings.fontFamily);
   const borderRadius = useFormBuilderStore((s) => s.schema.settings.borderRadius);
   const primaryColor = useFormBuilderStore((s) => s.schema.settings.primaryColor);

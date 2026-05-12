@@ -10,6 +10,7 @@ import { buildUpdateSchemaTx } from '../../sui/tx/update-schema';
 import { useExecuteTransaction } from '../../sui/use-execute-transaction';
 import { useInvalidateChainQueries } from '../../sui/use-invalidate-chain';
 import { useSuiClient } from '@mysten/dapp-kit';
+import { useWalrusWalletUpload } from '../../walrus';
 import { buildPublishTx } from '../lib/build-publish-tx';
 import { uploadCoverImageIfNeeded } from '../lib/upload-cover-on-publish';
 import type { PublishOptions } from '../components/publish/PublishDialog';
@@ -20,9 +21,19 @@ export interface UsePublishFormInput {
   formId: string;
 }
 
+export interface PublishedFormRefs {
+  /** Shared Form object id — feeds /forms/[id]/results. */
+  formObjectId: string;
+  /** Owned FormOwnerCap id minted by the publish PTB. */
+  formOwnerCapId: string;
+  /** 'on-chain' for live forms, 'template' for marketplace listings. */
+  mode: 'on-chain' | 'template';
+}
+
 export interface UsePublishFormResult {
   isSubmitting: boolean;
-  publish: (options: PublishOptions) => Promise<void>;
+  /** Returns the new on-chain refs on success, or null on failure / cancel. */
+  publish: (options: PublishOptions) => Promise<PublishedFormRefs | null>;
   /** True iff the active network has a deployed walform package. */
   isReady: boolean;
 }
@@ -47,14 +58,15 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
   const { execute, sender } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
   const setPublishState = usePublishStore((s) => s.setPublishState);
+  const { uploadBlob } = useWalrusWalletUpload();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const publish = useCallback(
-    async (options: PublishOptions) => {
+    async (options: PublishOptions): Promise<PublishedFormRefs | null> => {
       if (!sender || !packageId) {
         toast.error('Connect a wallet on a network with a deployed walform package.');
-        return;
+        return null;
       }
       setIsSubmitting(true);
       setPublishState(formId, 'publishing');
@@ -62,7 +74,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
         const stored = await formDb.getById(formId);
         if (!stored) throw new Error('Form not found locally');
 
-        const publishSchema = await uploadCoverImageIfNeeded(stored);
+        const publishSchema = await uploadCoverImageIfNeeded(stored, uploadBlob);
 
         const { tx, needsSealedSchemaFollowUp } = buildPublishTx({
           sender,
@@ -110,11 +122,17 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
         await invalidateChain(digest);
 
         toast.success(buildSuccessMessage(options));
+        return {
+          formObjectId: ids.formObjectId,
+          formOwnerCapId: ids.formOwnerCapId,
+          mode: options.mode === 'on-chain' ? 'on-chain' : 'template',
+        };
       } catch (err) {
         setPublishState(formId, 'error');
         const msg = err instanceof Error ? err.message : String(err);
         toast.error(`Publish failed: ${msg}`);
         console.error(err);
+        return null;
       } finally {
         setIsSubmitting(false);
       }
@@ -127,6 +145,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
       execute,
       invalidateChain,
       setPublishState,
+      uploadBlob,
       formId,
     ],
   );

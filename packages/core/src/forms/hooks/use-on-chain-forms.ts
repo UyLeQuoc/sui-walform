@@ -21,6 +21,9 @@ export interface OnChainForm {
   /** Mirrored from the Form's `site_object_id: Option<address>`; null when the
    *  form hasn't been deployed as a Walrus Site (Mode B) yet. */
   siteObjectId: string | null;
+  /** Walrus aggregator URL parsed from schema JSON; null when missing or
+   *  the schema can't be decoded (e.g. sealed schema). */
+  coverImage: string | null;
 }
 
 export interface OnChainTemplate {
@@ -127,6 +130,7 @@ export function useOnChainForms(): UseOnChainFormsResult {
         fields: {
           title?: string;
           closed?: boolean;
+          schema?: number[];
           site_object_id?: string | null | { Some?: string; vec?: string[] };
           settings?: {
             fields?: {
@@ -141,6 +145,7 @@ export function useOnChainForms(): UseOnChainFormsResult {
       const fields = content.fields;
       const settings = fields.settings?.fields ?? {};
       const stats = fields.stats?.fields ?? {};
+      const coverImage = extractCoverImage(fields.schema);
       // Form.site_object_id is Option<address>: serialised as the address
       // directly when Some, null when None.
       let siteObjectId: string | null = null;
@@ -163,6 +168,7 @@ export function useOnChainForms(): UseOnChainFormsResult {
         accessMode: Number(settings.access_mode ?? 0),
         closed: Boolean(fields.closed),
         siteObjectId,
+        coverImage,
       });
     }
     const running: OnChainForm[] = [];
@@ -219,4 +225,23 @@ export function useOnChainForms(): UseOnChainFormsResult {
 
   void network;
   return { running, ended, templates, isLoading, error, packageMissing };
+}
+
+/**
+ * Best-effort decode of the on-chain `schema` bytes into a coverImage URL.
+ * Sealed-schema forms (encrypted bytes) and any malformed/missing input
+ * return null silently — the caller falls back to the status-tinted banner.
+ */
+function extractCoverImage(schema: number[] | undefined): string | null {
+  if (!schema || schema.length === 0) return null;
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(schema));
+    const parsed = JSON.parse(text) as { coverImage?: unknown };
+    if (typeof parsed.coverImage === 'string' && parsed.coverImage.length > 0) {
+      return parsed.coverImage;
+    }
+  } catch {
+    // Sealed ciphertext or non-JSON payload — leave cover null.
+  }
+  return null;
 }

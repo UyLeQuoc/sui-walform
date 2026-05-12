@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useDocumentTitle } from '../../hooks/use-document-title';
 import { useFormOnChain } from '../../hooks/use-form-on-chain';
 import { CenteredMessage } from './CenteredMessage';
 import { SealedSchemaGate } from './SealedSchemaGate';
@@ -19,6 +20,7 @@ interface FormSubmissionViewProps {
  */
 export function FormSubmissionView({ formId }: FormSubmissionViewProps) {
   const { form, isLoading, error } = useFormOnChain(formId);
+  useDocumentTitle(form?.title);
   // Capture mount time once so the render stays pure. If the user leaves the
   // page open past `closesAtMs` the on-chain submit will still reject; the
   // banner just won't auto-flip without a refresh.

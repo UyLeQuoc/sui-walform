@@ -110,6 +110,21 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         return;
       }
 
+      // Pre-flight gas check. WalForm doesn't sponsor any transactions — the
+      // submitter signs and pays SUI gas. A wallet with zero SUI on this
+      // network would otherwise surface as the unfriendly low-level
+      // "No valid gas coins found for the transaction" error.
+      const suiBalance = await suiClient.getBalance({
+        owner: account.address,
+        coinType: '0x2::sui::SUI',
+      });
+      if (BigInt(suiBalance.totalBalance) === 0n) {
+        toast.error(
+          'Your wallet has no SUI to pay gas. Fund it from the testnet faucet and try again.',
+        );
+        return;
+      }
+
       const allowlistId = await resolveAllowlistId({
         form,
         accountAddress: account.address,
@@ -170,7 +185,18 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           toast.error(`Need at least ${formatSui(err.required)} SUI to pay the submission fee.`);
         } else {
           const msg = err instanceof Error ? err.message : String(err);
-          toast.error(`Submit failed: ${msg}`);
+          // Wallets surface a low-level "No valid gas coins found for the
+          // transaction" when the connected account holds no SUI on the
+          // active network. Map it to a clearer hint — same root cause as
+          // the pre-flight branch, but covers races where dust got spent
+          // between the pre-flight and the signing prompt.
+          if (msg.includes('No valid gas coins') || msg.includes('GasBalanceTooLow')) {
+            toast.error(
+              'Your wallet has no SUI to pay gas. Fund it from the testnet faucet and try again.',
+            );
+          } else {
+            toast.error(`Submit failed: ${msg}`);
+          }
         }
         console.error(err);
       } finally {

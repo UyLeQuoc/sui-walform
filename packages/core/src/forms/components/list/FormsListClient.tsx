@@ -1,46 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, Plus, Wallet } from 'lucide-react';
+import { FileText, Lock, Wallet } from 'lucide-react';
 import { useCurrentWallet } from '@mysten/dapp-kit';
-import { Button } from '../../../ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../ui/tabs';
-import { WalletButton } from '../../../sui/wallet-ui';
-import { useCreateDraft } from '../../hooks/use-create-draft';
 import { useForms } from '../../hooks/use-forms';
 import { useOnChainForms } from '../../hooks/use-on-chain-forms';
 import { MarketplaceBrowse } from '../marketplace';
-import { ThemeToggle } from '../editor/ThemeToggle';
-import { DraftsBody, OnChainFormsBody, TemplatesBody } from './list-bodies';
-import { EmptyState } from './list-shared';
+import { FormCard } from './FormCard';
+import { FormsHeader } from './FormsHeader';
+import { OnChainFormCard } from './OnChainFormCard';
+import { EmptyState, ErrorState, GridSkeleton } from './list-shared';
 
-type TopTab = 'drafts' | 'mine' | 'marketplace';
-type MineTab = 'on-chain-running' | 'on-chain-ended' | 'marketplace';
+type TopTab = 'forms' | 'marketplace';
 
-/**
- * Tabbed forms list. All transactional flows (close form, treasury withdraw,
- * draft creation) live in dedicated hooks; this component just routes tab
- * state to body components.
- */
 export function FormsListClient() {
   const router = useRouter();
   const { isConnected } = useCurrentWallet();
   const { forms, isLoading: draftsLoading, error: draftsError, deleteForm } = useForms();
   const {
     running,
-    ended,
-    templates,
     isLoading: chainLoading,
     error: chainError,
     packageMissing,
   } = useOnChainForms();
-  const { createAndOpen, isCreating } = useCreateDraft();
+  const [top, setTop] = useState<TopTab>('forms');
 
-  const [top, setTop] = useState<TopTab>('drafts');
-  const [mine, setMine] = useState<MineTab>('on-chain-running');
-
-  const myFormsCount = isConnected ? running.length + ended.length + templates.length : 0;
+  const formsCount = forms.length + (isConnected ? running.length : 0);
+  const isLoading = draftsLoading || (isConnected && chainLoading);
+  const error = draftsError ?? chainError;
+  const showRunningEmpty = isConnected && !packageMissing;
 
   return (
     <div className="bg-background relative min-h-screen [--forms-dot:rgba(0,0,0,0.14)] dark:[--forms-dot:rgba(255,255,255,0.12)]">
@@ -55,36 +45,16 @@ export function FormsListClient() {
             'radial-gradient(ellipse 100% 80% at 50% 0%, black 30%, transparent 100%)',
         }}
       />
-      <header className="bg-background relative z-10 border-b">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3">
-          <h1 className="text-xl font-semibold">Forms</h1>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            {top === 'drafts' && (
-              <Button onClick={() => void createAndOpen()} disabled={isCreating}>
-                <Plus className="mr-1.5 h-4 w-4" />
-                {isCreating ? 'Creating…' : 'New form'}
-              </Button>
-            )}
-            <WalletButton />
-          </div>
-        </div>
-      </header>
+      <FormsHeader />
 
       <main className="relative z-10 mx-auto w-full max-w-7xl px-4 py-6">
         <Tabs value={top} onValueChange={(v) => setTop(v as TopTab)} className="flex flex-col">
           <TabsList className="rounded-none">
             <TabsTrigger
-              value="drafts"
+              value="forms"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-none"
             >
-              Drafts ({forms.length})
-            </TabsTrigger>
-            <TabsTrigger
-              value="mine"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-none"
-            >
-              My Forms ({myFormsCount})
+              Forms ({formsCount})
             </TabsTrigger>
             <TabsTrigger
               value="marketplace"
@@ -94,72 +64,93 @@ export function FormsListClient() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="drafts" className="mt-6">
-            <DraftsBody
-              isLoading={draftsLoading}
-              error={draftsError}
-              forms={forms}
-              onDelete={deleteForm}
-              onCreate={createAndOpen}
-              isCreating={isCreating}
-              onRetry={() => router.refresh()}
-            />
-          </TabsContent>
-
-          <TabsContent value="marketplace" className="mt-6">
-            <MarketplaceBrowse />
-          </TabsContent>
-
-          <TabsContent value="mine" className="mt-6">
-            {!isConnected ? (
+          <TabsContent value="forms" className="mt-6">
+            {isLoading ? (
+              <GridSkeleton />
+            ) : error ? (
+              <ErrorState message={error.message} onRetry={() => router.refresh()} />
+            ) : !isConnected && forms.length === 0 ? (
               <EmptyState
                 icon={<Wallet className="text-muted-foreground h-8 w-8" />}
-                title="Connect a wallet to see your forms"
-                description="My Forms shows on-chain data tied to your wallet. Drafts are stored locally and stay in the Drafts tab."
+                title="Connect a wallet to see published forms"
+                description="Drafts stay on this device. Connect a wallet to load forms you've already published on-chain."
               />
-            ) : packageMissing ? (
+            ) : packageMissing && forms.length === 0 ? (
               <EmptyState
                 icon={<Lock className="text-muted-foreground h-8 w-8" />}
                 title="walform package not configured"
                 description="Set NEXT_PUBLIC_PACKAGE_ID for the active network in .env.local to load on-chain forms."
               />
+            ) : forms.length === 0 && running.length === 0 ? (
+              <EmptyState
+                icon={<FileText className="text-muted-foreground h-8 w-8" />}
+                title="No forms yet"
+                description="Create your first form — drafts live locally until you publish."
+              />
             ) : (
-              <Tabs
-                value={mine}
-                onValueChange={(v) => setMine(v as MineTab)}
-                className="flex flex-col"
-              >
-                <TabsList className="rounded-none">
-                  <TabsTrigger value="on-chain-running">Running ({running.length})</TabsTrigger>
-                  <TabsTrigger value="on-chain-ended">Ended ({ended.length})</TabsTrigger>
-                  <TabsTrigger value="marketplace">Marketplace ({templates.length})</TabsTrigger>
-                </TabsList>
-                <TabsContent value="on-chain-running" className="mt-6">
-                  <OnChainFormsBody
-                    isLoading={chainLoading}
-                    error={chainError}
-                    items={running}
-                    emptyTitle="No running forms"
-                    emptyDescription="Publish a draft to start accepting submissions."
-                  />
-                </TabsContent>
-                <TabsContent value="on-chain-ended" className="mt-6">
-                  <OnChainFormsBody
-                    isLoading={chainLoading}
-                    error={chainError}
-                    items={ended}
-                    emptyTitle="No ended forms"
-                    emptyDescription="Forms past their close date or closed manually show up here."
-                  />
-                </TabsContent>
-                <TabsContent value="marketplace" className="mt-6">
-                  <TemplatesBody isLoading={chainLoading} error={chainError} items={templates} />
-                </TabsContent>
-              </Tabs>
+              <div className="flex flex-col gap-8">
+                {showRunningEmpty || running.length > 0 ? (
+                  <Section
+                    title="Running"
+                    count={running.length}
+                    emptyHint={
+                      running.length === 0
+                        ? 'No running forms yet. Publish a draft to start collecting responses.'
+                        : null
+                    }
+                  >
+                    {running.map((f) => (
+                      <OnChainFormCard key={f.formId} form={f} />
+                    ))}
+                  </Section>
+                ) : null}
+                <Section
+                  title="Drafts"
+                  count={forms.length}
+                  emptyHint={
+                    forms.length === 0
+                      ? 'No drafts. Create a new form to start authoring.'
+                      : null
+                  }
+                >
+                  {forms.map((form) => (
+                    <FormCard key={form.id} form={form} onDelete={deleteForm} />
+                  ))}
+                </Section>
+              </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="marketplace" className="mt-6">
+            <MarketplaceBrowse />
           </TabsContent>
         </Tabs>
       </main>
     </div>
+  );
+}
+
+interface SectionProps {
+  title: string;
+  count: number;
+  emptyHint: string | null;
+  children: ReactNode;
+}
+
+function Section({ title, count, emptyHint, children }: SectionProps) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-baseline gap-2">
+        <h2 className="text-sm font-semibold tracking-wide uppercase">{title}</h2>
+        <span className="text-muted-foreground text-xs tabular-nums">{count}</span>
+      </div>
+      {emptyHint ? (
+        <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-6 text-center text-sm">
+          {emptyHint}
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+      )}
+    </section>
   );
 }

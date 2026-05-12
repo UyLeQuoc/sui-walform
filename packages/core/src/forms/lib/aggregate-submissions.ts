@@ -5,6 +5,15 @@ export interface AggregateBucket {
   count: number;
 }
 
+export interface FieldSummary {
+  /** Rows where this field had a non-empty value. */
+  answered: number;
+  /** Rows where this field was blank/skipped. */
+  skipped: number;
+  /** Numeric average for rating / linear_scale. NaN otherwise. */
+  average: number;
+}
+
 const CHART_FIELD_TYPES = new Set<FormField['type']>([
   'single_choice',
   'multiple_choice',
@@ -14,19 +23,72 @@ const CHART_FIELD_TYPES = new Set<FormField['type']>([
   'linear_scale',
 ]);
 
-/**
- * True iff this field type makes sense to render as an aggregate bar chart
- * on the Results dashboard. Free-text + layout fields are excluded.
- */
+const TEXT_FIELD_TYPES = new Set<FormField['type']>([
+  'short_text',
+  'long_text',
+  'email',
+  'phone',
+  'url',
+]);
+
 export function isChartableField(field: FormField): boolean {
   return CHART_FIELD_TYPES.has(field.type);
 }
 
+export function isTextField(field: FormField): boolean {
+  return TEXT_FIELD_TYPES.has(field.type);
+}
+
 /**
- * Group decrypted-submission rows into bucket counts for one field. Buckets
- * are pre-seeded from the field's option/scale definition so empty
- * categories still render and the order matches the form definition.
+ * Pick the best chart variant for a chartable field. Donut reads better for
+ * 2–4 mutually-exclusive options; horizontal bars handle longer option lists
+ * and multi-select; histogram is the natural shape for ordinal scales.
  */
+export function chartVariantFor(
+  field: FormField,
+): 'donut' | 'hbar' | 'histogram' {
+  if (field.type === 'yes_no') return 'donut';
+  if (field.type === 'single_choice' && (field.options?.length ?? 0) <= 4) return 'donut';
+  if (field.type === 'rating' || field.type === 'linear_scale') return 'histogram';
+  return 'hbar';
+}
+
+function isEmpty(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
+}
+
+/**
+ * Per-field response/skip counts + numeric average where it makes sense.
+ * Skip = decrypted row had this id missing or empty. Layout-only fields
+ * (heading, divider, etc.) should never reach this function — gate at the
+ * caller via `isInputField`.
+ */
+export function summarizeField(field: FormField, rows: Record<string, unknown>[]): FieldSummary {
+  let answered = 0;
+  let sum = 0;
+  let numericCount = 0;
+  for (const row of rows) {
+    const value = row[field.id];
+    if (isEmpty(value)) continue;
+    answered++;
+    if (field.type === 'rating' || field.type === 'linear_scale') {
+      const n = Number(value);
+      if (Number.isFinite(n)) {
+        sum += n;
+        numericCount++;
+      }
+    }
+  }
+  return {
+    answered,
+    skipped: rows.length - answered,
+    average: numericCount > 0 ? sum / numericCount : Number.NaN,
+  };
+}
+
 export function bucketize(field: FormField, rows: Record<string, unknown>[]): AggregateBucket[] {
   const counts = new Map<string, number>();
 
@@ -51,13 +113,43 @@ export function bucketize(field: FormField, rows: Record<string, unknown>[]): Ag
 
   for (const row of rows) {
     const value = row[field.id];
-    if (value === null || value === undefined || value === '') continue;
+    if (isEmpty(value)) continue;
     for (const label of pickLabels(field, value)) {
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
   }
 
   return Array.from(counts.entries()).map(([label, count]) => ({ label, count }));
+}
+
+/**
+ * Top-N most frequent answers for free-text fields. Trims and case-folds for
+ * grouping so "Yes" and "yes " count together — the displayed label keeps
+ * the first form observed.
+ */
+export function topTextAnswers(
+  field: FormField,
+  rows: Record<string, unknown>[],
+  limit = 5,
+): AggregateBucket[] {
+  if (!isTextField(field)) return [];
+  const counts = new Map<string, { label: string; count: number }>();
+  for (const row of rows) {
+    const value = row[field.id];
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    const entry = counts.get(key);
+    if (entry) {
+      entry.count++;
+    } else {
+      counts.set(key, { label: trimmed, count: 1 });
+    }
+  }
+  return Array.from(counts.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
 }
 
 function pickLabels(field: FormField, value: unknown): string[] {

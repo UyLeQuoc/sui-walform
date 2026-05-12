@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { Controller, type Control, type FieldValues } from 'react-hook-form';
 import { Button } from '../../../ui/button';
 import { Spinner } from '../../../ui/spinner';
-import { putBlob } from '../../../walrus';
+import { useWalrusWalletUpload } from '../../../walrus';
 import { PreviewField } from '../preview/PreviewField';
 import type { FormField } from '../../../types';
 
@@ -27,6 +27,7 @@ export function FileField({ field, control }: FileFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [filename, setFilename] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
+  const { uploadBlob, isReady } = useWalrusWalletUpload();
 
   return (
     <Controller
@@ -45,11 +46,15 @@ export function FileField({ field, control }: FileFieldProps) {
             toast.error(`File too large — max ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MiB.`);
             return;
           }
+          if (!isReady) {
+            toast.error('Connect a wallet on testnet/mainnet to upload files to Walrus.');
+            return;
+          }
           setFilename(file.name);
           setIsUploading(true);
           try {
             const bytes = new Uint8Array(await file.arrayBuffer());
-            const { url } = await putBlob(bytes, { epochs: 5 });
+            const { url } = await uploadBlob(bytes, { epochs: 5 });
             rhf.onChange(url);
             toast.success(`Uploaded ${file.name} to Walrus`);
           } catch (err) {

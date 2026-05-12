@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Send } from 'lucide-react';
 import { useCurrentWallet } from '@mysten/dapp-kit';
 import { Button } from '../../../ui/button';
@@ -15,6 +16,7 @@ interface EditorPublishButtonProps {
 }
 
 export function EditorPublishButton({ formId }: EditorPublishButtonProps) {
+  const router = useRouter();
   const formTitle = useFormBuilderStore((s) => s.schema.title);
   const { isConnected } = useCurrentWallet();
   const { coverDataUrl, refresh: refreshCover } = useDraftCoverDataUrl(formId);
@@ -37,8 +39,11 @@ export function EditorPublishButton({ formId }: EditorPublishButtonProps) {
   };
 
   const handleSubmit = async (options: Parameters<typeof publish>[0]) => {
-    await publish(options);
+    const result = await publish(options);
     setDialogOpen(false);
+    if (result?.mode === 'on-chain') {
+      router.push(`/forms/${result.formObjectId}/results`);
+    }
   };
 
   return (

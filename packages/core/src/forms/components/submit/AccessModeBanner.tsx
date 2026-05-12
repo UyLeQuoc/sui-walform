@@ -130,8 +130,8 @@ function PaidBanner({
         </span>
       ) : (
         <span>
-          {formatSui(form.submissionFeeMist)} SUI per submit — paid from your wallet (gas is
-          sponsored).
+          {formatSui(form.submissionFeeMist)} SUI per submit — fee and gas are paid from your
+          connected wallet.
         </span>
       )}
     </>
