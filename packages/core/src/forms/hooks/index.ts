@@ -22,6 +22,8 @@ export * from './use-template-schema';
 export * from './use-marketplace-votes';
 export * from './use-vote-template';
 export * from './use-submission-tags';
+export * from './use-form-reviewers';
+export * from './use-reviewing-forms';
 export * from './use-form-on-chain';
 export * from './use-form-allowlist';
 export * from './use-form-treasury';

@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "packageId": "0xb7f027d93a45d1d633daafbfd0a098f18b4e47790c9ad98caf9e8902ae45903d",
+  "packageId": "0x83993865d4dc92d2e4c08d25320ac0b593cacca9fc1971893400bf33d63b7bd6",
   "originalPackageId": "0x2d8b918defc43b3b72afe63364f9b974c636b5820082d9a64b031e5e6d977289",
   "publishedAt": "2026-04-26T08:49:54.366Z",
   "publishTxDigest": "7RH64djFLMT9R3jCiS8anMASPp8SoYzs1LnGKqu6w2Po",
@@ -12,7 +12,7 @@
   "platformTreasury": "0xfea2d0b3f4d87ec5ad0bbf6326295b2002d5a35f011e908e9d426446eca8fac6",
   "platformAdminCap": "0x65aa51347e74496d4a239aa6548facc585b401beb7005fd7d84f0a55dd496f87",
   "notes": "Written by scripts/publish.ts. originalPackageId MUST stay stable across upgrades (Seal identity prefix).",
-  "previousPackageId": "0xf56a0285f01c6c56f10b0e33ff6b9a0e8594ec916ab89286ee3ae7cc62b2cbda",
-  "lastUpgradeAt": "2026-05-12T17:44:22.445Z",
-  "lastUpgradeTxDigest": "56v5tcLPyCce6bpC3aWqECpFLBnvpzHtvBECR7Yv84Rq"
+  "previousPackageId": "0xb7f027d93a45d1d633daafbfd0a098f18b4e47790c9ad98caf9e8902ae45903d",
+  "lastUpgradeAt": "2026-05-12T18:43:05.676Z",
+  "lastUpgradeTxDigest": "6uf4rSpVPb2R2U3JVkFPVsz363Uf3eeqqKnwDEGRfmXn"
 }

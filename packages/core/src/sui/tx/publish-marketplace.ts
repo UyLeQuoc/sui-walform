@@ -94,6 +94,13 @@ export function buildPublishMarketplaceTx(input: BuildPublishMarketplaceTxInput)
     arguments: [templateArg],
   });
 
+  // reviewers tracker — owner can add judges/co-admins to decrypt the
+  // template's source-form submissions (rare but uniform with on-chain path).
+  tx.moveCall({
+    target: `${input.packageId}::reviewers::create_and_share`,
+    arguments: [capArg, formArg],
+  });
+
   tx.add(
     shareForm({
       package: input.packageId,

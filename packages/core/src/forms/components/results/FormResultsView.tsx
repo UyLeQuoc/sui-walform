@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Download, ExternalLink, Lock, RefreshCw, Share2, X } from 'lucide-react';
+import { Copy, Download, Eye, ExternalLink, Lock, RefreshCw, Share2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCurrentAccount, useCurrentWallet, useSuiClientContext } from '@mysten/dapp-kit';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,7 @@ import { useDocumentTitle } from '../../hooks/use-document-title';
 import type { OnChainForm } from '../../hooks/use-on-chain-forms';
 import { useCloseForm } from '../../hooks/use-close-form';
 import { useSeededSubmissions } from '../../hooks/use-seeded-submissions';
+import { useFormReviewers } from '../../hooks/use-form-reviewers';
 import { useSubmissionDecryption } from '../../hooks/use-submission-decryption';
 import { useSubmissionTags } from '../../hooks/use-submission-tags';
 import {
@@ -44,6 +46,7 @@ import { FormStatusBadge } from '../list/FormStatusBadge';
 import { WithdrawTreasuryButton } from '../list/WithdrawTreasuryButton';
 import { AggregateCharts } from './AggregateCharts';
 import { ResponseTimeline } from './ResponseTimeline';
+import { ReviewersPanel } from './ReviewersPanel';
 import { SeedResponsesButton } from './SeedResponsesButton';
 import { ShareFormDialog } from './ShareFormDialog';
 import { StatsSummary } from './StatsSummary';
@@ -53,7 +56,7 @@ interface FormResultsViewProps {
   formId: string;
 }
 
-type ResultsTab = 'summary' | 'individual' | 'manage';
+type ResultsTab = 'summary' | 'individual' | 'reviewers' | 'manage';
 
 /**
  * Creator's Results dashboard.
@@ -87,6 +90,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
 
   const decryption = useSubmissionDecryption({ formId });
   const tags = useSubmissionTags(formId);
+  const reviewersState = useFormReviewers(formId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [tab, setTab] = useState<ResultsTab>('summary');
   const [shareOpen, setShareOpen] = useState(false);
@@ -94,7 +98,13 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     DEFAULT_SUBMISSION_FILTERS,
   );
 
-  const isOwner = !!account && !!form && account.address === form.owner;
+  const myAddr = account?.address ? normalizeSuiAddress(account.address) : null;
+  const isOwner =
+    !!myAddr && !!form && myAddr === normalizeSuiAddress(form.owner);
+  const isReviewer = !!myAddr && reviewersState.members.includes(myAddr);
+  const canView = isOwner || isReviewer;
+  // Manage tab needs the FormOwnerCap (close/withdraw/etc.) so it stays
+  // owner-only. Reviewers see Summary + Individual but not Manage.
   const ownerForm = isOwner
     ? (running.find((f) => f.formId === formId) ?? ended.find((f) => f.formId === formId) ?? null)
     : null;
@@ -146,20 +156,19 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       </Card>
     );
   }
-  // Gate the entire dashboard behind owner-cap ownership. Non-owners can
-  // still submit at /f/[id] and view their own receipt — analytics is
-  // creator-only because Seal only releases full plaintext to the cap holder.
-  if (!isOwner) {
+  // Gate the dashboard: owner (cap holder) OR reviewer (in FormReviewers
+  // members set). Anyone else still gets the submit + own-receipt flows.
+  if (!canView) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
           <Lock className="text-muted-foreground h-6 w-6" />
           <h2 className="font-semibold">You don&apos;t have access to these results</h2>
           <p className="text-muted-foreground max-w-sm text-sm">
-            Only the form&apos;s creator can view responses. Connected as{' '}
+            Only the form&apos;s creator or invited reviewers can view responses. Connected as{' '}
             <code className="font-mono">{shortAddr(account?.address ?? '')}</code> — creator is{' '}
-            <code className="font-mono">{shortAddr(form.owner)}</code>. Switch wallets or open the
-            public submit page instead.
+            <code className="font-mono">{shortAddr(form.owner)}</code>. Ask the creator to add you
+            as a reviewer, switch wallets, or open the public submit page instead.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
             <WalletButton />
@@ -242,17 +251,29 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
               })}
             />
           </div>
-          <p className="text-muted-foreground mt-0.5 text-xs">
-            {rows.length} {rows.length === 1 ? 'response' : 'responses'} · creator{' '}
-            <a
-              href={suivisionUrl(network, 'account', form.owner)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground inline-flex items-center gap-1 underline-offset-2 hover:underline"
-            >
-              <code className="font-mono">{shortAddr(form.owner)}</code>
-              <ExternalLink className="h-3 w-3" />
-            </a>
+          <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+            <span>
+              {rows.length} {rows.length === 1 ? 'response' : 'responses'}
+            </span>
+            <span>·</span>
+            <span>
+              creator{' '}
+              <a
+                href={suivisionUrl(network, 'account', form.owner)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground inline-flex items-center gap-1 underline-offset-2 hover:underline"
+              >
+                <code className="font-mono">{shortAddr(form.owner)}</code>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </span>
+            {!isOwner && isReviewer && (
+              <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]">
+                <Eye className="h-3 w-3" />
+                Viewing as reviewer
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -261,6 +282,12 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
             fields={inputFields}
             seededCount={seededRows.length}
           />
+          <Button size="sm" variant="outline" asChild>
+            <a href={`/f/${formId}`} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Open form
+            </a>
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setShareOpen(true)}>
             <Share2 className="mr-1.5 h-3.5 w-3.5" />
             Share
@@ -314,6 +341,9 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
           </TabsTrigger>
           <TabsTrigger value="individual" className="rounded-none">
             Individual ({rows.length})
+          </TabsTrigger>
+          <TabsTrigger value="reviewers" className="rounded-none">
+            Reviewers ({reviewersState.members.length})
           </TabsTrigger>
           {ownerForm && (
             <TabsTrigger value="manage" className="rounded-none">
@@ -381,6 +411,10 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
               />
             );
           })}
+        </TabsContent>
+
+        <TabsContent value="reviewers" className="mt-4">
+          <ReviewersPanel formId={formId} capId={ownerForm?.capId} />
         </TabsContent>
 
         {ownerForm && (

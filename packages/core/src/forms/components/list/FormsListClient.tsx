@@ -7,10 +7,12 @@ import { useCurrentWallet } from '@mysten/dapp-kit';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../ui/tabs';
 import { useForms } from '../../hooks/use-forms';
 import { useOnChainForms } from '../../hooks/use-on-chain-forms';
+import { useReviewingForms } from '../../hooks/use-reviewing-forms';
 import { MarketplaceBrowse } from '../marketplace';
 import { FormCard } from './FormCard';
 import { FormsHeader } from './FormsHeader';
 import { OnChainFormCard } from './OnChainFormCard';
+import { ReviewingFormCard } from './ReviewingFormCard';
 import { EmptyState, ErrorState, GridSkeleton } from './list-shared';
 
 type TopTab = 'forms' | 'marketplace';
@@ -25,11 +27,15 @@ export function FormsListClient() {
     error: chainError,
     packageMissing,
   } = useOnChainForms();
+  const reviewing = useReviewingForms();
   const [top, setTop] = useState<TopTab>('forms');
 
-  const formsCount = forms.length + (isConnected ? running.length : 0);
-  const isLoading = draftsLoading || (isConnected && chainLoading);
-  const error = draftsError ?? chainError;
+  const formsCount =
+    forms.length +
+    (isConnected ? running.length + reviewing.reviewing.length : 0);
+  const isLoading =
+    draftsLoading || (isConnected && (chainLoading || reviewing.isLoading));
+  const error = draftsError ?? chainError ?? reviewing.error;
   const showRunningEmpty = isConnected && !packageMissing;
 
   return (
@@ -81,7 +87,9 @@ export function FormsListClient() {
                 title="walform package not configured"
                 description="Set NEXT_PUBLIC_PACKAGE_ID for the active network in .env.local to load on-chain forms."
               />
-            ) : forms.length === 0 && running.length === 0 ? (
+            ) : forms.length === 0 &&
+              running.length === 0 &&
+              reviewing.reviewing.length === 0 ? (
               <EmptyState
                 icon={<FileText className="text-muted-foreground h-8 w-8" />}
                 title="No forms yet"
@@ -104,6 +112,17 @@ export function FormsListClient() {
                     ))}
                   </Section>
                 ) : null}
+                {reviewing.reviewing.length > 0 && (
+                  <Section
+                    title="Reviewing"
+                    count={reviewing.reviewing.length}
+                    emptyHint={null}
+                  >
+                    {reviewing.reviewing.map((f) => (
+                      <ReviewingFormCard key={f.formId} form={f} />
+                    ))}
+                  </Section>
+                )}
                 <Section
                   title="Drafts"
                   count={forms.length}

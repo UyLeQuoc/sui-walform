@@ -96,13 +96,20 @@ export function buildCreateFormTx(input: BuildCreateFormTxInput): Transaction {
     arguments: [allowlistArg],
   });
 
-  // 6. share form
+  // 6. reviewers::create_and_share — owner-gated tracker so judges/co-admins
+  //    can be added later via the form-settings UI without giving up the cap.
+  tx.moveCall({
+    target: `${pkg}::reviewers::create_and_share`,
+    arguments: [capArg, formArg],
+  });
+
+  // 7. share form
   tx.moveCall({
     target: `${pkg}::form::share`,
     arguments: [formArg],
   });
 
-  // 7. transfer cap to sender
+  // 8. transfer cap to sender
   tx.transferObjects([capArg], input.sender);
 
   return tx;

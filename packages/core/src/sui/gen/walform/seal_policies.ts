@@ -53,6 +53,43 @@ export function sealApproveReadSubmission(options: SealApproveReadSubmissionOpti
         arguments: normalizeMoveArguments(options.arguments, argumentsTypes, parameterNames),
     });
 }
+export interface SealApproveReadSubmissionWithReviewersArguments {
+    id: RawTransactionArgument<Array<number>>;
+    form: RawTransactionArgument<string>;
+    submission: RawTransactionArgument<string>;
+    reviewersObj: RawTransactionArgument<string>;
+}
+export interface SealApproveReadSubmissionWithReviewersOptions {
+    package?: string;
+    arguments: SealApproveReadSubmissionWithReviewersArguments | [
+        id: RawTransactionArgument<Array<number>>,
+        form: RawTransactionArgument<string>,
+        submission: RawTransactionArgument<string>,
+        reviewersObj: RawTransactionArgument<string>
+    ];
+}
+/**
+ * Extended variant: in addition to owner + submitter, any address in the form's
+ * `FormReviewers.members` set can decrypt. Used after a form has added
+ * co-reviewers via `reviewers::add_reviewer`. Falls through to the same identity
+ * check as `seal_approve_read_submission`.
+ */
+export function sealApproveReadSubmissionWithReviewers(options: SealApproveReadSubmissionWithReviewersOptions) {
+    const packageAddress = options.package ?? 'walform';
+    const argumentsTypes = [
+        'vector<u8>',
+        null,
+        null,
+        null
+    ] satisfies (string | null)[];
+    const parameterNames = ["id", "form", "submission", "reviewersObj"];
+    return (tx: Transaction) => tx.moveCall({
+        package: packageAddress,
+        module: 'seal_policies',
+        function: 'seal_approve_read_submission_with_reviewers',
+        arguments: normalizeMoveArguments(options.arguments, argumentsTypes, parameterNames),
+    });
+}
 export interface SealApproveSubmitArguments {
     id: RawTransactionArgument<Array<number>>;
     form: RawTransactionArgument<string>;
