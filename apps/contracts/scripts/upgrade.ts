@@ -8,7 +8,7 @@
  * upgrade tx using the saved UpgradeCap, writes the NEW packageId back.
  */
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
 
@@ -119,6 +119,29 @@ async function main() {
   console.log(`\nUpgraded. New packageId: ${packageChange.packageId}`);
   console.log(`Original (stable):       ${deployed.originalPackageId}`);
   console.log(`Wrote ${DEPLOYED_JSON}`);
+
+  // Mirror packageId into apps/builder/.env.local so the dev server picks up
+  // the new id without a manual paste step. originalPackageId never changes
+  // — only the bumped packageId is written here.
+  const envPath = resolve(import.meta.dir, "../../../apps/builder/.env.local");
+  const wrote = upsertEnvVar(envPath, "NEXT_PUBLIC_PACKAGE_ID", packageChange.packageId);
+  console.log(`Wrote env:               ${envPath} (${wrote})`);
+}
+
+function upsertEnvVar(envPath: string, key: string, value: string): string {
+  if (!existsSync(envPath)) {
+    writeFileSync(envPath, `${key}=${value}\n`);
+    return "missing-file → created";
+  }
+  const original = readFileSync(envPath, "utf-8");
+  const re = new RegExp(`^${key}=.*$`, "m");
+  if (re.test(original)) {
+    writeFileSync(envPath, original.replace(re, `${key}=${value}`));
+    return "updated";
+  }
+  const suffix = original.endsWith("\n") ? "" : "\n";
+  writeFileSync(envPath, `${original}${suffix}${key}=${value}\n`);
+  return "appended";
 }
 
 // -----------------------------------------------------------------------------

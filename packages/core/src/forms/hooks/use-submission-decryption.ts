@@ -3,8 +3,9 @@
 import { useCallback, useState } from 'react';
 import { useSuiClient } from '@mysten/dapp-kit';
 import { sealDecryptSubmission, getSealClient } from '../../crypto';
-import { useOriginalPackageId } from '../../sui/package-id';
+import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
 import { decodeBodyPointer, fetchWalrusBlob } from '../../walrus';
+import { useFormReviewers } from './use-form-reviewers';
 import { useSealSession } from './use-seal-session';
 import type { SubmissionRow } from './use-form-submissions';
 
@@ -39,7 +40,13 @@ export function useSubmissionDecryption(
   const { formId } = input;
   const sealSession = useSealSession();
   const suiClient = useSuiClient();
+  // Seal namespace stays on the original packageId (encryption identity),
+  // but the moveCall target needs the CURRENT packageId — Sui upgrade
+  // resolves new entry fns (like `seal_approve_read_submission_with_reviewers`)
+  // only against versions where they were introduced.
   const originalPackageId = useOriginalPackageId();
+  const activePackageId = useActivePackageId();
+  const reviewersState = useFormReviewers(formId);
 
   const [decryptedById, setDecryptedById] = useState<Record<string, DecryptedRow>>({});
   const [errorById, setErrorById] = useState<Record<string, string>>({});
@@ -47,7 +54,7 @@ export function useSubmissionDecryption(
 
   const decryptOne = useCallback(
     async (row: SubmissionRow) => {
-      if (!originalPackageId) return;
+      if (!originalPackageId || !activePackageId) return;
       setPendingId(row.submissionId);
       setErrorById((prev) => {
         if (!(row.submissionId in prev)) return prev;
@@ -67,11 +74,14 @@ export function useSubmissionDecryption(
           seal,
           sessionKey,
           client: suiClient,
-          packageId: originalPackageId,
+          // Routing target: the function may have been added in a later
+          // upgrade and is only reachable through the current packageId.
+          packageId: activePackageId,
           formObjectId: formId,
           submissionObjectId: row.submissionId,
           ciphertext,
           nonce: row.nonce,
+          reviewersObjectId: reviewersState.reviewersId ?? undefined,
         });
         const text = new TextDecoder().decode(plaintextBytes);
         let parsed: DecryptedRow;
@@ -88,7 +98,14 @@ export function useSubmissionDecryption(
         setPendingId(null);
       }
     },
-    [originalPackageId, sealSession, suiClient, formId],
+    [
+      originalPackageId,
+      activePackageId,
+      sealSession,
+      suiClient,
+      formId,
+      reviewersState.reviewersId,
+    ],
   );
 
   const decryptAll = useCallback(

@@ -136,11 +136,21 @@ function buildFieldSchema(field: FormField): z.ZodTypeAny {
         : base.optional();
     }
     case 'file': {
-      // Value shape after upload: aggregator URL string. Empty = no file.
-      // The renderer enforces the actual upload — schema just validates that
-      // a non-empty string is present when required.
-      const base = z.string();
-      return field.required ? base.min(1, 'Attach a file to submit') : base.optional();
+      // Post-upload the value is `FileAttachmentValue` (rich object). Legacy
+      // submissions stored just the URL string — accept both. Empty string
+      // (initial state) counts as "no file".
+      const attachment = z.object({
+        url: z.string().min(1),
+        name: z.string(),
+        size: z.number().int().nonnegative(),
+        type: z.string(),
+      });
+      const base = z.union([attachment, z.string()]);
+      if (!field.required) return base.optional();
+      return base.refine(
+        (v) => (typeof v === 'string' ? v.length > 0 : v.url.length > 0),
+        'Attach a file to submit',
+      );
     }
     case 'divider':
     case 'space':

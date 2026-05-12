@@ -47,6 +47,8 @@ const aiFieldSchema = z.object({
 const aiFormSchema = z.object({
   title: z.string(),
   description: z.string().optional(),
+  /** 2–4 short lowercase tags for the marketplace listing. */
+  tags: z.array(z.string()).max(5).optional(),
   fields: z.array(aiFieldSchema).min(1).max(8),
 });
 
@@ -85,6 +87,7 @@ export interface GenerateOptions {
 export interface GeneratedForm {
   title: string;
   description: string;
+  tags: string[];
   fields: FormField[];
 }
 
@@ -96,6 +99,7 @@ Schema:
 {
   "title": string,
   "description"?: string,
+  "tags"?: string[],
   "fields": [
     {
       "type": "${FIELD_TYPES_LIST}",
@@ -116,6 +120,7 @@ Rules — keep the form MINIMAL:
 5. OMIT helpText, placeholder, and the form description unless they're strictly necessary to disambiguate. Default to omitting all three.
 6. NO filler fields the user didn't ask for. NO "Any other feedback?", NO "Is there anything else?".
 7. Labels are short and direct. "Email", not "What is your email address?".
+8. Generate 2–4 short lowercase tags that describe the form for the marketplace ("feedback", "bug", "nps", "rsvp"). No spaces in a tag — use hyphens.
 
 Output the JSON object now.`;
 
@@ -265,6 +270,7 @@ function materialize(payload: AiFormPayload): GeneratedForm {
   return {
     title: payload.title,
     description: payload.description ?? '',
+    tags: (payload.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean),
     fields,
   };
 }
@@ -279,6 +285,7 @@ export function applyGeneratedForm(current: FormSchema, generated: GeneratedForm
     ...current,
     title: generated.title,
     description: generated.description,
+    tags: generated.tags,
     fields: generated.fields,
   };
 }

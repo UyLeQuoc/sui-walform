@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { ExternalLink, Lock, Send } from 'lucide-react';
+import { Lock, Send } from 'lucide-react';
+import { FileAttachmentView } from './FileAttachmentView';
 import {
   useCurrentAccount,
   useCurrentWallet,
@@ -229,18 +230,9 @@ function formatCell(value: unknown): string {
 }
 
 function renderCell(field: FormField, value: unknown): ReactNode {
-  if (field.type === 'file' && typeof value === 'string' && value.length > 0) {
-    return (
-      <a
-        href={value}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-foreground inline-flex items-center gap-1 underline-offset-2 hover:underline"
-      >
-        Download attachment
-        <ExternalLink className="h-3 w-3" />
-      </a>
-    );
+  if (field.type === 'file') {
+    if (!value) return <span className="text-muted-foreground/60">— not answered —</span>;
+    return <FileAttachmentView value={value} />;
   }
   const formatted = formatCell(value);
   if (!formatted) {

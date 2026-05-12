@@ -23,7 +23,7 @@ interface PublishFormButtonProps {
 export function PublishFormButton({ formId, formTitle }: PublishFormButtonProps) {
   const router = useRouter();
   const { isConnected } = useCurrentWallet();
-  const { coverDataUrl, refresh: refreshCover } = useDraftCoverDataUrl(formId);
+  const { coverDataUrl, description, tags, refresh: refreshCover } = useDraftCoverDataUrl(formId);
   const { isSubmitting, publish, isReady } = usePublishForm({ formId });
 
   const [connectOpen, setConnectOpen] = useState(false);
@@ -70,6 +70,8 @@ export function PublishFormButton({ formId, formTitle }: PublishFormButtonProps)
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         formTitle={formTitle}
+        formDescription={description}
+        formTags={tags}
         coverImageDataUrl={coverDataUrl}
         isSubmitting={isSubmitting}
         onSubmit={async (options) => {

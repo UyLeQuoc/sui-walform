@@ -13,7 +13,7 @@ import type { WalrusSiteManifest } from '../../sui/tx/walrus-site';
  * "Resume Walrus deploy" branch in `<DeployToWalrusSiteButton>` can skip
  * straight to the Sui PTB on retry.
  *
- * Entries auto-expire at 24h; storage epochs (5) are well beyond that so a
+ * Entries auto-expire at 24h; storage epochs (15) are well beyond that so a
  * stale resume tx still resolves valid blobs.
  */
 

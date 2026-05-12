@@ -102,6 +102,12 @@ export function buildPublishListingTx(input: BuildPublishListingTxInput): Transa
     arguments: [templateArg],
   });
 
+  // reviewers tracker for this listing's source form.
+  tx.moveCall({
+    target: `${input.packageId}::reviewers::create_and_share`,
+    arguments: [capArg, formArg],
+  });
+
   // Share the Form + hand the cap to the creator.
   tx.moveCall({
     target: `${input.packageId}::form::share`,

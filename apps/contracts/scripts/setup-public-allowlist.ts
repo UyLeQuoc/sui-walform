@@ -19,7 +19,7 @@
  *      throwaway Form is shared so anyone could submit to it (irrelevant).
  */
 import { resolve } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { config as loadEnv } from 'dotenv';
 
 import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
@@ -83,10 +83,10 @@ async function main() {
   const formArg = created[0];
   const capArg = created[1];
 
-  // 3. allowlist::create_and_share(&cap)
+  // 3. allowlist::create_and_share(&cap, &clock)
   tx.moveCall({
     target: `${packageId}::allowlist::create_and_share`,
-    arguments: [capArg],
+    arguments: [capArg, tx.object.clock()],
   });
 
   // 4. share form, transfer cap to admin
@@ -107,14 +107,16 @@ async function main() {
     process.exit(1);
   }
 
-  const allowlistType = `${packageId}::allowlist::Allowlist`;
+  // RPC reports object types under `originalPackageId` regardless of which
+  // package version performed the create — match by `::allowlist::Allowlist`
+  // suffix so this works post-upgrade without re-keying on packageId.
   const created_objs = (result.objectChanges ?? []) as Array<{
     type?: string;
     objectType?: string;
     objectId?: string;
   }>;
   const allowlist = created_objs.find(
-    (c) => c.type === 'created' && c.objectType === allowlistType,
+    (c) => c.type === 'created' && c.objectType?.endsWith('::allowlist::Allowlist'),
   );
   if (!allowlist?.objectId) {
     console.error('No Allowlist created in tx');
@@ -125,9 +127,30 @@ async function main() {
   console.log(`✅ Public throwaway Allowlist created`);
   console.log(`   Tx digest:   ${result.digest}`);
   console.log(`   Allowlist:   ${allowlist.objectId}`);
-  console.log('');
-  console.log('Add to apps/builder/.env.local:');
-  console.log(`   NEXT_PUBLIC_PUBLIC_SUBMIT_ALLOWLIST_ID=${allowlist.objectId}`);
+
+  const envPath = resolve(import.meta.dir, '../../../apps/builder/.env.local');
+  const wrote = upsertEnvVar(envPath, 'NEXT_PUBLIC_PUBLIC_SUBMIT_ALLOWLIST_ID', allowlist.objectId);
+  console.log(`   Wrote env:   ${envPath} (${wrote})`);
+}
+
+/**
+ * Read `.env.local`, replace the line `KEY=...` if present, otherwise append.
+ * Returns 'updated' / 'appended' / 'missing-file' for logging.
+ */
+function upsertEnvVar(envPath: string, key: string, value: string): string {
+  if (!existsSync(envPath)) {
+    writeFileSync(envPath, `${key}=${value}\n`);
+    return 'missing-file → created';
+  }
+  const original = readFileSync(envPath, 'utf-8');
+  const re = new RegExp(`^${key}=.*$`, 'm');
+  if (re.test(original)) {
+    writeFileSync(envPath, original.replace(re, `${key}=${value}`));
+    return 'updated';
+  }
+  const suffix = original.endsWith('\n') ? '' : '\n';
+  writeFileSync(envPath, `${original}${suffix}${key}=${value}\n`);
+  return 'appended';
 }
 
 main().catch((err) => {

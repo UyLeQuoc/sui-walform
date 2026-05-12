@@ -209,7 +209,7 @@ function FieldEditPreviewImpl({ field }: FieldEditPreviewProps) {
           className="text-muted-foreground mt-2 w-full justify-start font-normal"
         >
           <Upload className="mr-1.5 h-3.5 w-3.5" />
-          {field.placeholder ?? 'Choose a file (max 4 MiB)'}
+          {field.placeholder ?? 'Choose any file (max 100 MiB)'}
         </Button>
       );
   }

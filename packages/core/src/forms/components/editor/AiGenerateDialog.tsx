@@ -74,10 +74,12 @@ export function AiGenerateDialog({ open, onOpenChange }: AiGenerateDialogProps) 
           title: generated.title,
           description: generated.description,
           fields: generated.fields,
+          tags: generated.tags,
         },
         `Generated: ${truncate(prompt, 40)}`,
       );
-      toast.success(`Generated ${generated.fields.length} fields`);
+      const tagSuffix = generated.tags.length > 0 ? ` · ${generated.tags.length} tags` : '';
+      toast.success(`Generated ${generated.fields.length} fields${tagSuffix}`);
       onOpenChange(false);
       setPrompt('');
     } catch (err) {

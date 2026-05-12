@@ -14,6 +14,7 @@ module walform::seal_policies;
 
 use walform::allowlist::{Self, Allowlist};
 use walform::form::{Self, Form};
+use walform::reviewers::{Self, FormReviewers};
 use walform::submission::{Self, Submission};
 use walform::template::{Self, FormTemplate};
 
@@ -61,6 +62,27 @@ entry fun seal_approve_read_submission(
         caller == form::owner(form) || caller == submission::submitter(submission),
         E_UNAUTHORIZED,
     );
+}
+
+/// Extended variant: in addition to owner + submitter, any address in the
+/// form's `FormReviewers.members` set can decrypt. Used after a form has
+/// added co-reviewers via `reviewers::add_reviewer`. Falls through to the
+/// same identity check as `seal_approve_read_submission`.
+entry fun seal_approve_read_submission_with_reviewers(
+    id: vector<u8>,
+    form: &Form,
+    submission: &Submission,
+    reviewers_obj: &FormReviewers,
+    ctx: &TxContext,
+) {
+    assert!(check_read_identity(&id, form, submission), E_BAD_IDENTITY);
+    reviewers::assert_for_form(reviewers_obj, form::id_address(form));
+    let caller = ctx.sender();
+    let allowed =
+        caller == form::owner(form) ||
+        caller == submission::submitter(submission) ||
+        reviewers::is_reviewer(reviewers_obj, caller);
+    assert!(allowed, E_UNAUTHORIZED);
 }
 
 /// Called by Seal before encryption to validate that a new ciphertext for

@@ -218,7 +218,7 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
         const results = await walrus.writeFiles({
           files: walrusFiles,
           signer: walrusSigner,
-          epochs: 5,
+          epochs: 15,
           deletable: false,
         });
         const quiltBlobId = results[0]?.blobId;
@@ -232,7 +232,7 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
         manifest = {
           publishedAt: new Date().toISOString(),
           network: net === 'mainnet' ? 'mainnet' : 'testnet',
-          epochs: 5,
+          epochs: 15,
           signer: account.address,
           quiltBlobId,
           quiltBlobIdU256,

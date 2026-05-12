@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Extension } from '@tiptap/core';
 import Placeholder from '@tiptap/extension-placeholder';
 import StarterKit from '@tiptap/starter-kit';
@@ -35,6 +36,26 @@ export function FormHeader() {
     immediatelyRender: false,
     onUpdate: ({ editor }) => updateDescription(editor.getText()),
   });
+
+  // Tiptap's `content` prop is mount-only — when the store mutates from
+  // outside (AI replace, undo/redo, draft load), push the new text into the
+  // editor manually. `setContent(text, false)` skips emitUpdate so we don't
+  // loop back into the onUpdate → updateTitle cycle.
+  useEffect(() => {
+    if (!titleEditor) return;
+    if (titleEditor.getText() !== schema.title) {
+      titleEditor.commands.setContent(schema.title || '', { emitUpdate: false });
+    }
+  }, [schema.title, titleEditor]);
+
+  useEffect(() => {
+    if (!descEditor) return;
+    const current = descEditor.getText();
+    const next = schema.description ?? '';
+    if (current !== next) {
+      descEditor.commands.setContent(next, { emitUpdate: false });
+    }
+  }, [schema.description, descEditor]);
 
   return (
     <div className="mb-10 px-3">

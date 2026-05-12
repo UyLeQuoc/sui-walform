@@ -26,7 +26,7 @@ export async function uploadCoverImageIfNeeded(
   let url: string;
   try {
     const bytes = dataUrlToBytes(stored.schema.coverImage);
-    const result = await uploadBlob(bytes, { epochs: 5 });
+    const result = await uploadBlob(bytes, { epochs: 15 });
     url = result.url;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
