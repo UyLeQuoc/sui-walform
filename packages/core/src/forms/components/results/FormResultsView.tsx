@@ -136,6 +136,34 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       </Card>
     );
   }
+  // Gate the entire dashboard behind owner-cap ownership. Non-owners can
+  // still submit at /f/[id] and view their own receipt — analytics is
+  // creator-only because Seal only releases full plaintext to the cap holder.
+  if (!isOwner) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+          <Lock className="text-muted-foreground h-6 w-6" />
+          <h2 className="font-semibold">You don&apos;t have access to these results</h2>
+          <p className="text-muted-foreground max-w-sm text-sm">
+            Only the form&apos;s creator can view responses. Connected as{' '}
+            <code className="font-mono">{shortAddr(account?.address ?? '')}</code> — creator is{' '}
+            <code className="font-mono">{shortAddr(form.owner)}</code>. Switch wallets or open the
+            public submit page instead.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <WalletButton />
+            <Button asChild variant="outline" size="sm">
+              <a href={`/f/${formId}`}>
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                Open public form
+              </a>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const decryptedCount = Object.keys(decryptedById).length;
   const uniqueSubmitters = new Set(rows.map((r) => r.submitter)).size;
@@ -190,12 +218,6 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
               <ExternalLink className="h-3 w-3" />
             </a>
           </p>
-          {!isOwner && (
-            <p className="text-destructive mt-2 text-xs">
-              Connected wallet is not the form&apos;s creator — Seal will reject decrypt requests
-              for other submitters&apos; responses.
-            </p>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SeedResponsesButton
