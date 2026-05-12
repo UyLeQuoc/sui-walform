@@ -92,7 +92,7 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
       const { blobId } = await clientRef.current.writeBlob({
         blob: bytes,
         deletable: options.deletable ?? false,
-        epochs: options.epochs ?? 5,
+        epochs: options.epochs ?? 15,
         signer: cachedSignerRef.current.signer,
       });
       return {

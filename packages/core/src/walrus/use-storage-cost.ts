@@ -31,7 +31,7 @@ export interface UseStorageCostResult {
   error: Error | null;
 }
 
-export function useStorageCost(sizeBytes: number, epochs: number = 5): UseStorageCostResult {
+export function useStorageCost(sizeBytes: number, epochs: number = 15): UseStorageCostResult {
   const suiClient = useSuiClient();
   const { network } = useSuiClientContext();
 

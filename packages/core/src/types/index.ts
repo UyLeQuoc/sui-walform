@@ -173,3 +173,20 @@ export interface FormSchema {
    */
   tags?: string[];
 }
+
+/**
+ * Rich attachment payload stored as a FileField submission value. Replaces
+ * the legacy URL-only string so the viewer can show filename + size + type
+ * without hitting the network for a HEAD probe. Legacy string values still
+ * decode for back-compat — viewers should accept `string | FileAttachmentValue`.
+ */
+export interface FileAttachmentValue {
+  /** Walrus aggregator URL of the blob. */
+  url: string;
+  /** Original filename from the picker (e.g. "demo.mp4"). */
+  name: string;
+  /** Byte size, captured at upload time. */
+  size: number;
+  /** MIME content-type from the File object (e.g. "video/mp4"). May be empty. */
+  type: string;
+}

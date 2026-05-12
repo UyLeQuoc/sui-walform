@@ -539,7 +539,7 @@ function CostEstimateRow({
           ) : cost ? (
             <span className="font-mono">
               {formatWal(cost.totalCost)} WAL
-              <span className="text-muted-foreground"> (5 epochs)</span>
+              <span className="text-muted-foreground"> (15 epochs · ~3 months)</span>
             </span>
           ) : null}
         </div>
