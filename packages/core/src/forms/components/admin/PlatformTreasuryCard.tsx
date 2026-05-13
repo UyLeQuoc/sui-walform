@@ -77,14 +77,12 @@ export function PlatformTreasuryCard() {
             Not authorized.
           </div>
           <p className="text-muted-foreground">
-            The connected wallet does not hold a{' '}
-            <code className="font-mono">PlatformAdminCap</code>. Withdrawals can only be signed by
-            the address that owns the cap.
+            The connected wallet does not hold a <code className="font-mono">PlatformAdminCap</code>
+            . Withdrawals can only be signed by the address that owns the cap.
           </p>
           <p className="text-muted-foreground text-xs">
             Connected as{' '}
-            <span className="font-mono">{treasury.sender ? shortAddr(treasury.sender) : '—'}</span>
-            .
+            <span className="font-mono">{treasury.sender ? shortAddr(treasury.sender) : '—'}</span>.
           </p>
         </CardContent>
       </Card>
@@ -96,8 +94,7 @@ export function PlatformTreasuryCard() {
     Number.isFinite(parsedAmountSui) && parsedAmountSui > 0 ? suiToMist(parsedAmountSui) : 0n;
   const empty = treasury.balanceMist === 0n;
   const overdraw = amountMist > treasury.balanceMist;
-  const canWithdraw =
-    !treasury.isWithdrawing && !empty && amountMist > 0n && !overdraw;
+  const canWithdraw = !treasury.isWithdrawing && !empty && amountMist > 0n && !overdraw;
 
   const handleWithdraw = async () => {
     if (!canWithdraw) return;

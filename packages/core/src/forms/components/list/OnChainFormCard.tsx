@@ -83,9 +83,7 @@ export function OnChainFormCard({ form }: OnChainFormCardProps) {
             </span>
             <span className="text-foreground text-3xl font-semibold tabular-nums">
               {form.submissionCount}
-              <span className="text-muted-foreground ml-1 text-base font-normal">
-                / {capLabel}
-              </span>
+              <span className="text-muted-foreground ml-1 text-base font-normal">/ {capLabel}</span>
             </span>
           </div>
           {fill !== null && !form.coverImage && (

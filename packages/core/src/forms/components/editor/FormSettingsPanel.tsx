@@ -241,8 +241,8 @@ export function FormSettingsPanel() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete form?</AlertDialogTitle>
             <AlertDialogDescription>
-              &ldquo;{formTitle}&rdquo; will be permanently deleted from this device. This cannot
-              be undone.
+              &ldquo;{formTitle}&rdquo; will be permanently deleted from this device. This cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

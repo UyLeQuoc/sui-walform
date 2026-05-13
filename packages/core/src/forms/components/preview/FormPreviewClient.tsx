@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useMemo } from 'react';
-import { WalformMark } from '../../../ui/landing-pages/walform-mark';
+import { Logo } from '../../../ui/logo';
 import { cn } from '../../../lib/utils';
 import { useStoredForm } from '../../hooks/use-stored-form';
 import { useFormBuilderStore } from '../../store/form-builder-store';
@@ -80,7 +80,7 @@ export function FormPreviewClient({ id }: Props) {
             href="/"
             className="hover:text-foreground inline-flex items-center gap-2 transition-colors"
           >
-            <WalformMark className="size-4" />
+            <Logo className="size-4" />
             <span className="font-medium">
               Made with <span className="underline-offset-2 group-hover:underline">WalForm</span>
             </span>

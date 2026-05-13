@@ -86,8 +86,7 @@ export function bucketizeTimeline(
   // Trim the leading window if the series is very long — keep the last ~36
   // buckets so axis labels stay legible.
   const maxBuckets = 36;
-  const startMs =
-    rawCount > maxBuckets ? earliest + (rawCount - maxBuckets) * stepMs : earliest;
+  const startMs = rawCount > maxBuckets ? earliest + (rawCount - maxBuckets) * stepMs : earliest;
   const buckets: TimelineBucket[] = [];
   for (let t = startMs; t <= latest; t += stepMs) {
     buckets.push({

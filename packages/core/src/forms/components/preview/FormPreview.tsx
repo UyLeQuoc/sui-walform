@@ -36,40 +36,40 @@ export function FormPreview({ schema, onSubmit, prefill }: FormPreviewProps) {
 
   return (
     <FormAppearanceProvider borderRadiusIndex={schema.settings.borderRadius}>
-    <div>
-      {/* Title block — 24px horizontal inset matches field content (outer px-3 + PreviewField px-3). */}
-      <div className="px-6 pt-8 pb-6">
-        {schema.title && <h1 className="text-3xl leading-tight font-bold">{schema.title}</h1>}
-        {schema.description && (
-          <p className="text-muted-foreground mt-2 text-sm">{schema.description}</p>
-        )}
-      </div>
-
-      <form onSubmit={handleSubmit}>
-        {/* Field list — matches editor FormCard field wrapper padding */}
-        <div className="flex flex-col px-3">
-          {schema.fields.map((field) => (
-            <PreviewFieldRenderer key={field.id} field={field} control={form.control} />
-          ))}
-        </div>
-
-        {/* Submit — total inset matches PreviewField's (px-3 outer + px-3 inner). */}
-        <div
-          className={cn(
-            'flex px-6 pb-8',
-            schema.settings.submitAlignment === 'right' && 'justify-end',
+      <div>
+        {/* Title block — 24px horizontal inset matches field content (outer px-3 + PreviewField px-3). */}
+        <div className="px-6 pt-8 pb-6">
+          {schema.title && <h1 className="text-3xl leading-tight font-bold">{schema.title}</h1>}
+          {schema.description && (
+            <p className="text-muted-foreground mt-2 text-sm">{schema.description}</p>
           )}
-        >
-          <Button
-            type="submit"
-            disabled={form.formState.isSubmitting}
-            className={cn(schema.settings.submitAlignment === 'center' && 'w-full')}
-          >
-            {schema.settings.submitLabel}
-          </Button>
         </div>
-      </form>
-    </div>
+
+        <form onSubmit={handleSubmit}>
+          {/* Field list — matches editor FormCard field wrapper padding */}
+          <div className="flex flex-col px-3">
+            {schema.fields.map((field) => (
+              <PreviewFieldRenderer key={field.id} field={field} control={form.control} />
+            ))}
+          </div>
+
+          {/* Submit — total inset matches PreviewField's (px-3 outer + px-3 inner). */}
+          <div
+            className={cn(
+              'flex px-6 pb-8',
+              schema.settings.submitAlignment === 'right' && 'justify-end',
+            )}
+          >
+            <Button
+              type="submit"
+              disabled={form.formState.isSubmitting}
+              className={cn(schema.settings.submitAlignment === 'center' && 'w-full')}
+            >
+              {schema.settings.submitLabel}
+            </Button>
+          </div>
+        </form>
+      </div>
     </FormAppearanceProvider>
   );
 }

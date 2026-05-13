@@ -456,11 +456,7 @@ function OnChainFields({
             <Label htmlFor="limit-toggle" className="cursor-pointer">
               Limit submissions
             </Label>
-            <Switch
-              id="limit-toggle"
-              checked={limitEnabled}
-              onCheckedChange={setLimitEnabled}
-            />
+            <Switch id="limit-toggle" checked={limitEnabled} onCheckedChange={setLimitEnabled} />
           </div>
           {limitEnabled ? (
             <Input

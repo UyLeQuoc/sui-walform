@@ -198,7 +198,10 @@ function rewriteProviderError(err: unknown, model: string): Error {
       `Rate-limited by OpenRouter on "${model}". Wait a moment or pick another free model.`,
     );
   }
-  if (status === '401' || (typeof body === 'string' && /invalid.?api.?key|unauthorized/i.test(body))) {
+  if (
+    status === '401' ||
+    (typeof body === 'string' && /invalid.?api.?key|unauthorized/i.test(body))
+  ) {
     return new Error('OpenRouter rejected the API key. Paste a fresh one from openrouter.ai/keys.');
   }
   const detail = status ? `${status} ${body ?? ''}`.trim() : (body ?? err.message);

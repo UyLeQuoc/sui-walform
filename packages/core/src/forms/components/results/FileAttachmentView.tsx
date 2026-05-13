@@ -1,10 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, ExternalLink, FileText, Image as ImageIcon, Music, Paperclip, Video } from 'lucide-react';
+import {
+  Download,
+  ExternalLink,
+  FileText,
+  Image as ImageIcon,
+  Music,
+  Paperclip,
+  Video,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '../../../ui/button';
-import { coerceFileAttachment, formatBytes, mimeKind, type MediaKind } from '../../lib/file-attachment';
+import {
+  coerceFileAttachment,
+  formatBytes,
+  mimeKind,
+  type MediaKind,
+} from '../../lib/file-attachment';
 
 interface FileAttachmentViewProps {
   /** Either the rich `FileAttachmentValue` object or a legacy URL string. */

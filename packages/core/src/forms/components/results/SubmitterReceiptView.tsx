@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { Lock, Send } from 'lucide-react';
+import { Logo } from '../../../ui/logo';
 import { FileAttachmentView } from './FileAttachmentView';
 import {
   useCurrentAccount,
@@ -216,8 +218,19 @@ export function SubmitterReceiptView({ formId }: { formId: string }) {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="bg-secondary/40 flex min-h-screen items-center justify-center px-4 py-10">
+    <div className="bg-secondary/40 flex min-h-screen flex-col items-center justify-center gap-4 px-4 py-10">
+      <Link href="/" aria-label="WalForm home" className="flex items-center gap-2">
+        <Logo className="size-6" />
+        <span className="text-foreground/80 text-sm font-semibold">WalForm</span>
+      </Link>
       <div className="w-full max-w-xl">{children}</div>
+      <Link
+        href="/"
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-[11px] transition-colors"
+      >
+        <Logo className="size-3.5" />
+        Made with <span className="font-medium">WalForm</span>
+      </Link>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { ArrowLeft, Eye, History, Redo2, Settings2, Sparkles, Undo2 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '../../../ui/button';
+import { Logo } from '../../../ui/logo';
 import type { SaveStatus } from '../../hooks/use-auto-save';
 import type { RightSidebarMode } from '../../hooks/use-right-sidebar-mode';
 import { EditorPublishButton } from './EditorPublishButton';
@@ -39,6 +40,9 @@ export function FormBuilderHeader({
     <header className="bg-background/95 supports-backdrop-filter:bg-background/60 z-20 border-b backdrop-blur">
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2">
+          <Link href="/" aria-label="WalForm home" className="flex items-center">
+            <Logo className="size-6" />
+          </Link>
           <Button variant="ghost" asChild className="gap-1.5">
             <Link href="/forms">
               <ArrowLeft className="h-4 w-4" />

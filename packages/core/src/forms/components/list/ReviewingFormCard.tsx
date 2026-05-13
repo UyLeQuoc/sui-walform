@@ -65,8 +65,7 @@ export function ReviewingFormCard({ form }: ReviewingFormCardProps) {
               {deadline}
             </span>
             <span>
-              {form.submissionCount}{' '}
-              {form.submissionCount === 1 ? 'response' : 'responses'}
+              {form.submissionCount} {form.submissionCount === 1 ? 'response' : 'responses'}
             </span>
           </div>
 

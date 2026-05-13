@@ -49,9 +49,7 @@ export function useMarketplaceVotes(): UseMarketplaceVotesResult {
     const events = eventsQuery.data?.data ?? [];
     const map = new Map<string, string>();
     for (const ev of events) {
-      const parsed = ev.parsedJson as
-        | { template_id?: string; votes_id?: string }
-        | undefined;
+      const parsed = ev.parsedJson as { template_id?: string; votes_id?: string } | undefined;
       if (!parsed?.template_id || !parsed.votes_id) continue;
       const tid = normalizeSuiAddress(parsed.template_id);
       if (map.has(tid)) continue;
@@ -103,8 +101,7 @@ export function useMarketplaceVotes(): UseMarketplaceVotesResult {
   const isLoading =
     (!!originalPackageId && eventsQuery.isPending) ||
     (votesIds.length > 0 && objectsQuery.isPending);
-  const error =
-    (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
+  const error = (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
 
   return { byTemplate, isLoading, error };
 }

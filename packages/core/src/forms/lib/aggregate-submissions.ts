@@ -44,9 +44,7 @@ export function isTextField(field: FormField): boolean {
  * 2–4 mutually-exclusive options; horizontal bars handle longer option lists
  * and multi-select; histogram is the natural shape for ordinal scales.
  */
-export function chartVariantFor(
-  field: FormField,
-): 'donut' | 'hbar' | 'histogram' {
+export function chartVariantFor(field: FormField): 'donut' | 'hbar' | 'histogram' {
   if (field.type === 'yes_no') return 'donut';
   if (field.type === 'single_choice' && (field.options?.length ?? 0) <= 4) return 'donut';
   if (field.type === 'rating' || field.type === 'linear_scale') return 'histogram';

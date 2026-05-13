@@ -53,7 +53,11 @@ export function VoteButtons({ votes, size = 'sm' }: VoteButtonsProps) {
           disabled={disabled || pending === 'up'}
           onClick={() => handle('up')}
         >
-          {pending === 'up' ? <Spinner className="size-3.5" /> : <ArrowBigUp className={iconSize} />}
+          {pending === 'up' ? (
+            <Spinner className="size-3.5" />
+          ) : (
+            <ArrowBigUp className={iconSize} />
+          )}
           <span className="tabular-nums">{votes?.upvotes ?? 0}</span>
         </Button>
         <Button

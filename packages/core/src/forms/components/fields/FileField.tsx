@@ -150,23 +150,19 @@ export function FileField({ field, control }: FileFieldProps) {
                   </span>
                 </div>
 
-                <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border-dashed bg-muted/30 px-3 py-2 text-xs">
+                <div className="text-muted-foreground bg-muted/30 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border-dashed px-3 py-2 text-xs">
                   <span className="font-medium">Walrus storage cost</span>
                   {cost.isLoading && <Spinner className="size-3" />}
                   {cost.cost && (
                     <>
-                      <span className="tabular-nums">
-                        {formatWal(cost.cost.totalCost)} WAL
-                      </span>
+                      <span className="tabular-nums">{formatWal(cost.cost.totalCost)} WAL</span>
                       <span className="text-muted-foreground/70">
                         ({ATTACHMENT_EPOCHS} epochs · ~1 year)
                       </span>
                     </>
                   )}
                   {!cost.isLoading && !cost.cost && cost.error && (
-                    <span className="text-destructive">
-                      Cost unavailable — upload anyway?
-                    </span>
+                    <span className="text-destructive">Cost unavailable — upload anyway?</span>
                   )}
                   {!cost.isLoading && !cost.cost && !cost.error && (
                     <span className="text-muted-foreground/70">— estimating —</span>
@@ -174,11 +170,7 @@ export function FileField({ field, control }: FileFieldProps) {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => void handleUpload()}
-                    disabled={isUploading}
-                  >
+                  <Button type="button" onClick={() => void handleUpload()} disabled={isUploading}>
                     {isUploading ? (
                       <Spinner className="mr-1.5 size-3.5" />
                     ) : (

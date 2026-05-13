@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { Button } from '../../../ui/button';
+import { Logo } from '../../../ui/logo';
 import { WalletButton } from '../../../sui/wallet-ui';
 import { useCreateDraft } from '../../hooks/use-create-draft';
 import { ThemeToggle } from '../editor/ThemeToggle';
@@ -20,8 +21,9 @@ export function FormsHeader() {
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3">
         <Link
           href="/forms"
-          className="hover:text-foreground/80 text-xl font-semibold transition-colors"
+          className="hover:text-foreground/80 flex items-center gap-2 text-xl font-semibold transition-colors"
         >
+          <Logo className="size-6" />
           Forms
         </Link>
         <div className="flex items-center gap-2">

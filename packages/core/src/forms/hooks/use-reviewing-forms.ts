@@ -133,8 +133,7 @@ export function useReviewingForms(): UseReviewingFormsResult {
   const isLoading =
     (!!packageId && !!me && eventsQuery.isPending) ||
     (objectIds.length > 0 && objectsQuery.isPending);
-  const error =
-    (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
+  const error = (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
 
   return { reviewing, isLoading, error };
 }
@@ -199,9 +198,9 @@ function parseFormInfo(obj: { content?: unknown }): FormInfo | null {
   };
 }
 
-function parseReviewersInfo(
-  obj: { content?: unknown },
-): { formId: string; members: string[] } | null {
+function parseReviewersInfo(obj: {
+  content?: unknown;
+}): { formId: string; members: string[] } | null {
   const content = obj.content as
     | {
         dataType: 'moveObject';
@@ -212,9 +211,7 @@ function parseReviewersInfo(
       }
     | undefined;
   if (!content?.fields) return null;
-  const formId = content.fields.form_id
-    ? normalizeSuiAddress(content.fields.form_id)
-    : null;
+  const formId = content.fields.form_id ? normalizeSuiAddress(content.fields.form_id) : null;
   if (!formId) return null;
   const rawContents = Array.isArray(content.fields.members)
     ? content.fields.members

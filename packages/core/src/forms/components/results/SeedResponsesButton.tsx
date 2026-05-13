@@ -12,10 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../../ui/dropdown-menu';
-import {
-  clearSeededSubmissions,
-  seedSubmissions,
-} from '../../services/dev-seed-submissions';
+import { clearSeededSubmissions, seedSubmissions } from '../../services/dev-seed-submissions';
 import type { FormField } from '../../../types';
 
 const SEED_COUNTS = [5, 10, 25, 50] as const;
@@ -34,11 +31,7 @@ interface SeedResponsesButtonProps {
  * build time). Generates fake decrypted submissions in module-level memory —
  * no chain, no Seal, no wallet.
  */
-export function SeedResponsesButton({
-  formId,
-  fields,
-  seededCount,
-}: SeedResponsesButtonProps) {
+export function SeedResponsesButton({ formId, fields, seededCount }: SeedResponsesButtonProps) {
   const [pending, setPending] = useState<'seed' | 'clear' | null>(null);
 
   if (process.env.NODE_ENV !== 'development') return null;
@@ -47,9 +40,7 @@ export function SeedResponsesButton({
     setPending('seed');
     try {
       const added = seedSubmissions(formId, fields, count);
-      toast.success(
-        `Seeded ${added.length} fake response${added.length === 1 ? '' : 's'}`,
-      );
+      toast.success(`Seeded ${added.length} fake response${added.length === 1 ? '' : 's'}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Seed failed: ${msg}`);

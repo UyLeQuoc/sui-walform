@@ -81,7 +81,7 @@ export function SubmissionsFilterBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
-        <span className="text-muted-foreground mr-1 text-[10px] uppercase tracking-wide">
+        <span className="text-muted-foreground mr-1 text-[10px] tracking-wide uppercase">
           Status
         </span>
         {STATUS_OPTIONS.map((opt) => (
@@ -98,7 +98,7 @@ export function SubmissionsFilterBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
-        <span className="text-muted-foreground mr-1 text-[10px] uppercase tracking-wide">
+        <span className="text-muted-foreground mr-1 text-[10px] tracking-wide uppercase">
           Priority
         </span>
         {PRIORITY_OPTIONS.filter((p) => p.value !== 'none').map((opt) => (

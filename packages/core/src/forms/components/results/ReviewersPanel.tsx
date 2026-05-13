@@ -40,8 +40,7 @@ export function ReviewersPanel({ formId, capId }: ReviewersPanelProps) {
   // Owner identity proven by both (a) the cap id passed in by the parent
   // and (b) the tracker's cached owner address matching the connected
   // wallet. Reviewer-only callers omit capId and never satisfy isOwner.
-  const isOwner =
-    !!myAddr && !!capId && (!reviewers.owner || reviewers.owner === myAddr);
+  const isOwner = !!myAddr && !!capId && (!reviewers.owner || reviewers.owner === myAddr);
   const isMember = !!myAddr && reviewers.members.includes(myAddr);
   const canAdd = isOwner || isMember;
 
@@ -91,8 +90,7 @@ export function ReviewersPanel({ formId, capId }: ReviewersPanelProps) {
           <Users className="text-muted-foreground h-4 w-4" />
           <h3 className="text-sm font-medium">Reviewers</h3>
           <span className="text-muted-foreground text-xs">
-            {reviewers.members.length}{' '}
-            {reviewers.members.length === 1 ? 'member' : 'members'}
+            {reviewers.members.length} {reviewers.members.length === 1 ? 'member' : 'members'}
           </span>
           {busy && !reviewers.reviewersId && (
             <span className="text-muted-foreground inline-flex items-center gap-1 text-xs italic">
@@ -103,8 +101,8 @@ export function ReviewersPanel({ formId, capId }: ReviewersPanelProps) {
         </div>
 
         <p className="text-muted-foreground text-xs">
-          Reviewers can decrypt submissions and invite more reviewers. Only the owner can
-          remove a reviewer.
+          Reviewers can decrypt submissions and invite more reviewers. Only the owner can remove a
+          reviewer.
         </p>
 
         {canAdd ? (

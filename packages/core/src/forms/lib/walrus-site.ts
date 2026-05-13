@@ -428,11 +428,14 @@ function renderControl(
       const opts = Array.isArray(field.options) ? (field.options as unknown[]) : [];
       const optionsHtml = opts
         .map((o) => {
-          const value = typeof o === 'string' ? o : isRecord(o) && typeof o.value === 'string'
-            ? o.value
-            : isRecord(o) && typeof o.label === 'string'
-              ? o.label
-              : '';
+          const value =
+            typeof o === 'string'
+              ? o
+              : isRecord(o) && typeof o.value === 'string'
+                ? o.value
+                : isRecord(o) && typeof o.label === 'string'
+                  ? o.label
+                  : '';
           if (!value) return '';
           return `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`;
         })

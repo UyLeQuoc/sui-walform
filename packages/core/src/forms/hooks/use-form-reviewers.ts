@@ -73,9 +73,7 @@ export function useFormReviewers(formId: string | undefined): UseFormReviewersRe
     const target = normalizeSuiAddress(formId);
     const events = eventsQuery.data?.data ?? [];
     for (const ev of events) {
-      const parsed = ev.parsedJson as
-        | { form_id?: string; reviewers_id?: string }
-        | undefined;
+      const parsed = ev.parsedJson as { form_id?: string; reviewers_id?: string } | undefined;
       if (!parsed?.form_id || !parsed.reviewers_id) continue;
       if (normalizeSuiAddress(parsed.form_id) !== target) continue;
       reviewersId = parsed.reviewers_id;
@@ -166,8 +164,7 @@ export function useFormReviewers(formId: string | undefined): UseFormReviewersRe
   };
 
   const isLoading =
-    (!!packageId && !!formId && eventsQuery.isPending) ||
-    (!!reviewersId && objectQuery.isPending);
+    (!!packageId && !!formId && eventsQuery.isPending) || (!!reviewersId && objectQuery.isPending);
 
   return {
     reviewersId,

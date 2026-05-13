@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
+import Link from 'next/link';
+import { Logo } from '../../../ui/logo';
 import { Spinner } from '../../../ui/spinner';
 import { WalletButton } from '../../../sui/wallet-ui/WalletButton';
 import { WalletConnectModal } from '../../../sui/wallet-ui/WalletConnectModal';
@@ -59,9 +61,12 @@ export function SubmitForm({ form }: SubmitFormProps) {
       )}
     >
       <div className="mb-3 flex w-full max-w-2xl items-center justify-between">
-        <span className="text-muted-foreground text-xs">
-          {ACCESS_MODE_LABEL[form.accessMode](form)}
-        </span>
+        <Link href="/" aria-label="WalForm home" className="flex items-center gap-2">
+          <Logo className="size-5" />
+          <span className="text-muted-foreground text-xs">
+            {ACCESS_MODE_LABEL[form.accessMode](form)}
+          </span>
+        </Link>
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <WalletButton />
@@ -103,6 +108,13 @@ export function SubmitForm({ form }: SubmitFormProps) {
           Your responses are end-to-end encrypted with Seal and stored on-chain. Only the form
           creator and you can decrypt them.
         </p>
+        <Link
+          href="/"
+          className="text-muted-foreground hover:text-foreground mt-3 inline-flex items-center gap-1.5 text-[11px] transition-colors"
+        >
+          <Logo className="size-3.5" />
+          Made with <span className="font-medium">WalForm</span>
+        </Link>
       </div>
       <WalletConnectModal
         open={submission.connectOpen}

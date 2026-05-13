@@ -1,7 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Download, Eye, ExternalLink, Lock, RefreshCw, Share2, X } from 'lucide-react';
+import {
+  ChevronDown,
+  Copy,
+  Download,
+  Eye,
+  ExternalLink,
+  Lock,
+  RefreshCw,
+  Share2,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { useCurrentAccount, useCurrentWallet, useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
@@ -19,6 +29,14 @@ import { Button } from '../../../ui/button';
 import { Card, CardContent } from '../../../ui/card';
 import { Spinner } from '../../../ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../../ui/dropdown-menu';
 import { useActivePackageId, useOriginalPackageId } from '../../../sui/package-id';
 import { suivisionUrl, type ExplorerNetwork } from '../../../sui/explorer';
 import { useInvalidateChainQueries } from '../../../sui/use-invalidate-chain';
@@ -38,7 +56,11 @@ import {
 } from './SubmissionsFilterBar';
 import { isInputField } from '../../lib/field-types';
 import { shortAddr } from '../../lib/format-address';
-import { buildSubmissionsCsv, downloadCsv } from '../../lib/export-submissions-csv';
+import {
+  buildSubmissionsExport,
+  downloadExport,
+  type ExportFormat,
+} from '../../lib/export-submissions-csv';
 import { deriveOnChainStatus } from '../../lib/form-status';
 import { copyFormShareLink } from '../../lib/share-link';
 import { DeployToWalrusSiteButton } from '../list/DeployToWalrusSiteButton';
@@ -50,7 +72,7 @@ import { ReviewersPanel } from './ReviewersPanel';
 import { SeedResponsesButton } from './SeedResponsesButton';
 import { ShareFormDialog } from './ShareFormDialog';
 import { StatsSummary } from './StatsSummary';
-import { SubmissionRowCard } from './SubmissionRowCard';
+import { SubmissionsDataTable } from './SubmissionsDataTable';
 
 interface FormResultsViewProps {
   formId: string;
@@ -91,7 +113,6 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
   const decryption = useSubmissionDecryption({ formId });
   const tags = useSubmissionTags(formId);
   const reviewersState = useFormReviewers(formId);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [tab, setTab] = useState<ResultsTab>('summary');
   const [shareOpen, setShareOpen] = useState(false);
   const [submissionFilters, setSubmissionFilters] = useState<SubmissionsFilterState>(
@@ -99,8 +120,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
   );
 
   const myAddr = account?.address ? normalizeSuiAddress(account.address) : null;
-  const isOwner =
-    !!myAddr && !!form && myAddr === normalizeSuiAddress(form.owner);
+  const isOwner = !!myAddr && !!form && myAddr === normalizeSuiAddress(form.owner);
   const isReviewer = !!myAddr && reviewersState.members.includes(myAddr);
   const canView = isOwner || isReviewer;
   // Manage tab needs the FormOwnerCap (close/withdraw/etc.) so it stays
@@ -119,14 +139,14 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     ...Object.fromEntries(seededSubmissions.map((s) => [s.row.submissionId, s.decrypted])),
   };
 
-  const handleCsv = () => {
+  const handleExport = (format: ExportFormat) => {
     if (!form) return;
-    const csv = buildSubmissionsCsv({
+    const content = buildSubmissionsExport(format, {
       rows,
       decryptedById,
       fields: inputFields,
     });
-    downloadCsv(csv, `${form.title}-responses`);
+    downloadExport(content, `${form.title}-responses`, format);
   };
 
   if (formLoading) {
@@ -219,7 +239,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
   const completionPct =
     inputFields.length === 0 || decryptedRows.length === 0
       ? Number.NaN
-      : (decryptedRows.reduce((sum, row) => {
+      : decryptedRows.reduce((sum, row) => {
           let answered = 0;
           for (const f of inputFields) {
             const v = row[f.id];
@@ -231,7 +251,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
             if (!empty) answered++;
           }
           return sum + (answered / inputFields.length) * 100;
-        }, 0) / decryptedRows.length);
+        }, 0) / decryptedRows.length;
   const canDecrypt = !!activePackageId && !!originalPackageId;
   const isDecryptingAny = decryption.isSessionInitializing || !!decryption.pendingId;
   const timestamps = rows.map((r) => r.submittedAtMs);
@@ -304,10 +324,35 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
             )}
             Decrypt all
           </Button>
-          <Button size="sm" variant="outline" onClick={handleCsv} disabled={rows.length === 0}>
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            Export CSV
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" disabled={rows.length === 0}>
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Export
+                <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuLabel>Download as</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => handleExport('csv')}>
+                CSV
+                <span className="text-muted-foreground ml-auto text-[10px]">.csv</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleExport('json')}>
+                JSON
+                <span className="text-muted-foreground ml-auto text-[10px]">.json</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleExport('ndjson')}>
+                NDJSON
+                <span className="text-muted-foreground ml-auto text-[10px]">.ndjson</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleExport('markdown')}>
+                Markdown table
+                <span className="text-muted-foreground ml-auto text-[10px]">.md</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" variant="ghost" onClick={() => void invalidateChain()}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
             Refresh
@@ -330,23 +375,31 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
         completionPct={completionPct}
       />
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) => setTab(v as ResultsTab)}
-        className="flex flex-col"
-      >
+      <Tabs value={tab} onValueChange={(v) => setTab(v as ResultsTab)} className="flex flex-col">
         <TabsList className="rounded-none">
-          <TabsTrigger value="summary" className="rounded-none">
+          <TabsTrigger
+            value="summary"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
+          >
             Summary
           </TabsTrigger>
-          <TabsTrigger value="individual" className="rounded-none">
+          <TabsTrigger
+            value="individual"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
+          >
             Individual ({rows.length})
           </TabsTrigger>
-          <TabsTrigger value="reviewers" className="rounded-none">
+          <TabsTrigger
+            value="reviewers"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
+          >
             Reviewers ({reviewersState.members.length})
           </TabsTrigger>
           {ownerForm && (
-            <TabsTrigger value="manage" className="rounded-none">
+            <TabsTrigger
+              value="manage"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
+            >
               Manage
             </TabsTrigger>
           )}
@@ -387,30 +440,21 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
               visible={filteredRows.length}
             />
           )}
-          {filteredRows.map((row) => {
-            const tag = tags.tagFor(row.submissionId);
-            return (
-              <SubmissionRowCard
-                key={row.submissionId}
-                row={row}
-                decrypted={decryptedById[row.submissionId]}
-                error={decryption.errorById[row.submissionId]}
-                isExpanded={expandedId === row.submissionId}
-                onToggle={() =>
-                  setExpandedId(expandedId === row.submissionId ? null : row.submissionId)
-                }
-                onDecrypt={() => void decryption.decryptOne(row)}
-                isPending={decryption.pendingId === row.submissionId}
-                canDecrypt={canDecrypt}
-                fields={inputFields}
-                network={network}
-                status={tag.status}
-                priority={tag.priority}
-                onStatusChange={(next) => void tags.setStatus(row.submissionId, next)}
-                onPriorityChange={(next) => void tags.setPriority(row.submissionId, next)}
-              />
-            );
-          })}
+          {!rowsLoading && rows.length > 0 && (
+            <SubmissionsDataTable
+              rows={filteredRows}
+              decryptedById={decryptedById}
+              errorById={decryption.errorById}
+              fields={inputFields}
+              network={network}
+              canDecrypt={canDecrypt}
+              pendingId={decryption.pendingId}
+              onDecrypt={(row) => void decryption.decryptOne(row)}
+              tagFor={(id) => tags.tagFor(id)}
+              onStatusChange={(id, next) => void tags.setStatus(id, next)}
+              onPriorityChange={(id, next) => void tags.setPriority(id, next)}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="reviewers" className="mt-4">

@@ -25,7 +25,9 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
   const state = useStoredForm(id);
   const draftMissing = state.status === 'not-found';
 
-  const { form: onChainForm, isLoading: chainLoading } = useFormOnChain(draftMissing ? id : undefined);
+  const { form: onChainForm, isLoading: chainLoading } = useFormOnChain(
+    draftMissing ? id : undefined,
+  );
 
   useEffect(() => {
     if (!draftMissing || !onChainForm) return;

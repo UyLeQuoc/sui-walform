@@ -173,8 +173,7 @@ export function useMarketplaceTemplates(): UseMarketplaceTemplatesResult {
   const isLoading =
     (!!originalPackageId && eventsQuery.isPending) ||
     (templateIds.length > 0 && objectsQuery.isPending);
-  const error =
-    (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
+  const error = (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
 
   void network;
   return { templates, isLoading, error, packageMissing };

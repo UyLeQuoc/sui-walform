@@ -121,7 +121,7 @@ export function MarketplacePreviewDialog({
             schema={schema}
           />
 
-          <DialogFooter className="border-t bg-background p-4">
+          <DialogFooter className="bg-background border-t p-4">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
               Close
             </Button>

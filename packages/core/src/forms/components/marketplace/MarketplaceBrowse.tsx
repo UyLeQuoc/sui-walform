@@ -6,10 +6,7 @@ import {
   useMarketplaceTemplates,
   type MarketplaceTemplate,
 } from '../../hooks/use-marketplace-templates';
-import {
-  useMarketplaceVotes,
-  type TemplateVoteCounts,
-} from '../../hooks/use-marketplace-votes';
+import { useMarketplaceVotes, type TemplateVoteCounts } from '../../hooks/use-marketplace-votes';
 import { EmptyState } from '../list/list-shared';
 import { MarketplaceCard } from './MarketplaceCard';
 import {

@@ -30,10 +30,7 @@ function notify(formId: string): void {
   bus?.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { formId } }));
 }
 
-export function subscribeSeededSubmissions(
-  formId: string,
-  listener: () => void,
-): () => void {
+export function subscribeSeededSubmissions(formId: string, listener: () => void): () => void {
   if (!bus) return () => {};
   const handler = (e: Event) => {
     const detail = (e as CustomEvent<{ formId: string }>).detail;

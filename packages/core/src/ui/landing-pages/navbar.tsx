@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { Button } from '../button';
 import { ArrowRight } from 'lucide-react';
+import { ThemeToggle } from '../../forms/components/editor/ThemeToggle';
+import { Logo } from '../logo';
 
 const links = [
   { label: 'Features', href: '#features' },
@@ -39,6 +41,7 @@ export function Navbar() {
       >
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-2">
           <Link href="/" className="flex items-center gap-2">
+            <Logo variant="primary" className="size-7" />
             <span className="font-mono text-lg font-bold">WalForm</span>
             <span className="border-primary/30 bg-primary/10 text-primary ml-1 hidden border px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase sm:inline-block">
               Testnet
@@ -54,6 +57,7 @@ export function Navbar() {
           </nav>
 
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Button asChild>
               <Link href="/forms">
                 Start building

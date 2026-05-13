@@ -63,8 +63,7 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
       if (!clientRef.current) {
         const { WalrusClient } = await import('@mysten/walrus');
         const relayHost =
-          (typeof process !== 'undefined' &&
-            process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_HOST) ||
+          (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_HOST) ||
           'https://upload-relay.testnet.walrus.space';
         clientRef.current = new WalrusClient({
           network: walrusNetwork,

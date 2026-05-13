@@ -20,6 +20,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '../../../ui/chart';
+import { Table, TableBody, TableCell, TableRow } from '../../../ui/table';
 import {
   bucketize,
   chartVariantFor,
@@ -161,24 +162,30 @@ function DonutViz({ buckets }: { buckets: AggregateBucket[] }) {
           </Pie>
         </PieChart>
       </ChartContainer>
-      <ul className="flex flex-col gap-1 text-xs">
-        {buckets.map((b, i) => {
-          const pct = total === 0 ? 0 : Math.round((b.count / total) * 100);
-          return (
-            <li key={b.label} className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className="inline-block size-2.5 shrink-0 rounded-sm"
-                style={{ backgroundColor: PALETTE[i % PALETTE.length] }}
-              />
-              <span className="line-clamp-1 min-w-0 flex-1">{b.label}</span>
-              <span className="text-muted-foreground tabular-nums">
-                {b.count} · {pct}%
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      <Table className="text-xs">
+        <TableBody>
+          {buckets.map((b, i) => {
+            const pct = total === 0 ? 0 : Math.round((b.count / total) * 100);
+            return (
+              <TableRow key={b.label}>
+                <TableCell className="w-4 py-1.5 pr-0 pl-0">
+                  <span
+                    aria-hidden
+                    className="inline-block size-2.5 shrink-0 rounded-sm"
+                    style={{ backgroundColor: PALETTE[i % PALETTE.length] }}
+                  />
+                </TableCell>
+                <TableCell className="line-clamp-1 max-w-0 py-1.5 pl-2 whitespace-normal">
+                  {b.label}
+                </TableCell>
+                <TableCell className="text-muted-foreground py-1.5 pr-0 text-right tabular-nums">
+                  {b.count} · {pct}%
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -187,30 +194,31 @@ function HBarViz({ buckets }: { buckets: AggregateBucket[] }) {
   const data = [...buckets].sort((a, b) => b.count - a.count);
   const total = data.reduce((s, b) => s + b.count, 0);
   return (
-    <ul className="flex flex-col gap-1.5">
-      {data.map((b, i) => {
-        const pct = total === 0 ? 0 : Math.round((b.count / total) * 100);
-        return (
-          <li key={b.label} className="flex flex-col gap-0.5 text-xs">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="line-clamp-1 min-w-0 flex-1">{b.label}</span>
-              <span className="text-muted-foreground shrink-0 tabular-nums">
+    <Table className="text-xs">
+      <TableBody>
+        {data.map((b, i) => {
+          const pct = total === 0 ? 0 : Math.round((b.count / total) * 100);
+          return (
+            <TableRow key={b.label}>
+              <TableCell className="max-w-0 py-1.5 pl-0 whitespace-normal">
+                <div className="flex flex-col gap-1">
+                  <span className="line-clamp-1">{b.label}</span>
+                  <div className="bg-muted relative h-1.5 w-full overflow-hidden rounded-full">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full"
+                      style={{ width: `${pct}%`, backgroundColor: PALETTE[i % PALETTE.length] }}
+                    />
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell className="text-muted-foreground w-20 py-1.5 pr-0 text-right tabular-nums">
                 {b.count} · {pct}%
-              </span>
-            </div>
-            <div className="bg-muted relative h-1.5 w-full overflow-hidden rounded-full">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full"
-                style={{
-                  width: `${pct}%`,
-                  backgroundColor: PALETTE[i % PALETTE.length],
-                }}
-              />
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -243,19 +251,23 @@ function TextTopList({ items, total }: { items: AggregateBucket[]; total: number
       <p className="text-muted-foreground text-[11px] tracking-wide uppercase">
         Top {items.length} answer{items.length === 1 ? '' : 's'}
       </p>
-      <ul className="flex flex-col gap-1 text-xs">
-        {items.map((it) => {
-          const pct = total === 0 ? 0 : Math.round((it.count / total) * 100);
-          return (
-            <li key={it.label} className="flex items-baseline justify-between gap-2">
-              <span className="line-clamp-1 min-w-0 flex-1">{it.label}</span>
-              <span className="text-muted-foreground shrink-0 tabular-nums">
-                {it.count} · {pct}%
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      <Table className="text-xs">
+        <TableBody>
+          {items.map((it) => {
+            const pct = total === 0 ? 0 : Math.round((it.count / total) * 100);
+            return (
+              <TableRow key={it.label}>
+                <TableCell className="max-w-0 py-1.5 pl-0 whitespace-normal">
+                  <span className="line-clamp-1">{it.label}</span>
+                </TableCell>
+                <TableCell className="text-muted-foreground w-20 py-1.5 pr-0 text-right tabular-nums">
+                  {it.count} · {pct}%
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 }

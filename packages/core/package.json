@@ -86,6 +86,7 @@
     "@mysten/sui": "latest",
     "@mysten/walrus": "latest",
     "@tanstack/react-query": "^5.100.1",
+    "@tanstack/react-table": "^8.21.3",
     "@teispace/next-themes": "^0.2.1",
     "@tiptap/core": "^3.22.4",
     "@tiptap/extension-placeholder": "^3.22.4",

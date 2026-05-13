@@ -35,15 +35,9 @@ export function StatsSummary({
       <StatCard
         label="Completion"
         value={Number.isFinite(completionPct) ? `${Math.round(completionPct)}%` : '—'}
-        hint={
-          Number.isFinite(completionPct)
-            ? 'avg fields answered'
-            : 'decrypt to compute'
-        }
+        hint={Number.isFinite(completionPct) ? 'avg fields answered' : 'decrypt to compute'}
         icon={<CheckCircle2 className="text-muted-foreground h-3.5 w-3.5" />}
-        accent={
-          Number.isFinite(completionPct) && completionPct < 60 ? 'warn' : undefined
-        }
+        accent={Number.isFinite(completionPct) && completionPct < 60 ? 'warn' : undefined}
       />
       <StatCard
         label="Unique submitters"

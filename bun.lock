@@ -150,6 +150,7 @@
         "@mysten/sui": "latest",
         "@mysten/walrus": "latest",
         "@tanstack/react-query": "^5.100.1",
+        "@tanstack/react-table": "^8.21.3",
         "@teispace/next-themes": "^0.2.1",
         "@tiptap/core": "^3.22.4",
         "@tiptap/extension-placeholder": "^3.22.4",
@@ -789,6 +790,10 @@
     "@tanstack/query-core": ["@tanstack/query-core@5.100.1", "", {}, "sha512-awvQhOO/2TrSCHE5LKKsXcvvj6WSBncwEcMFCB/ez0Qs0b17iyyivoGArNV3HFfXryZwCpnb/olsaBBKrIbtSw=="],
 
     "@tanstack/react-query": ["@tanstack/react-query@5.100.1", "", { "dependencies": { "@tanstack/query-core": "5.100.1" }, "peerDependencies": { "react": "^18 || ^19" } }, "sha512-UgWRLhQKprC37SsO6y1zRabOqDmM2gsdTNPbqTT35yl7kOOhwXU4nyfOiGHXPwoEFJV1IpSk85hjIFjNFWVpzw=="],
+
+    "@tanstack/react-table": ["@tanstack/react-table@8.21.3", "", { "dependencies": { "@tanstack/table-core": "8.21.3" }, "peerDependencies": { "react": ">=16.8", "react-dom": ">=16.8" } }, "sha512-5nNMTSETP4ykGegmVkhjcS8tTLW6Vl4axfEGQN3v0zdHYbK4UfoqfPChclTrJ4EoK9QynqAu9oUf8VEmrpZ5Ww=="],
+
+    "@tanstack/table-core": ["@tanstack/table-core@8.21.3", "", {}, "sha512-ldZXEhOBb8Is7xLs01fR3YEc3DERiz5silj8tnGkFZytt1abEvl/GhUmCE0PMLaMPTa3Jk4HbKmRlHmu+gCftg=="],
 
     "@teispace/next-themes": ["@teispace/next-themes@0.2.1", "", { "peerDependencies": { "next": ">=13.0.0", "react": ">=18.0.0", "react-dom": ">=18.0.0" }, "optionalPeers": ["next"] }, "sha512-1s3AYfGZw6sXS6fWPun9Jyzyc/EF3wr/v5y/6lLAU82JALgEi9BEHyBgTfxScu3S6BczlJ8XzvuGIzfWsFUm7g=="],
 

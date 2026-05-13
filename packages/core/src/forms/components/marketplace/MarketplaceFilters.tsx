@@ -3,13 +3,7 @@
 import { Search, X } from 'lucide-react';
 import { Button } from '../../../ui/button';
 import { Input } from '../../../ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../../ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/select';
 
 export type MarketplaceSort =
   | 'newest'
@@ -104,7 +98,10 @@ export function MarketplaceFilters({ value, onChange, resultCount }: Marketplace
           </SelectContent>
         </Select>
 
-        <Select value={value.sort} onValueChange={(v) => onChange({ ...value, sort: v as MarketplaceSort })}>
+        <Select
+          value={value.sort}
+          onValueChange={(v) => onChange({ ...value, sort: v as MarketplaceSort })}
+        >
           <SelectTrigger className="w-full sm:w-40">
             <SelectValue />
           </SelectTrigger>

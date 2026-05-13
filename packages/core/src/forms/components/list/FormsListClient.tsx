@@ -21,20 +21,12 @@ export function FormsListClient() {
   const router = useRouter();
   const { isConnected } = useCurrentWallet();
   const { forms, isLoading: draftsLoading, error: draftsError, deleteForm } = useForms();
-  const {
-    running,
-    isLoading: chainLoading,
-    error: chainError,
-    packageMissing,
-  } = useOnChainForms();
+  const { running, isLoading: chainLoading, error: chainError, packageMissing } = useOnChainForms();
   const reviewing = useReviewingForms();
   const [top, setTop] = useState<TopTab>('forms');
 
-  const formsCount =
-    forms.length +
-    (isConnected ? running.length + reviewing.reviewing.length : 0);
-  const isLoading =
-    draftsLoading || (isConnected && (chainLoading || reviewing.isLoading));
+  const formsCount = forms.length + (isConnected ? running.length + reviewing.reviewing.length : 0);
+  const isLoading = draftsLoading || (isConnected && (chainLoading || reviewing.isLoading));
   const error = draftsError ?? chainError ?? reviewing.error;
   const showRunningEmpty = isConnected && !packageMissing;
 
@@ -58,13 +50,13 @@ export function FormsListClient() {
           <TabsList className="rounded-none">
             <TabsTrigger
               value="forms"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-none"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
             >
               Forms ({formsCount})
             </TabsTrigger>
             <TabsTrigger
               value="marketplace"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-none"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
             >
               Marketplace
             </TabsTrigger>
@@ -87,9 +79,7 @@ export function FormsListClient() {
                 title="walform package not configured"
                 description="Set NEXT_PUBLIC_PACKAGE_ID for the active network in .env.local to load on-chain forms."
               />
-            ) : forms.length === 0 &&
-              running.length === 0 &&
-              reviewing.reviewing.length === 0 ? (
+            ) : forms.length === 0 && running.length === 0 && reviewing.reviewing.length === 0 ? (
               <EmptyState
                 icon={<FileText className="text-muted-foreground h-8 w-8" />}
                 title="No forms yet"
@@ -113,11 +103,7 @@ export function FormsListClient() {
                   </Section>
                 ) : null}
                 {reviewing.reviewing.length > 0 && (
-                  <Section
-                    title="Reviewing"
-                    count={reviewing.reviewing.length}
-                    emptyHint={null}
-                  >
+                  <Section title="Reviewing" count={reviewing.reviewing.length} emptyHint={null}>
                     {reviewing.reviewing.map((f) => (
                       <ReviewingFormCard key={f.formId} form={f} />
                     ))}
@@ -127,9 +113,7 @@ export function FormsListClient() {
                   title="Drafts"
                   count={forms.length}
                   emptyHint={
-                    forms.length === 0
-                      ? 'No drafts. Create a new form to start authoring.'
-                      : null
+                    forms.length === 0 ? 'No drafts. Create a new form to start authoring.' : null
                   }
                 >
                   {forms.map((form) => (
