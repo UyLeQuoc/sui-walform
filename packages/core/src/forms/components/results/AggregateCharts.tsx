@@ -1,7 +1,7 @@
 'use client';
 
-import { type ReactNode } from 'react';
-import { BarChart3 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { BarChart3, Maximize2 } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { Button } from '../../../ui/button';
 import { Card, CardContent } from '../../../ui/card';
 import {
   ChartContainer,
@@ -20,7 +21,19 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '../../../ui/chart';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../../../ui/dialog';
 import { Table, TableBody, TableCell, TableRow } from '../../../ui/table';
+import { shortAddr } from '../../lib/format-address';
+import { formatCell } from '../../lib/format-submission-cell';
+import { isFileAttachmentValue } from '../../lib/file-attachment';
+import type { SubmissionRow } from '../../hooks/use-form-submissions';
+import { FileAttachmentView } from './FileAttachmentView';
 import {
   bucketize,
   chartVariantFor,
@@ -48,22 +61,31 @@ const CHART_CONFIG: ChartConfig = {
 interface AggregateChartsProps {
   fields: FormField[];
   decryptedRows: Record<string, unknown>[];
+  /** Optional — when provided, each card gains an "All answers" dialog
+   * showing every submitter's response to that field. */
+  submissionRows?: SubmissionRow[];
+  decryptedById?: Record<string, Record<string, unknown>>;
 }
 
-/**
- * Per-question summary cards. One card per input field that has either a
- * chartable distribution (donut / horizontal bar / histogram) or text
- * frequencies. Layout-only fields are filtered upstream. Returns null when
- * nothing summarizable exists so the parent renders a cleaner layout.
- */
-export function AggregateCharts({ fields, decryptedRows }: AggregateChartsProps) {
+export function AggregateCharts({
+  fields,
+  decryptedRows,
+  submissionRows,
+  decryptedById,
+}: AggregateChartsProps) {
   const summarizable = fields.filter((f) => isChartableField(f) || isTextField(f));
   if (summarizable.length === 0) return null;
 
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       {summarizable.map((field) => (
-        <FieldCard key={field.id} field={field} rows={decryptedRows} />
+        <FieldCard
+          key={field.id}
+          field={field}
+          rows={decryptedRows}
+          submissionRows={submissionRows}
+          decryptedById={decryptedById}
+        />
       ))}
     </div>
   );
@@ -72,21 +94,38 @@ export function AggregateCharts({ fields, decryptedRows }: AggregateChartsProps)
 interface FieldCardProps {
   field: FormField;
   rows: Record<string, unknown>[];
+  submissionRows?: SubmissionRow[];
+  decryptedById?: Record<string, Record<string, unknown>>;
 }
 
-function FieldCard({ field, rows }: FieldCardProps) {
+function FieldCard({ field, rows, submissionRows, decryptedById }: FieldCardProps) {
   const summary = summarizeField(field, rows);
   const total = rows.length;
   const skipPct = total === 0 ? 0 : Math.round((summary.skipped / total) * 100);
+  const [allOpen, setAllOpen] = useState(false);
+  const canShowAll = !!submissionRows && !!decryptedById;
 
   return (
     <Card>
       <CardContent className="flex flex-col gap-2 p-4">
         <div className="flex items-baseline justify-between gap-2">
           <span className="line-clamp-1 text-sm font-medium">{field.label || field.id}</span>
-          <span className="text-muted-foreground text-[11px] tracking-wide uppercase">
-            {field.type.replace(/_/g, ' ')}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground text-[11px] tracking-wide uppercase">
+              {field.type.replace(/_/g, ' ')}
+            </span>
+            {canShowAll && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-6"
+                onClick={() => setAllOpen(true)}
+                aria-label="View all answers"
+              >
+                <Maximize2 className="size-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
         <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
           <span>
@@ -110,8 +149,135 @@ function FieldCard({ field, rows }: FieldCardProps) {
         </div>
         <FieldViz field={field} rows={rows} answered={summary.answered} />
       </CardContent>
+      {canShowAll && (
+        <AllAnswersDialog
+          open={allOpen}
+          onOpenChange={setAllOpen}
+          field={field}
+          submissionRows={submissionRows!}
+          decryptedById={decryptedById!}
+        />
+      )}
     </Card>
   );
+}
+
+interface AllAnswersDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  field: FormField;
+  submissionRows: SubmissionRow[];
+  decryptedById: Record<string, Record<string, unknown>>;
+}
+
+function AllAnswersDialog({
+  open,
+  onOpenChange,
+  field,
+  submissionRows,
+  decryptedById,
+}: AllAnswersDialogProps) {
+  const entries = submissionRows.map((row) => {
+    const decrypted = decryptedById[row.submissionId];
+    return {
+      submissionId: row.submissionId,
+      submitter: row.submitter,
+      submittedAtMs: row.submittedAtMs,
+      value: decrypted ? decrypted[field.id] : undefined,
+      decrypted: !!decrypted,
+    };
+  });
+  const answered = entries.filter((e) => e.decrypted && !isEmptyValue(e.value));
+  const skipped = entries.filter((e) => e.decrypted && isEmptyValue(e.value));
+  const encrypted = entries.filter((e) => !e.decrypted);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{field.label || field.id}</DialogTitle>
+          <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span>
+              <span className="text-foreground font-medium tabular-nums">{answered.length}</span>{' '}
+              answered
+            </span>
+            {skipped.length > 0 && (
+              <span>
+                <span className="text-foreground tabular-nums">{skipped.length}</span> skipped
+              </span>
+            )}
+            {encrypted.length > 0 && (
+              <span>
+                <span className="text-foreground tabular-nums">{encrypted.length}</span> still
+                encrypted
+              </span>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        {answered.length === 0 && encrypted.length === 0 ? (
+          <p className="text-muted-foreground py-6 text-center text-sm">
+            No answers for this question yet.
+          </p>
+        ) : (
+          <Table className="text-sm">
+            <TableBody>
+              {answered.map((e) => (
+                <TableRow key={e.submissionId}>
+                  <TableCell className="w-32 align-top whitespace-nowrap text-xs">
+                    <code className="font-mono">{shortAddr(e.submitter)}</code>
+                    <div className="text-muted-foreground mt-0.5 text-[10px]">
+                      {new Date(e.submittedAtMs).toLocaleString()}
+                    </div>
+                  </TableCell>
+                  <TableCell className="align-top break-words whitespace-normal">
+                    {renderAnswer(field, e.value)}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {skipped.map((e) => (
+                <TableRow key={e.submissionId}>
+                  <TableCell className="w-32 align-top whitespace-nowrap text-xs">
+                    <code className="font-mono">{shortAddr(e.submitter)}</code>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground/60 align-top text-xs italic">
+                    — skipped —
+                  </TableCell>
+                </TableRow>
+              ))}
+              {encrypted.map((e) => (
+                <TableRow key={e.submissionId}>
+                  <TableCell className="w-32 align-top whitespace-nowrap text-xs">
+                    <code className="font-mono">{shortAddr(e.submitter)}</code>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground/60 align-top text-xs italic">
+                    — encrypted — decrypt this submission to view the answer
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function isEmptyValue(v: unknown): boolean {
+  if (v === null || v === undefined) return true;
+  if (typeof v === 'string' && v.trim() === '') return true;
+  if (Array.isArray(v) && v.length === 0) return true;
+  return false;
+}
+
+function renderAnswer(field: FormField, value: unknown): ReactNode {
+  if (isEmptyValue(value)) {
+    return <span className="text-muted-foreground/60 text-xs italic">— not answered —</span>;
+  }
+  if (field.type === 'file' || isFileAttachmentValue(value)) {
+    return <FileAttachmentView value={value} />;
+  }
+  return formatCell(value);
 }
 
 interface FieldVizProps {

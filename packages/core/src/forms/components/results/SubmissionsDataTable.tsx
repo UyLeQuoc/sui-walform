@@ -4,7 +4,6 @@ import { useMemo, useState, type ReactNode } from 'react';
 import {
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
@@ -21,10 +20,10 @@ import {
   ChevronsRight,
   ExternalLink,
   Lock,
-  Search,
 } from 'lucide-react';
 import { Badge } from '../../../ui/badge';
 import { Button } from '../../../ui/button';
+import { Card, CardContent } from '../../../ui/card';
 import {
   Dialog,
   DialogContent,
@@ -32,7 +31,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../../ui/dialog';
-import { Input } from '../../../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/select';
 import { Spinner } from '../../../ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../ui/table';
@@ -75,7 +73,6 @@ export function SubmissionsDataTable({
 }: SubmissionsDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'submittedAtMs', desc: true }]);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [globalFilter, setGlobalFilter] = useState('');
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
 
   const columns = useMemo<ColumnDef<SubmissionRow>[]>(
@@ -155,54 +152,25 @@ export function SubmissionsDataTable({
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, globalFilter, pagination },
+    state: { sorting, pagination },
     onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: setPagination,
-    globalFilterFn: (row, _columnId, value) => {
-      const needle = String(value).toLowerCase().trim();
-      if (!needle) return true;
-      const submitter = row.original.submitter.toLowerCase();
-      const id = row.original.submissionId.toLowerCase();
-      if (submitter.includes(needle) || id.includes(needle)) return true;
-      const decrypted = decryptedById[row.original.submissionId];
-      if (!decrypted) return false;
-      return Object.values(decrypted).some((v) => {
-        if (v === null || v === undefined) return false;
-        return String(v).toLowerCase().includes(needle);
-      });
-    },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
 
   const openRow = rows.find((r) => r.submissionId === openId) ?? null;
 
   const pageCount = table.getPageCount();
-  const filteredCount = table.getFilteredRowModel().rows.length;
+  const totalCount = rows.length;
   const { pageIndex, pageSize } = table.getState().pagination;
-  const firstRowIndex = filteredCount === 0 ? 0 : pageIndex * pageSize + 1;
-  const lastRowIndex = Math.min(filteredCount, (pageIndex + 1) * pageSize);
+  const firstRowIndex = totalCount === 0 ? 0 : pageIndex * pageSize + 1;
+  const lastRowIndex = Math.min(totalCount, (pageIndex + 1) * pageSize);
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative max-w-sm flex-1">
-          <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
-          <Input
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder="Search submitters or decrypted answers…"
-            className="h-8 pl-8 text-xs"
-          />
-        </div>
-        <span className="text-muted-foreground ml-auto text-xs">
-          {filteredCount} of {rows.length}
-        </span>
-      </div>
-      <div className="overflow-hidden rounded-md border">
+    <Card>
+      <CardContent className="flex flex-col gap-3">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
@@ -222,7 +190,7 @@ export function SubmissionsDataTable({
                   colSpan={columns.length}
                   className="text-muted-foreground py-6 text-center text-sm"
                 >
-                  No responses match the current filters.
+                  No responses to show.
                 </TableCell>
               </TableRow>
             ) : (
@@ -242,91 +210,91 @@ export function SubmissionsDataTable({
             )}
           </TableBody>
         </Table>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Rows per page</span>
-          <Select value={String(pageSize)} onValueChange={(v) => table.setPageSize(Number(v))}>
-            <SelectTrigger className="h-7 w-[68px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper" align="start">
-              {[10, 25, 50, 100].map((n) => (
-                <SelectItem key={n} value={String(n)} className="text-xs">
-                  {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <span className="text-muted-foreground">
-          {firstRowIndex}–{lastRowIndex} of {filteredCount}
-        </span>
-        <div className="ml-auto flex items-center gap-1">
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-7 w-7"
-            disabled={!table.getCanPreviousPage()}
-            onClick={() => table.setPageIndex(0)}
-            aria-label="First page"
-          >
-            <ChevronsLeft className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-7 w-7"
-            disabled={!table.getCanPreviousPage()}
-            onClick={() => table.previousPage()}
-            aria-label="Previous page"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </Button>
-          <span className="text-muted-foreground px-2 tabular-nums">
-            Page {pageCount === 0 ? 0 : pageIndex + 1} of {pageCount}
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">Rows per page</span>
+            <Select value={String(pageSize)} onValueChange={(v) => table.setPageSize(Number(v))}>
+              <SelectTrigger className="h-7 w-[68px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" align="start">
+                {[10, 25, 50, 100].map((n) => (
+                  <SelectItem key={n} value={String(n)} className="text-xs">
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <span className="text-muted-foreground">
+            {firstRowIndex}–{lastRowIndex} of {totalCount}
           </span>
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-7 w-7"
-            disabled={!table.getCanNextPage()}
-            onClick={() => table.nextPage()}
-            aria-label="Next page"
-          >
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-7 w-7"
-            disabled={!table.getCanNextPage()}
-            onClick={() => table.setPageIndex(pageCount - 1)}
-            aria-label="Last page"
-          >
-            <ChevronsRight className="h-3.5 w-3.5" />
-          </Button>
+          <div className="ml-auto flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-7 w-7"
+              disabled={!table.getCanPreviousPage()}
+              onClick={() => table.setPageIndex(0)}
+              aria-label="First page"
+            >
+              <ChevronsLeft className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-7 w-7"
+              disabled={!table.getCanPreviousPage()}
+              onClick={() => table.previousPage()}
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-muted-foreground px-2 tabular-nums">
+              Page {pageCount === 0 ? 0 : pageIndex + 1} of {pageCount}
+            </span>
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-7 w-7"
+              disabled={!table.getCanNextPage()}
+              onClick={() => table.nextPage()}
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-7 w-7"
+              disabled={!table.getCanNextPage()}
+              onClick={() => table.setPageIndex(pageCount - 1)}
+              aria-label="Last page"
+            >
+              <ChevronsRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
-      </div>
 
-      <Dialog open={!!openRow} onOpenChange={(o) => !o && setOpenId(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          {openRow && (
-            <SubmissionDetail
-              row={openRow}
-              decrypted={decryptedById[openRow.submissionId]}
-              error={errorById[openRow.submissionId]}
-              isPending={pendingId === openRow.submissionId}
-              canDecrypt={canDecrypt}
-              onDecrypt={() => onDecrypt(openRow)}
-              fields={fields}
-              network={network}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+        <Dialog open={!!openRow} onOpenChange={(o) => !o && setOpenId(null)}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+            {openRow && (
+              <SubmissionDetail
+                row={openRow}
+                decrypted={decryptedById[openRow.submissionId]}
+                error={errorById[openRow.submissionId]}
+                isPending={pendingId === openRow.submissionId}
+                canDecrypt={canDecrypt}
+                onDecrypt={() => onDecrypt(openRow)}
+                fields={fields}
+                network={network}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
 }
 

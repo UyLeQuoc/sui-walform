@@ -59,7 +59,7 @@ export function SubmissionsFilterBar({
     value.decryptedOnly;
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border p-3">
+    <div className="bg-card flex flex-col gap-2 rounded-lg border p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="text-muted-foreground absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2" />

@@ -218,6 +218,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     const needle = submissionFilters.search.trim().toLowerCase();
     if (needle) {
       const submitterMatch = row.submitter.toLowerCase().includes(needle);
+      const idMatch = row.submissionId.toLowerCase().includes(needle);
       const decrypted = decryptedById[row.submissionId];
       const bodyMatch = decrypted
         ? Object.values(decrypted).some((v) => {
@@ -225,7 +226,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
             return String(v).toLowerCase().includes(needle);
           })
         : false;
-      if (!submitterMatch && !bodyMatch) return false;
+      if (!submitterMatch && !idMatch && !bodyMatch) return false;
     }
     return true;
   });
@@ -423,7 +424,12 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
                   onDecrypt={() => void decryption.decryptAll(rows)}
                 />
               ) : (
-                <AggregateCharts fields={inputFields} decryptedRows={decryptedRows} />
+                <AggregateCharts
+                  fields={inputFields}
+                  decryptedRows={decryptedRows}
+                  submissionRows={rows}
+                  decryptedById={decryptedById}
+                />
               )}
             </>
           )}
