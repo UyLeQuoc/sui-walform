@@ -15,6 +15,7 @@ import { useActivePackageId } from '../../../sui/package-id';
 import {
   getWalrusAggregatorUrl,
   getWalrusUploadRelayHost,
+  getWalrusUploadRelayTipMaxMist,
   useActiveWalrusSitePackageId,
 } from '../../../sui/env-network';
 import { useInvalidateChainQueries } from '../../../sui/use-invalidate-chain';
@@ -196,18 +197,22 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
           suiClient,
           uploadRelay: {
             host: getWalrusUploadRelayHost(walrusNet),
-            sendTip: { max: 1_000_000 },
+            sendTip: { max: getWalrusUploadRelayTipMaxMist(walrusNet) },
           },
         });
         let walrusUploadDigest: string | null = null;
-        const walrusSigner = new WalrusWalletSigner(account.address, async (args) => {
-          const r = await signAndExecuteTransaction({
-            transaction: args.transaction,
-            chain: args.chain ?? `sui:${net}`,
-          });
-          walrusUploadDigest = r.digest;
-          return { digest: r.digest };
-        });
+        const walrusSigner = new WalrusWalletSigner(
+          account.address,
+          async (args) => {
+            const r = await signAndExecuteTransaction({
+              transaction: args.transaction,
+              chain: args.chain ?? `sui:${net}`,
+            });
+            walrusUploadDigest = r.digest;
+            return { digest: r.digest };
+          },
+          walrusNet,
+        );
         const results = await walrus.writeFiles({
           files: walrusFiles,
           signer: walrusSigner,

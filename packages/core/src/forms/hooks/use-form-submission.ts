@@ -177,7 +177,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         toast.loading('Uploading encrypted response to Walrus…', {
           id: 'walrus-body',
         });
-        const { blobId } = await uploadBlob(ciphertext, { epochs: 53 });
+        const { blobId } = await uploadBlob(ciphertext, { epochs: 10 });
         toast.success('Stored on Walrus — broadcasting Sui receipt…', {
           id: 'walrus-body',
         });

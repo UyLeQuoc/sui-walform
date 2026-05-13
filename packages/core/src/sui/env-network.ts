@@ -104,6 +104,27 @@ export function getWalrusUploadRelayHost(network: WalformNetwork): string {
   );
 }
 
+/**
+ * Max tip (in MIST) the wallet will auto-pay to the Walrus upload-relay.
+ * Testnet relays are typically free or near-free (~1M MIST); mainnet relays
+ * charge based on real storage cost and ask for ~2–5M MIST per upload. The
+ * cap is a safety ceiling — the relay's `/v1/tip-config` advertises the
+ * actual amount, and the SDK uses min(advertised, max). Override per-network
+ * via `NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_TIP_MAX_MIST_{TESTNET,MAINNET}`.
+ */
+export function getWalrusUploadRelayTipMaxMist(network: WalformNetwork): number {
+  const raw =
+    network === 'mainnet'
+      ? process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_TIP_MAX_MIST_MAINNET
+      : process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_TIP_MAX_MIST_TESTNET;
+  const parsed = raw ? Number(raw) : NaN;
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  // Defaults: mainnet upload tips run higher (storage cost is real). 50M MIST
+  // = 0.05 SUI ceiling — enough headroom for current relay pricing, still
+  // bounded so a misconfigured relay can't drain a wallet.
+  return network === 'mainnet' ? 50_000_000 : 1_000_000;
+}
+
 export function getWalrusSitePackageId(network: WalformNetwork): string | null {
   if (network === 'mainnet') {
     return process.env.NEXT_PUBLIC_WALRUS_SITE_PACKAGE_ID_MAINNET ?? null;
@@ -142,10 +163,18 @@ export interface SealNetworkConfig {
   aggregatorUrl: string | null;
 }
 
-export function getSealConfig(network: WalformNetwork): SealNetworkConfig {
+/**
+ * Resolve Seal config for a network. Returns null when the network has no
+ * configured key servers — avoids silently calling testnet committee from a
+ * mainnet client. Testnet has a built-in default committee, so it never
+ * returns null.
+ */
+export function getSealConfig(network: WalformNetwork): SealNetworkConfig | null {
   if (network === 'mainnet') {
+    const keyServers = process.env.NEXT_PUBLIC_SEAL_KEY_SERVERS_MAINNET;
+    if (!keyServers || keyServers.trim() === '') return null;
     return {
-      keyServers: process.env.NEXT_PUBLIC_SEAL_KEY_SERVERS_MAINNET ?? null,
+      keyServers,
       aggregatorUrl: process.env.NEXT_PUBLIC_SEAL_AGGREGATOR_URL_MAINNET ?? null,
     };
   }
