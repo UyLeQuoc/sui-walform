@@ -224,7 +224,7 @@ function AllAnswersDialog({
             <TableBody>
               {answered.map((e) => (
                 <TableRow key={e.submissionId}>
-                  <TableCell className="w-32 align-top whitespace-nowrap text-xs">
+                  <TableCell className="w-32 align-top text-xs whitespace-nowrap">
                     <code className="font-mono">{shortAddr(e.submitter)}</code>
                     <div className="text-muted-foreground mt-0.5 text-[10px]">
                       {new Date(e.submittedAtMs).toLocaleString()}
@@ -237,7 +237,7 @@ function AllAnswersDialog({
               ))}
               {skipped.map((e) => (
                 <TableRow key={e.submissionId}>
-                  <TableCell className="w-32 align-top whitespace-nowrap text-xs">
+                  <TableCell className="w-32 align-top text-xs whitespace-nowrap">
                     <code className="font-mono">{shortAddr(e.submitter)}</code>
                   </TableCell>
                   <TableCell className="text-muted-foreground/60 align-top text-xs italic">
@@ -247,7 +247,7 @@ function AllAnswersDialog({
               ))}
               {encrypted.map((e) => (
                 <TableRow key={e.submissionId}>
-                  <TableCell className="w-32 align-top whitespace-nowrap text-xs">
+                  <TableCell className="w-32 align-top text-xs whitespace-nowrap">
                     <code className="font-mono">{shortAddr(e.submitter)}</code>
                   </TableCell>
                   <TableCell className="text-muted-foreground/60 align-top text-xs italic">
