@@ -77,7 +77,7 @@ export function FormsListClient() {
               <EmptyState
                 icon={<Lock className="text-muted-foreground h-8 w-8" />}
                 title="walform package not configured"
-                description="Set NEXT_PUBLIC_PACKAGE_ID for the active network in .env.local to load on-chain forms."
+                description="Set NEXT_PUBLIC_PACKAGE_ID_TESTNET / _MAINNET in .env.local to load on-chain forms."
               />
             ) : forms.length === 0 && running.length === 0 && reviewing.reviewing.length === 0 ? (
               <EmptyState

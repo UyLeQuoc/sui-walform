@@ -4,6 +4,7 @@ import { ArrowLeft, Eye, History, Redo2, Settings2, Sparkles, Undo2 } from 'luci
 import Link from 'next/link';
 import { Button } from '../../../ui/button';
 import { Logo } from '../../../ui/logo';
+import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
 import type { SaveStatus } from '../../hooks/use-auto-save';
 import type { RightSidebarMode } from '../../hooks/use-right-sidebar-mode';
 import { EditorPublishButton } from './EditorPublishButton';
@@ -86,6 +87,7 @@ export function FormBuilderHeader({
             <Settings2 className="h-4 w-4" />
           </Button>
 
+          <NetworkBadge />
           <ThemeToggle />
           <ExportButton />
 
@@ -97,6 +99,7 @@ export function FormBuilderHeader({
           </Button>
 
           <EditorPublishButton formId={formId} />
+          <WalletButton />
         </div>
       </div>
     </header>

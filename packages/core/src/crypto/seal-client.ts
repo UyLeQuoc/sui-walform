@@ -1,26 +1,26 @@
 'use client';
 
+import { useMemo } from 'react';
 import { SealClient, type KeyServerConfig } from '@mysten/seal';
+import { useSuiClient } from '@mysten/dapp-kit';
 import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import { useActiveSealConfig, type SealNetworkConfig } from '../sui/env-network';
 
 /**
- * Default Seal testnet setup: Mysten's decentralized committee key server
- * exposed through its hosted aggregator. The committee runs an internal
- * MPC threshold (2-of-N) server-side, so the SDK uses a single serverConfigs
- * entry with `threshold: 1` — the committee itself handles quorum.
- *
- * Swap to 3 individual key servers + `threshold: 2` by setting
- * `NEXT_PUBLIC_SEAL_KEY_SERVERS` to a comma-separated list of objectIds and
- * bumping `NEXT_PUBLIC_SEAL_THRESHOLD=2`. Mysten's aggregator URL stays
- * relevant only in committee mode.
+ * Seal client factory. The default for testnet is Mysten's decentralized
+ * committee key server exposed through a hosted aggregator — the committee
+ * itself handles 2-of-N MPC server-side, so we pass a single serverConfigs
+ * entry with `threshold: 1`. Override per-network via
+ * `NEXT_PUBLIC_SEAL_KEY_SERVERS_{TESTNET,MAINNET}` (comma-separated objectIds)
+ * and bump `NEXT_PUBLIC_SEAL_THRESHOLD=2`.
  */
-export const DEFAULT_TESTNET_COMMITTEE_OBJECT_ID =
+const DEFAULT_TESTNET_COMMITTEE_OBJECT_ID =
   '0xb012378c9f3799fb5b1a7083da74a4069e3c3f1c93de0b27212a5799ce1e1e98';
-export const DEFAULT_TESTNET_AGGREGATOR_URL = 'https://seal-aggregator-testnet.mystenlabs.com';
+const DEFAULT_TESTNET_AGGREGATOR_URL = 'https://seal-aggregator-testnet.mystenlabs.com';
 
 export function parseKeyServerConfig(
-  raw: string | undefined,
-  aggregatorUrl: string | undefined,
+  raw: string | null | undefined,
+  aggregatorUrl: string | null | undefined,
 ): KeyServerConfig[] {
   if (!raw || raw.trim() === '') {
     return [
@@ -48,15 +48,29 @@ export function getSealThreshold(): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-export function getSealClient(suiClient: SuiJsonRpcClient): SealClient {
-  const servers = parseKeyServerConfig(
-    process.env.NEXT_PUBLIC_SEAL_KEY_SERVERS,
-    process.env.NEXT_PUBLIC_SEAL_AGGREGATOR_URL,
-  );
+export function getSealClient(
+  suiClient: SuiJsonRpcClient,
+  config: SealNetworkConfig,
+): SealClient {
+  const servers = parseKeyServerConfig(config.keyServers, config.aggregatorUrl);
   return new SealClient({
     suiClient,
     serverConfigs: servers,
     verifyKeyServers: false,
     timeout: 10_000,
   });
+}
+
+/**
+ * React-side Seal client wired to the active network. Returns `null` when the
+ * active network is unsupported (devnet/localnet) — callers should gate on
+ * this rather than throwing.
+ */
+export function useSealClient(): SealClient | null {
+  const suiClient = useSuiClient();
+  const config = useActiveSealConfig();
+  return useMemo(() => {
+    if (!config) return null;
+    return getSealClient(suiClient as SuiJsonRpcClient, config);
+  }, [suiClient, config?.keyServers, config?.aggregatorUrl]);
 }

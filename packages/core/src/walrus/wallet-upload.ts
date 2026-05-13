@@ -9,7 +9,7 @@ import {
 } from '@mysten/dapp-kit';
 import type { WalrusClient } from '@mysten/walrus';
 import { WalrusWalletSigner } from '../sui/wallet-signer';
-import { getWalrusAggregatorUrl } from './upload';
+import { getWalrusAggregatorUrl, getWalrusUploadRelayHost } from '../sui/env-network';
 
 export interface WalletUploadResult {
   blobId: string;
@@ -62,14 +62,11 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
 
       if (!clientRef.current) {
         const { WalrusClient } = await import('@mysten/walrus');
-        const relayHost =
-          (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_HOST) ||
-          'https://upload-relay.testnet.walrus.space';
         clientRef.current = new WalrusClient({
           network: walrusNetwork,
           suiClient,
           uploadRelay: {
-            host: relayHost,
+            host: getWalrusUploadRelayHost(walrusNetwork),
             sendTip: { max: 1_000_000 },
           },
         });
@@ -96,7 +93,7 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
       });
       return {
         blobId,
-        url: `${getWalrusAggregatorUrl()}/v1/blobs/${blobId}`,
+        url: `${getWalrusAggregatorUrl(walrusNetwork)}/v1/blobs/${blobId}`,
       };
     },
     [account, walrusNetwork, network, suiClient, signAndExecuteTransaction],

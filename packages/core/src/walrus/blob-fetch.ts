@@ -1,12 +1,15 @@
-import { getWalrusAggregatorUrl } from './upload';
+import { getWalrusAggregatorUrl } from '../sui/env-network';
 
 /**
  * Fetch a Walrus blob's raw bytes via the configured aggregator. Used by the
  * submission-decrypt path to follow a WAL: pointer back to its actual Seal
- * ciphertext payload.
+ * ciphertext payload. Pass the active network so the aggregator host matches.
  */
-export async function fetchWalrusBlob(blobId: string): Promise<Uint8Array> {
-  const url = `${getWalrusAggregatorUrl()}/v1/blobs/${blobId}`;
+export async function fetchWalrusBlob(
+  blobId: string,
+  network: 'testnet' | 'mainnet',
+): Promise<Uint8Array> {
+  const url = `${getWalrusAggregatorUrl(network)}/v1/blobs/${blobId}`;
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Walrus aggregator returned ${response.status} for blob ${blobId}`);

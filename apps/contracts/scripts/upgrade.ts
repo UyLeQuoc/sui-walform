@@ -124,8 +124,9 @@ async function main() {
   // the new id without a manual paste step. originalPackageId never changes
   // — only the bumped packageId is written here.
   const envPath = resolve(import.meta.dir, "../../../apps/builder/.env.local");
-  const wrote = upsertEnvVar(envPath, "NEXT_PUBLIC_PACKAGE_ID", packageChange.packageId);
-  console.log(`Wrote env:               ${envPath} (${wrote})`);
+  const envKey = `NEXT_PUBLIC_PACKAGE_ID_${NETWORK.toUpperCase()}`;
+  const wrote = upsertEnvVar(envPath, envKey, packageChange.packageId);
+  console.log(`Wrote env:               ${envPath} :: ${envKey} (${wrote})`);
 }
 
 function upsertEnvVar(envPath: string, key: string, value: string): string {

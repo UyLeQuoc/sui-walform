@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { Button } from '../../../ui/button';
 import { Logo } from '../../../ui/logo';
-import { WalletButton } from '../../../sui/wallet-ui';
+import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
 import { useCreateDraft } from '../../hooks/use-create-draft';
 import { ThemeToggle } from '../editor/ThemeToggle';
 
@@ -27,6 +27,7 @@ export function FormsHeader() {
           Forms
         </Link>
         <div className="flex items-center gap-2">
+          <NetworkBadge />
           <ThemeToggle />
           <Button onClick={() => void createAndOpen()} disabled={isCreating}>
             <Plus className="mr-1.5 h-4 w-4" />
