@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { DEFAULT_CODE_LANGUAGE } from '../lib/code-languages';
+import { isInputField } from '../lib/field-types';
 import { DEFAULT_BORDER_RADIUS, DEFAULT_FORM_COLOR_KEY } from '../lib/form-appearance';
 import { DEFAULT_FORM_FONT_KEY } from '../lib/form-fonts';
 import { SCHEMA_VERSION } from '../lib/schema-version';
@@ -60,7 +61,7 @@ function buildDefaultField(type: FieldType): FormField {
     id: crypto.randomUUID(),
     type,
     label: DEFAULT_LABELS[type],
-    required: false,
+    required: isInputField({ type }),
   };
   if (type === 'single_choice' || type === 'multiple_choice' || type === 'select') {
     return {
