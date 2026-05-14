@@ -77,9 +77,31 @@ export interface FormField {
   height?: number;
 }
 
+export interface NavigationSettings {
+  /**
+   * `sequential` (default): respondents must satisfy the current page's
+   * visible required fields before "Next" advances. `free`: navigation
+   * is always available; validation only runs on final submit.
+   */
+  mode: 'sequential' | 'free';
+  /** When false, the Previous button is hidden — respondents can't revisit. */
+  allowBack: boolean;
+  /** Renders a horizontal progress bar above the form. */
+  showProgress: boolean;
+}
+
 export interface FormSettings {
   submitLabel: string;
+  /** Label for the Next button shown on multi-page forms. Defaults to "Next". */
+  nextLabel?: string;
+  /** Label for the Previous button shown on multi-page forms. Defaults to "Previous". */
+  previousLabel?: string;
   successMessage: string;
+  /**
+   * Alignment of the form's action buttons row. `center` makes the buttons
+   * span the full row (Submit goes `w-full`; Previous + Next split 50/50).
+   * `left`/`right` keep their natural width and align to that edge.
+   */
   submitAlignment: 'left' | 'center' | 'right';
   /**
    * Key from FORM_FONTS (see `src/lib/form-fonts.ts`) controlling the font
@@ -96,6 +118,12 @@ export interface FormSettings {
    * the page background. Default `card`.
    */
   displayMode?: 'card' | 'page';
+  /**
+   * Multi-page navigation behavior. Absent → defaults to
+   * `{ mode: 'sequential', allowBack: true, showProgress: true }`.
+   * Only consulted by renderers when `schema.pages.length > 1`.
+   */
+  navigation?: NavigationSettings;
 }
 
 export interface HistoryEntry {
@@ -146,6 +174,20 @@ export interface PublishedMeta {
   sealNonce?: string;
 }
 
+/**
+ * A logical page of the form — groups a subset of `schema.fields` for
+ * rendering. Pages are an optional layer on top of the flat field array:
+ * if `schema.pages` is missing or empty, the renderer treats the whole
+ * form as a single implicit page. When present, every field in
+ * `schema.fields` MUST appear in exactly one page's `fieldIds`.
+ */
+export interface FormPage {
+  id: string;
+  title?: string;
+  description?: string;
+  fieldIds: string[];
+}
+
 export interface FormSchema {
   id: string;
   /**
@@ -172,6 +214,12 @@ export interface FormSchema {
    * rest of the draft.
    */
   tags?: string[];
+  /**
+   * Optional page partition. Absent (or empty) means "single implicit page".
+   * Every field id in `fields` should appear in exactly one page's `fieldIds`
+   * when this is populated. `normalizeSchema()` reconciles drift.
+   */
+  pages?: FormPage[];
 }
 
 /**

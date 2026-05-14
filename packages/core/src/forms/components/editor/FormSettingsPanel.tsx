@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CreditCard, FileText, Trash2, type LucideIcon } from 'lucide-react';
+import { CreditCard, FileText, ListOrdered, Move, Trash2, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -26,6 +26,9 @@ import {
   SelectValue,
 } from '../../../ui/select';
 import { Slider } from '../../../ui/slider';
+import { Switch } from '../../../ui/switch';
+import { DEFAULT_NAVIGATION } from '../../lib/pages';
+import type { NavigationSettings } from '../../../types';
 import { FORM_FONTS, getFormFont, groupFontsByCategory } from '../../lib/form-fonts';
 import {
   BORDER_RADIUS_LABELS,
@@ -112,6 +115,27 @@ export function FormSettingsPanel() {
     (key: string) => updateSettings({ primaryColor: key }),
     [updateSettings],
   );
+
+  const navigation = useMemo<NavigationSettings>(
+    () => ({ ...DEFAULT_NAVIGATION, ...(settings.navigation ?? {}) }),
+    [settings.navigation],
+  );
+  const handleNavMode = useCallback(
+    (mode: NavigationSettings['mode']) =>
+      updateSettings({ navigation: { ...navigation, mode } }),
+    [navigation, updateSettings],
+  );
+  const handleAllowBack = useCallback(
+    (allowBack: boolean) =>
+      updateSettings({ navigation: { ...navigation, allowBack } }),
+    [navigation, updateSettings],
+  );
+  const handleShowProgress = useCallback(
+    (showProgress: boolean) =>
+      updateSettings({ navigation: { ...navigation, showProgress } }),
+    [navigation, updateSettings],
+  );
+  const pageCount = schema.pages?.length ?? 0;
 
   const radiusBadgeStyle = useMemo<React.CSSProperties>(
     () => ({
@@ -224,6 +248,57 @@ export function FormSettingsPanel() {
       </Field>
 
       <Field>
+        <FieldLabel className="flex items-center gap-1.5">
+          <ListOrdered className="h-3.5 w-3.5" />
+          Page navigation
+          {pageCount > 1 && (
+            <span className="text-muted-foreground ml-auto text-[11px]">{pageCount} pages</span>
+          )}
+        </FieldLabel>
+        <div className="grid grid-cols-2 gap-2">
+          <NavModeButton
+            mode="sequential"
+            active={navigation.mode === 'sequential'}
+            onSelect={handleNavMode}
+            label="Sequential"
+            hint="Validate before Next"
+            icon={ListOrdered}
+          />
+          <NavModeButton
+            mode="free"
+            active={navigation.mode === 'free'}
+            onSelect={handleNavMode}
+            label="Free"
+            hint="Jump anywhere"
+            icon={Move}
+          />
+        </div>
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span>Allow Previous button</span>
+            <Switch
+              aria-label="Allow Previous button"
+              checked={navigation.allowBack}
+              onCheckedChange={handleAllowBack}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span>Show progress bar</span>
+            <Switch
+              aria-label="Show progress bar"
+              checked={navigation.showProgress}
+              onCheckedChange={handleShowProgress}
+            />
+          </div>
+        </div>
+        {pageCount <= 1 && (
+          <p className="text-muted-foreground/80 mt-2 text-[11px]">
+            Add a page break in the canvas to split this form into multiple pages.
+          </p>
+        )}
+      </Field>
+
+      <Field>
         <FieldLabel>Danger zone</FieldLabel>
         <Button
           type="button"
@@ -263,6 +338,43 @@ export function FormSettingsPanel() {
     </FieldGroup>
   );
 }
+
+interface NavModeButtonProps {
+  mode: NavigationSettings['mode'];
+  active: boolean;
+  onSelect: (mode: NavigationSettings['mode']) => void;
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+}
+
+const NavModeButton = memo(function NavModeButton({
+  mode,
+  active,
+  onSelect,
+  label,
+  hint,
+  icon: Icon,
+}: NavModeButtonProps) {
+  const handleClick = useCallback(() => onSelect(mode), [onSelect, mode]);
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-pressed={active}
+      className={cn(
+        'group flex flex-col items-start gap-0.5 rounded-md border p-2.5 text-left transition-colors',
+        active ? 'border-primary/60 bg-primary/5' : 'border-border hover:bg-accent/60',
+      )}
+    >
+      <span className="flex items-center gap-1.5 text-sm font-medium">
+        <Icon className={cn('h-3.5 w-3.5', active ? 'text-primary' : 'text-muted-foreground')} />
+        {label}
+      </span>
+      <span className="text-muted-foreground text-[11px]">{hint}</span>
+    </button>
+  );
+});
 
 interface DisplayModeButtonProps {
   mode: DisplayModeDef;

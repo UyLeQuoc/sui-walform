@@ -1,6 +1,20 @@
 import { z } from 'zod';
 import type { FormField } from '../../../types';
 
+/**
+ * Per-field overrides used when generating a Zod schema for a specific
+ * subset of fields (e.g. one page) under active conditional logic.
+ *
+ *  - `hiddenFieldIds` — fields removed entirely from validation.
+ *  - `requiredOverrides` — flip a field's `required` flag without mutating it.
+ *
+ * Both are optional; omitting them yields the same behavior as before.
+ */
+export interface FieldSchemaOverrides {
+  hiddenFieldIds?: ReadonlySet<string>;
+  requiredOverrides?: ReadonlyMap<string, boolean>;
+}
+
 const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 function buildFieldSchema(field: FormField): z.ZodTypeAny {
@@ -161,8 +175,13 @@ function buildFieldSchema(field: FormField): z.ZodTypeAny {
   }
 }
 
-export function generateZodSchema(fields: FormField[]): z.ZodObject<Record<string, z.ZodTypeAny>> {
+export function generateZodSchema(
+  fields: FormField[],
+  overrides?: FieldSchemaOverrides,
+): z.ZodObject<Record<string, z.ZodTypeAny>> {
   const shape: Record<string, z.ZodTypeAny> = {};
+  const hidden = overrides?.hiddenFieldIds;
+  const requiredOverrides = overrides?.requiredOverrides;
   for (const field of fields) {
     if (
       field.type === 'divider' ||
@@ -172,7 +191,12 @@ export function generateZodSchema(fields: FormField[]): z.ZodObject<Record<strin
       field.type === 'markdown'
     )
       continue;
-    shape[field.id] = buildFieldSchema(field);
+    if (hidden?.has(field.id)) continue;
+    const effective =
+      requiredOverrides?.has(field.id)
+        ? { ...field, required: requiredOverrides.get(field.id)! }
+        : field;
+    shape[field.id] = buildFieldSchema(effective);
   }
 
   return z.object(shape);
