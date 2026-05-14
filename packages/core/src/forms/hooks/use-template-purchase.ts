@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
+import {
+  useActiveTransferPolicyId,
+  useActivePlatformTreasuryId,
+} from '../../sui/env-network';
 import { buildCloneFreeTx, computeRoyaltyMist } from '../../sui/tx/clone-template';
 import { buildClonePaidTx } from '../../sui/tx/clone-paid';
 import { useExecuteTransaction } from '../../sui/use-execute-transaction';
@@ -54,6 +58,8 @@ export interface UseTemplatePurchaseResult {
 export function useTemplatePurchase(template: MarketplaceTemplate): UseTemplatePurchaseResult {
   const packageId = useActivePackageId();
   const originalPackageId = useOriginalPackageId();
+  const transferPolicyId = useActiveTransferPolicyId();
+  const platformTreasuryId = useActivePlatformTreasuryId();
   const { execute } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
 
@@ -88,10 +94,9 @@ export function useTemplatePurchase(template: MarketplaceTemplate): UseTemplateP
   })();
 
   // Paid clones require both TransferPolicy (royalty config source) and
-  // PlatformTreasury env vars. Disable up-front so the button never leads
-  // to a guaranteed failure.
-  const paidEnvReady =
-    !!process.env.NEXT_PUBLIC_TRANSFER_POLICY_ID && !!process.env.NEXT_PUBLIC_PLATFORM_TREASURY_ID;
+  // PlatformTreasury for the active network. Disable up-front so the button
+  // never leads to a guaranteed failure.
+  const paidEnvReady = !!transferPolicyId && !!platformTreasuryId;
   const canAct =
     !!packageId &&
     !!originalPackageId &&
@@ -125,6 +130,8 @@ export function useTemplatePurchase(template: MarketplaceTemplate): UseTemplateP
           listingId: paidListing.listing.listingId,
           priceMist: paidListing.listing.priceMist,
           titleForNew: cloneTitle,
+          transferPolicyId,
+          platformTreasuryId,
           execute,
           invalidateChain,
         });
@@ -176,12 +183,12 @@ async function dispatchPaidClone(
     listingId: string;
     priceMist: bigint;
     titleForNew: string;
+    transferPolicyId: string | null;
+    platformTreasuryId: string | null;
   },
 ): Promise<void> {
-  const transferPolicyId = process.env.NEXT_PUBLIC_TRANSFER_POLICY_ID;
-  const platformTreasuryId = process.env.NEXT_PUBLIC_PLATFORM_TREASURY_ID;
-  if (!transferPolicyId || !platformTreasuryId) {
-    toast.error('TransferPolicy / Treasury env not configured.');
+  if (!input.transferPolicyId || !input.platformTreasuryId) {
+    toast.error('TransferPolicy / Treasury not configured on this network.');
     return;
   }
   const royaltyMist = computeRoyaltyMist(input.priceMist);
@@ -190,8 +197,8 @@ async function dispatchPaidClone(
     packageId: input.packageId,
     templateId: input.template.templateId,
     listingId: input.listingId,
-    platformTreasuryId,
-    transferPolicyId,
+    platformTreasuryId: input.platformTreasuryId,
+    transferPolicyId: input.transferPolicyId,
     priceMist: input.priceMist,
     royaltyMist,
     titleForNew: input.titleForNew,

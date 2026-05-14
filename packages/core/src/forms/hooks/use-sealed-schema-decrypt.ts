@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useSuiClient } from '@mysten/dapp-kit';
 import { toast } from 'sonner';
-import { getSealClient, sealDecryptFormSchema } from '../../crypto';
+import { sealDecryptFormSchema, useSealClient } from '../../crypto';
 import { useOriginalPackageId } from '../../sui/package-id';
 import type { FormSchema } from '../../types';
 import { useFormAllowlist } from './use-form-allowlist';
@@ -35,6 +35,7 @@ export function useSealedSchemaDecrypt(
 ): UseSealedSchemaDecryptResult {
   const { formObjectId, ciphertext } = input;
   const suiClient = useSuiClient();
+  const seal = useSealClient();
   const originalPackageId = useOriginalPackageId();
   const allowlistQuery = useFormAllowlist(formObjectId);
   const sealSession = useSealSession();
@@ -44,8 +45,8 @@ export function useSealedSchemaDecrypt(
   const [error, setError] = useState<string | null>(null);
 
   const decrypt = async () => {
-    if (!originalPackageId) {
-      toast.error('walform package not configured for this network.');
+    if (!originalPackageId || !seal) {
+      toast.error('walform package or Seal not configured for this network.');
       return;
     }
     if (!allowlistQuery.allowlist) {
@@ -56,7 +57,6 @@ export function useSealedSchemaDecrypt(
     setError(null);
     try {
       const sessionKey = await sealSession.ensureSession();
-      const seal = getSealClient(suiClient);
       const plaintextBytes = await sealDecryptFormSchema({
         seal,
         sessionKey,

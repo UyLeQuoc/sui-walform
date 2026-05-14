@@ -12,6 +12,12 @@ import {
 import { WalrusClient, WalrusFile, blobIdToInt } from '@mysten/walrus';
 import { Button } from '../../../ui/button';
 import { useActivePackageId } from '../../../sui/package-id';
+import {
+  getWalrusAggregatorUrl,
+  getWalrusUploadRelayHost,
+  getWalrusUploadRelayTipMaxMist,
+  useActiveWalrusSitePackageId,
+} from '../../../sui/env-network';
 import { useInvalidateChainQueries } from '../../../sui/use-invalidate-chain';
 import {
   buildDeployWalrusSiteTx,
@@ -28,9 +34,6 @@ import {
 import { formSiteCache } from '../../services/form-site-cache';
 import type { OnChainForm } from '../../hooks/use-on-chain-forms';
 import { WalrusSiteManageDialog } from './WalrusSiteManageDialog';
-
-const CANONICAL_WALRUS_SITE_TESTNET =
-  '0x22b8c1496650eb45fbcca0f8f37fae77ed33b7d4eaab4da5f0bb9b62a8708dcb';
 
 export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
   const account = useCurrentAccount();
@@ -58,13 +61,10 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
     /** Pre-computed at load time — `Date.now()` in render breaks react-hooks/purity. */
     ageMin: number;
   } | null>(null);
-  // Fallback to canonical testnet id so a missing/stale env doesn't silently
-  // route deploys to the older `0xf99aee…` package (which has the same
-  // module surface but was missing the redirects API and is no longer
-  // canonical). Override only when targeting a private/forked Walrus Sites.
-  const sitePackageId =
-    (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WALRUS_SITE_PACKAGE_ID) ||
-    CANONICAL_WALRUS_SITE_TESTNET;
+  // Walrus Sites packageId resolves per-active-network via env-network helpers;
+  // testnet defaults to the canonical Mysten id so a missing/stale env doesn't
+  // silently route deploys to the older `0xf99aee…` package.
+  const sitePackageId = useActiveWalrusSitePackageId();
   const net = (network === 'mainnet' || network === 'devnet' ? network : 'testnet') as
     | 'testnet'
     | 'mainnet'
@@ -115,11 +115,7 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
     setProgress(null);
     // Surface the live env value so a stale dev-server bundle is obvious in
     // the console — happens when .env.local changes without a full restart.
-    console.info(
-      '[DeployToWalrusSite] sitePackageId =',
-      sitePackageId,
-      sitePackageId.startsWith('0x22b8c1') ? '(canonical)' : '(STALE? expected 0x22b8c1…8dcb)',
-    );
+    console.info('[DeployToWalrusSite] sitePackageId =', sitePackageId, `(network=${net})`);
     try {
       let manifest: WalrusSiteManifest;
 
@@ -195,26 +191,28 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
         // reservation). User pays WAL + SUI gas; upload-relay auto-discovers
         // tip, capped at 1M MIST.
         setStage('uploading-walrus');
+        const walrusNet: 'testnet' | 'mainnet' = net === 'mainnet' ? 'mainnet' : 'testnet';
         const walrus = new WalrusClient({
-          network: net === 'devnet' ? 'testnet' : net,
+          network: walrusNet,
           suiClient,
           uploadRelay: {
-            host:
-              (typeof process !== 'undefined' &&
-                process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_HOST) ||
-              'https://upload-relay.testnet.walrus.space',
-            sendTip: { max: 1_000_000 },
+            host: getWalrusUploadRelayHost(walrusNet),
+            sendTip: { max: getWalrusUploadRelayTipMaxMist(walrusNet) },
           },
         });
         let walrusUploadDigest: string | null = null;
-        const walrusSigner = new WalrusWalletSigner(account.address, async (args) => {
-          const r = await signAndExecuteTransaction({
-            transaction: args.transaction,
-            chain: args.chain ?? `sui:${net}`,
-          });
-          walrusUploadDigest = r.digest;
-          return { digest: r.digest };
-        });
+        const walrusSigner = new WalrusWalletSigner(
+          account.address,
+          async (args) => {
+            const r = await signAndExecuteTransaction({
+              transaction: args.transaction,
+              chain: args.chain ?? `sui:${net}`,
+            });
+            walrusUploadDigest = r.digest;
+            return { digest: r.digest };
+          },
+          walrusNet,
+        );
         const results = await walrus.writeFiles({
           files: walrusFiles,
           signer: walrusSigner,
@@ -226,9 +224,7 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
           throw new Error('Walrus writeFiles returned no results');
         }
         const quiltBlobIdU256 = blobIdToInt(quiltBlobId).toString();
-        const aggregator =
-          (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL) ||
-          'https://aggregator.walrus-testnet.walrus.space';
+        const aggregator = getWalrusAggregatorUrl(walrusNet);
         manifest = {
           publishedAt: new Date().toISOString(),
           network: net === 'mainnet' ? 'mainnet' : 'testnet',
@@ -442,7 +438,7 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
           onClick={() => void handleDeploy()}
           title={
             !sitePackageId
-              ? 'NEXT_PUBLIC_WALRUS_SITE_PACKAGE_ID not configured'
+              ? `Walrus Sites packageId not configured for ${net}`
               : 'Deploy this form as a Walrus Site (Mode B). Your wallet signs + pays for both the Walrus upload and the atomic Sui PTB.'
           }
         >

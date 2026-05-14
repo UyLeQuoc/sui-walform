@@ -9,7 +9,11 @@ import {
 } from '@mysten/dapp-kit';
 import type { WalrusClient } from '@mysten/walrus';
 import { WalrusWalletSigner } from '../sui/wallet-signer';
-import { getWalrusAggregatorUrl } from './upload';
+import {
+  getWalrusAggregatorUrl,
+  getWalrusUploadRelayHost,
+  getWalrusUploadRelayTipMaxMist,
+} from '../sui/env-network';
 
 export interface WalletUploadResult {
   blobId: string;
@@ -42,9 +46,15 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   // Cache the WalrusClient + signer across calls: WalrusClient construction
   // pulls in the WASM bundle, and we want one signer per account so polling
-  // state inside it can warm up.
-  const clientRef = useRef<WalrusClient | null>(null);
-  const cachedSignerRef = useRef<{ address: string; signer: WalrusWalletSigner } | null>(null);
+  // state inside it can warm up. Both refs key on (network, address) — when
+  // the user flips networks via the dropdown, the old clients are stale (they
+  // baked in the old aggregator/relay) and must be rebuilt.
+  const clientRef = useRef<{ network: 'testnet' | 'mainnet'; client: WalrusClient } | null>(null);
+  const cachedSignerRef = useRef<{
+    address: string;
+    network: 'testnet' | 'mainnet';
+    signer: WalrusWalletSigner;
+  } | null>(null);
 
   const walrusNetwork: 'testnet' | 'mainnet' | null =
     network === 'testnet' || network === 'mainnet' ? network : null;
@@ -60,35 +70,43 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
         throw new Error(`Walrus does not run on ${network}; switch to testnet or mainnet.`);
       }
 
-      if (!clientRef.current) {
+      if (!clientRef.current || clientRef.current.network !== walrusNetwork) {
         const { WalrusClient } = await import('@mysten/walrus');
-        const relayHost =
-          (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_HOST) ||
-          'https://upload-relay.testnet.walrus.space';
-        clientRef.current = new WalrusClient({
+        clientRef.current = {
           network: walrusNetwork,
-          suiClient,
-          uploadRelay: {
-            host: relayHost,
-            sendTip: { max: 1_000_000 },
-          },
-        });
-      }
-
-      if (cachedSignerRef.current?.address !== account.address) {
-        cachedSignerRef.current = {
-          address: account.address,
-          signer: new WalrusWalletSigner(account.address, async (args) => {
-            const r = await signAndExecuteTransaction({
-              transaction: args.transaction,
-              chain: args.chain ?? `sui:${walrusNetwork}`,
-            });
-            return { digest: r.digest };
+          client: new WalrusClient({
+            network: walrusNetwork,
+            suiClient,
+            uploadRelay: {
+              host: getWalrusUploadRelayHost(walrusNetwork),
+              sendTip: { max: getWalrusUploadRelayTipMaxMist(walrusNetwork) },
+            },
           }),
         };
       }
 
-      const { blobId } = await clientRef.current.writeBlob({
+      if (
+        cachedSignerRef.current?.address !== account.address ||
+        cachedSignerRef.current?.network !== walrusNetwork
+      ) {
+        cachedSignerRef.current = {
+          address: account.address,
+          network: walrusNetwork,
+          signer: new WalrusWalletSigner(
+            account.address,
+            async (args) => {
+              const r = await signAndExecuteTransaction({
+                transaction: args.transaction,
+                chain: args.chain ?? `sui:${walrusNetwork}`,
+              });
+              return { digest: r.digest };
+            },
+            walrusNetwork,
+          ),
+        };
+      }
+
+      const { blobId } = await clientRef.current.client.writeBlob({
         blob: bytes,
         deletable: options.deletable ?? false,
         epochs: options.epochs ?? 15,
@@ -96,7 +114,7 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
       });
       return {
         blobId,
-        url: `${getWalrusAggregatorUrl()}/v1/blobs/${blobId}`,
+        url: `${getWalrusAggregatorUrl(walrusNetwork)}/v1/blobs/${blobId}`,
       };
     },
     [account, walrusNetwork, network, suiClient, signAndExecuteTransaction],

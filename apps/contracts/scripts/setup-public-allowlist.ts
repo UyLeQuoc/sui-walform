@@ -129,8 +129,9 @@ async function main() {
   console.log(`   Allowlist:   ${allowlist.objectId}`);
 
   const envPath = resolve(import.meta.dir, '../../../apps/builder/.env.local');
-  const wrote = upsertEnvVar(envPath, 'NEXT_PUBLIC_PUBLIC_SUBMIT_ALLOWLIST_ID', allowlist.objectId);
-  console.log(`   Wrote env:   ${envPath} (${wrote})`);
+  const envKey = `NEXT_PUBLIC_PUBLIC_SUBMIT_ALLOWLIST_ID_${NETWORK.toUpperCase()}`;
+  const wrote = upsertEnvVar(envPath, envKey, allowlist.objectId);
+  console.log(`   Wrote env:   ${envPath} :: ${envKey} (${wrote})`);
 }
 
 /**

@@ -158,8 +158,8 @@ export function hexObjectIdToBase36(objectId: string): string {
  *     There's no Mysten-hosted testnet portal — viewers run our own copy
  *     locally (see `apps/portal`, `bun run --cwd apps/portal dev`).
  *
- * Override the non-mainnet host via `NEXT_PUBLIC_WALRUS_PORTAL_HOST` if the
- * portal lives somewhere other than `localhost:4000`.
+ * Override the non-mainnet host via `NEXT_PUBLIC_WALRUS_PORTAL_HOST_TESTNET`
+ * if the portal lives somewhere other than `localhost:4000`.
  */
 export function walrusSitePublicUrl(
   siteObjectId: string,
@@ -170,7 +170,8 @@ export function walrusSitePublicUrl(
   if (network === 'mainnet') {
     return `https://${subdomain}.wal.app/#/f/${formId}`;
   }
-  const overrideHost = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WALRUS_PORTAL_HOST;
+  const overrideHost =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WALRUS_PORTAL_HOST_TESTNET;
   // Override is host-only (e.g. `portal.example.com:4000`); we always speak
   // http for non-mainnet to make the localhost case work without TLS setup.
   // Strip any leading scheme the user may have included.

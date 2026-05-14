@@ -3,19 +3,17 @@
  * conversion. Actual upload happens through `useWalrusWalletUpload()` in
  * `./wallet-upload`, which signs the registration tx with the user's wallet —
  * there is no app-level WAL payer.
+ *
+ * Aggregator host is network-aware. Use `getWalrusAggregatorUrl(network)`
+ * directly when you already have the active network in scope, or the
+ * `useActiveWalrusAggregatorUrl()` hook from `sui/env-network`.
  */
 
-const DEFAULT_AGGREGATOR = 'https://aggregator.walrus-testnet.walrus.space';
+export { getWalrusAggregatorUrl, useActiveWalrusAggregatorUrl } from '../sui/env-network';
+import { getWalrusAggregatorUrl } from '../sui/env-network';
 
-export function getWalrusAggregatorUrl(): string {
-  return (
-    (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL) ||
-    DEFAULT_AGGREGATOR
-  );
-}
-
-export function resolveBlobUrl(blobId: string): string {
-  return `${getWalrusAggregatorUrl()}/v1/blobs/${blobId}`;
+export function resolveBlobUrl(blobId: string, network: 'testnet' | 'mainnet'): string {
+  return `${getWalrusAggregatorUrl(network)}/v1/blobs/${blobId}`;
 }
 
 /**

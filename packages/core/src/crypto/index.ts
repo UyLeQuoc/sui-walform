@@ -9,7 +9,12 @@ export {
   identityToHex,
 } from './seal-identity';
 
-export { getSealClient, parseKeyServerConfig, getSealThreshold } from './seal-client';
+export {
+  getSealClient,
+  parseKeyServerConfig,
+  getSealThreshold,
+  useSealClient,
+} from './seal-client';
 
 export { createSealSessionKey } from './seal-session';
 export type { CreateSealSessionKeyInput } from './seal-session';

@@ -8,6 +8,7 @@ import { Button } from '../button';
 import { ArrowRight } from 'lucide-react';
 import { ThemeToggle } from '../../forms/components/editor/ThemeToggle';
 import { Logo } from '../logo';
+import { NetworkBadge, WalletButton } from '../../sui/wallet-ui';
 
 const links = [
   { label: 'Features', href: '#features' },
@@ -43,9 +44,7 @@ export function Navbar() {
           <Link href="/" className="flex items-center gap-2">
             <Logo variant="primary" className="size-7" />
             <span className="font-mono text-lg font-bold">WalForm</span>
-            <span className="border-primary/30 bg-primary/10 text-primary ml-1 hidden border px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase sm:inline-block">
-              Testnet
-            </span>
+            <NetworkBadge className="ml-1 hidden sm:inline-flex" />
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex">
@@ -58,6 +57,7 @@ export function Navbar() {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <WalletButton />
             <Button asChild>
               <Link href="/forms">
                 Start building

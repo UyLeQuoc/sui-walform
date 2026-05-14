@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useSuiClient } from '@mysten/dapp-kit';
-import { sealDecryptSubmission, getSealClient } from '../../crypto';
+import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { sealDecryptSubmission, useSealClient } from '../../crypto';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
 import { decodeBodyPointer, fetchWalrusBlob } from '../../walrus';
 import { useFormReviewers } from './use-form-reviewers';
@@ -40,6 +40,8 @@ export function useSubmissionDecryption(
   const { formId } = input;
   const sealSession = useSealSession();
   const suiClient = useSuiClient();
+  const seal = useSealClient();
+  const { network } = useSuiClientContext();
   // Seal namespace stays on the original packageId (encryption identity),
   // but the moveCall target needs the CURRENT packageId — Sui upgrade
   // resolves new entry fns (like `seal_approve_read_submission_with_reviewers`)
@@ -54,7 +56,8 @@ export function useSubmissionDecryption(
 
   const decryptOne = useCallback(
     async (row: SubmissionRow) => {
-      if (!originalPackageId || !activePackageId) return;
+      if (!originalPackageId || !activePackageId || !seal) return;
+      if (network !== 'testnet' && network !== 'mainnet') return;
       setPendingId(row.submissionId);
       setErrorById((prev) => {
         if (!(row.submissionId in prev)) return prev;
@@ -64,12 +67,11 @@ export function useSubmissionDecryption(
       });
       try {
         const sessionKey = await sealSession.ensureSession();
-        const seal = getSealClient(suiClient);
         // If the stored body is a Walrus pointer (post-2026-05-12 submissions),
         // fetch the real Seal ciphertext from the aggregator. Legacy inline
         // ciphertexts skip this step.
         const blobId = decodeBodyPointer(row.ciphertext);
-        const ciphertext = blobId ? await fetchWalrusBlob(blobId) : row.ciphertext;
+        const ciphertext = blobId ? await fetchWalrusBlob(blobId, network) : row.ciphertext;
         const plaintextBytes = await sealDecryptSubmission({
           seal,
           sessionKey,
@@ -101,6 +103,8 @@ export function useSubmissionDecryption(
     [
       originalPackageId,
       activePackageId,
+      seal,
+      network,
       sealSession,
       suiClient,
       formId,

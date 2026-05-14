@@ -9,8 +9,9 @@ import {
   useSuiClientQuery,
 } from '@mysten/dapp-kit';
 import type { FieldValues } from 'react-hook-form';
-import { sealEncryptSubmission, getSealClient } from '../../crypto';
+import { sealEncryptSubmission, useSealClient } from '../../crypto';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
+import { useActivePublicAllowlistId } from '../../sui/env-network';
 import { buildSubmitTx } from '../../sui/tx/submit';
 import { buildPaidSubmitTx, InsufficientSuiError } from '../../sui/tx/submit-paid';
 import { useExecuteTransaction } from '../../sui/use-execute-transaction';
@@ -66,7 +67,9 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
   const account = useCurrentAccount();
   const packageId = useActivePackageId();
   const originalPackageId = useOriginalPackageId();
+  const publicAllowlistId = useActivePublicAllowlistId();
   const suiClient = useSuiClient();
+  const seal = useSealClient();
   const allowlistQuery = useFormAllowlist(form.formObjectId);
   const treasuryQuery = useFormTreasury(form.accessMode === 3 ? form.formObjectId : undefined);
   const tokenBalanceQuery = useSuiClientQuery(
@@ -131,6 +134,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         form,
         accountAddress: account.address,
         allowlistQuery,
+        publicAllowlistId,
       });
       if (allowlistId === null) return;
 
@@ -150,9 +154,13 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         return;
       }
 
+      if (!seal) {
+        toast.error('Seal not configured for this network.');
+        return;
+      }
+
       setIsSubmitting(true);
       try {
-        const seal = getSealClient(suiClient);
         const plaintext = new TextEncoder().encode(JSON.stringify(values));
         const { ciphertext, nonce } = await sealEncryptSubmission({
           seal,
@@ -169,7 +177,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         toast.loading('Uploading encrypted response to Walrus…', {
           id: 'walrus-body',
         });
-        const { blobId } = await uploadBlob(ciphertext, { epochs: 53 });
+        const { blobId } = await uploadBlob(ciphertext, { epochs: 10 });
         toast.success('Stored on Walrus — broadcasting Sui receipt…', {
           id: 'walrus-body',
         });
@@ -231,6 +239,8 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       account,
       packageId,
       originalPackageId,
+      publicAllowlistId,
+      seal,
       form,
       meetsTokenGate,
       allowlistQuery,
@@ -272,6 +282,7 @@ interface ResolveAllowlistInput {
   form: FormOnChainDetail;
   accountAddress: string;
   allowlistQuery: ReturnType<typeof useFormAllowlist>;
+  publicAllowlistId: string | null;
 }
 
 /**
@@ -285,7 +296,7 @@ interface ResolveAllowlistInput {
  * - Paid (3): allowlist is unused by submit_paid_and_share — return ''.
  */
 async function resolveAllowlistId(input: ResolveAllowlistInput): Promise<string | null> {
-  const { form, accountAddress, allowlistQuery } = input;
+  const { form, accountAddress, allowlistQuery, publicAllowlistId } = input;
 
   if (form.accessMode === 1) {
     const al = allowlistQuery.allowlist;
@@ -307,12 +318,11 @@ async function resolveAllowlistId(input: ResolveAllowlistInput): Promise<string 
   if (form.accessMode === 0 || form.accessMode === 2) {
     const al = allowlistQuery.allowlist;
     if (al) return al.allowlistId;
-    const throwaway = process.env.NEXT_PUBLIC_PUBLIC_SUBMIT_ALLOWLIST_ID;
-    if (!throwaway) {
+    if (!publicAllowlistId) {
       toast.error('No allowlist available. Re-publish the form, or run setup-public-allowlist.');
       return null;
     }
-    return throwaway;
+    return publicAllowlistId;
   }
   // Paid mode — submit_paid_and_share doesn't take an allowlist arg.
   return '';
