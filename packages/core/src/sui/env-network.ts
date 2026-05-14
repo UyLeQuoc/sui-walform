@@ -161,6 +161,11 @@ const DEFAULT_SEAL_AGGREGATOR_TESTNET = 'https://seal-aggregator-testnet.mystenl
 export interface SealNetworkConfig {
   keyServers: string | null;
   aggregatorUrl: string | null;
+  /** HTTP header name for the API key (e.g. `x-api-key`). Permissioned
+   * (independent) servers require this; decentralized usually do not. */
+  apiKeyName: string | null;
+  /** API key value sent in the header named by `apiKeyName`. */
+  apiKey: string | null;
 }
 
 /**
@@ -168,6 +173,11 @@ export interface SealNetworkConfig {
  * configured key servers — avoids silently calling testnet committee from a
  * mainnet client. Testnet has a built-in default committee, so it never
  * returns null.
+ *
+ * For permissioned mainnet servers (e.g. Ruby Nodes free tier), set both
+ * `NEXT_PUBLIC_SEAL_API_KEY_NAME_MAINNET` (header name, typically `x-api-key`)
+ * and `NEXT_PUBLIC_SEAL_API_KEY_MAINNET` (the key). The Seal SDK rejects a
+ * partial pair, so either provide both or neither.
  */
 export function getSealConfig(network: WalformNetwork): SealNetworkConfig | null {
   if (network === 'mainnet') {
@@ -176,12 +186,28 @@ export function getSealConfig(network: WalformNetwork): SealNetworkConfig | null
     return {
       keyServers,
       aggregatorUrl: process.env.NEXT_PUBLIC_SEAL_AGGREGATOR_URL_MAINNET ?? null,
+      apiKeyName: process.env.NEXT_PUBLIC_SEAL_API_KEY_NAME_MAINNET ?? null,
+      apiKey: process.env.NEXT_PUBLIC_SEAL_API_KEY_MAINNET ?? null,
+    };
+  }
+  // Testnet: respect explicit env config when set. Only fall back to Mysten's
+  // committee defaults when keyServers is fully empty — otherwise the SDK
+  // throws "V1 server should not have aggregatorUrl" because an independent
+  // server (e.g. Overclock open-mode) was paired with the committee aggregator.
+  const testnetKeyServers = process.env.NEXT_PUBLIC_SEAL_KEY_SERVERS_TESTNET;
+  if (testnetKeyServers && testnetKeyServers.trim() !== '') {
+    return {
+      keyServers: testnetKeyServers,
+      aggregatorUrl: process.env.NEXT_PUBLIC_SEAL_AGGREGATOR_URL_TESTNET ?? null,
+      apiKeyName: process.env.NEXT_PUBLIC_SEAL_API_KEY_NAME_TESTNET ?? null,
+      apiKey: process.env.NEXT_PUBLIC_SEAL_API_KEY_TESTNET ?? null,
     };
   }
   return {
-    keyServers: process.env.NEXT_PUBLIC_SEAL_KEY_SERVERS_TESTNET || DEFAULT_SEAL_COMMITTEE_TESTNET,
-    aggregatorUrl:
-      process.env.NEXT_PUBLIC_SEAL_AGGREGATOR_URL_TESTNET || DEFAULT_SEAL_AGGREGATOR_TESTNET,
+    keyServers: DEFAULT_SEAL_COMMITTEE_TESTNET,
+    aggregatorUrl: DEFAULT_SEAL_AGGREGATOR_TESTNET,
+    apiKeyName: null,
+    apiKey: null,
   };
 }
 

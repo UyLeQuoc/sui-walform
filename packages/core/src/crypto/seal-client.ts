@@ -13,6 +13,11 @@ import { useActiveSealConfig, type SealNetworkConfig } from '../sui/env-network'
  * entry with `threshold: 1`. Override per-network via
  * `NEXT_PUBLIC_SEAL_KEY_SERVERS_{TESTNET,MAINNET}` (comma-separated objectIds)
  * and bump `NEXT_PUBLIC_SEAL_THRESHOLD=2`.
+ *
+ * Permissioned (independent) servers like Ruby Nodes free tier require an
+ * API key — pass `apiKeyName` (header name, typically `x-api-key`) + `apiKey`
+ * through the per-network env vars. The Seal SDK rejects a half-set pair, so
+ * provide both or neither.
  */
 const DEFAULT_TESTNET_COMMITTEE_OBJECT_ID =
   '0xb012378c9f3799fb5b1a7083da74a4069e3c3f1c93de0b27212a5799ce1e1e98';
@@ -21,13 +26,18 @@ const DEFAULT_TESTNET_AGGREGATOR_URL = 'https://seal-aggregator-testnet.mystenla
 export function parseKeyServerConfig(
   raw: string | null | undefined,
   aggregatorUrl: string | null | undefined,
+  apiKeyName: string | null | undefined,
+  apiKey: string | null | undefined,
 ): KeyServerConfig[] {
+  const apiAuth = apiKeyName && apiKey ? { apiKeyName, apiKey } : {};
+
   if (!raw || raw.trim() === '') {
     return [
       {
         objectId: DEFAULT_TESTNET_COMMITTEE_OBJECT_ID,
         weight: 1,
         aggregatorUrl: aggregatorUrl ?? DEFAULT_TESTNET_AGGREGATOR_URL,
+        ...apiAuth,
       },
     ];
   }
@@ -39,6 +49,7 @@ export function parseKeyServerConfig(
       objectId,
       weight: 1,
       ...(aggregatorUrl ? { aggregatorUrl } : {}),
+      ...apiAuth,
     }));
 }
 
@@ -52,7 +63,12 @@ export function getSealClient(
   suiClient: SuiJsonRpcClient,
   config: SealNetworkConfig,
 ): SealClient {
-  const servers = parseKeyServerConfig(config.keyServers, config.aggregatorUrl);
+  const servers = parseKeyServerConfig(
+    config.keyServers,
+    config.aggregatorUrl,
+    config.apiKeyName,
+    config.apiKey,
+  );
   return new SealClient({
     suiClient,
     serverConfigs: servers,
@@ -72,5 +88,5 @@ export function useSealClient(): SealClient | null {
   return useMemo(() => {
     if (!config) return null;
     return getSealClient(suiClient as SuiJsonRpcClient, config);
-  }, [suiClient, config?.keyServers, config?.aggregatorUrl]);
+  }, [suiClient, config?.keyServers, config?.aggregatorUrl, config?.apiKeyName, config?.apiKey]);
 }
