@@ -22,6 +22,7 @@ import { Label } from '../../../ui/label';
 import { Textarea } from '../../../ui/textarea';
 import { Spinner } from '../../../ui/spinner';
 import { useInvalidateChainQueries } from '../../../sui/use-invalidate-chain';
+import { useActiveWalrusSitePackageId } from '../../../sui/env-network';
 import { buildUpdateSiteMetadataTx } from '../../../sui/tx/update-walrus-site-metadata';
 import { walrusSitePublicUrl } from '../../../sui/tx/extract-walrus-site-id';
 import { useFormSite } from '../../hooks/use-form-site';
@@ -46,8 +47,7 @@ export function WalrusSiteManageDialog({
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
   const { site, isLoading } = useFormSite(siteObjectId);
-  const sitePackageId =
-    typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_WALRUS_SITE_PACKAGE_ID : '';
+  const sitePackageId = useActiveWalrusSitePackageId();
   const net = (network === 'mainnet' || network === 'devnet' ? network : 'testnet') as
     | 'testnet'
     | 'mainnet'

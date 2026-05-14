@@ -17,7 +17,7 @@ import { Badge } from '../../../ui/badge';
 import { Spinner } from '../../../ui/spinner';
 import { useActivePackageId, useOriginalPackageId } from '../../../sui/package-id';
 import { suivisionUrl } from '../../../sui/explorer';
-import { sealDecryptSubmission, getSealClient } from '../../../crypto';
+import { sealDecryptSubmission, useSealClient } from '../../../crypto';
 import { useFormOnChain, useFormSubmissions, useSealSession } from '../../hooks';
 import type { SubmissionRow } from '../../hooks';
 import { WalletButton } from '../../../sui/wallet-ui/WalletButton';
@@ -43,6 +43,7 @@ export function SubmitterReceiptView({ formId }: { formId: string }) {
     | 'devnet';
   const activePackageId = useActivePackageId();
   const originalPackageId = useOriginalPackageId();
+  const seal = useSealClient();
 
   const [decrypted, setDecrypted] = useState<Record<string, unknown> | null>(null);
   const [decryptError, setDecryptError] = useState<string | null>(null);
@@ -68,12 +69,11 @@ export function SubmitterReceiptView({ formId }: { formId: string }) {
   // already lowercase + 0x-prefixed; equality should match. Keep both for safety.
 
   const handleDecrypt = async () => {
-    if (!myRow || !originalPackageId) return;
+    if (!myRow || !originalPackageId || !seal) return;
     setPending(true);
     setDecryptError(null);
     try {
       const sessionKey = await sealSession.ensureSession();
-      const seal = getSealClient(suiClient);
       const plaintextBytes = await sealDecryptSubmission({
         seal,
         sessionKey,

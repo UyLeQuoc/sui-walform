@@ -1,7 +1,7 @@
 'use client';
 
 import { Transaction } from '@mysten/sui/transactions';
-import type { SealClient, SessionKey } from '@mysten/seal';
+import { EncryptedObject, type SealClient, type SessionKey } from '@mysten/seal';
 import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { sealApproveReadSubmission } from '../sui/gen/walform/seal_policies';
 import { buildSubmissionIdentity, generateSubmissionNonce, identityToHex } from './seal-identity';
@@ -95,6 +95,20 @@ export async function sealDecryptSubmission(
     );
   }
   const txBytes = await tx.build({ client: input.client, onlyTransactionKind: true });
+  // One-shot diagnostic: surface the ciphertext's recorded services + threshold
+  // so a server-mismatch (encrypted under server A, current config = server B)
+  // is obvious in the console instead of buried in a generic "Not enough shares".
+  try {
+    const parsed = EncryptedObject.parse(input.ciphertext);
+    // eslint-disable-next-line no-console
+    console.info('[seal] decrypt submission — encrypted under', {
+      threshold: parsed.threshold,
+      services: parsed.services.map(([objectId, share]) => ({ objectId, share })),
+      packageId: parsed.packageId,
+    });
+  } catch (e) {
+    console.warn('[seal] EncryptedObject.parse failed (legacy ciphertext?)', e);
+  }
   return input.seal.decrypt({
     data: input.ciphertext,
     sessionKey: input.sessionKey,

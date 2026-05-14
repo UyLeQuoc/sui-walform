@@ -60,8 +60,9 @@ export function PlatformTreasuryCard() {
         <CardContent className="p-6 text-sm">
           <p className="font-medium">Treasury not configured.</p>
           <p className="text-muted-foreground mt-1">
-            Set <code className="font-mono">NEXT_PUBLIC_PLATFORM_TREASURY_ID</code> in{' '}
-            <code className="font-mono">apps/builder/.env.local</code>.
+            Set <code className="font-mono">NEXT_PUBLIC_PLATFORM_TREASURY_ID_TESTNET</code> /{' '}
+            <code className="font-mono">_MAINNET</code> in{' '}
+            <code className="font-mono">apps/builder/.env.local</code> for the active network.
           </p>
         </CardContent>
       </Card>

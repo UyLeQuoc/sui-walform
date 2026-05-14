@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSuiClientQuery } from '@mysten/dapp-kit';
 import { toast } from 'sonner';
 import { useActivePackageId } from '../../sui/package-id';
+import { useActivePlatformTreasuryId } from '../../sui/env-network';
 import { useIsPlatformAdmin } from '../../sui/use-platform-admin';
 import { buildWithdrawPlatformTx } from '../../sui/tx/withdraw-platform';
 import { useExecuteTransaction } from '../../sui/use-execute-transaction';
@@ -11,7 +12,7 @@ import { useInvalidateChainQueries } from '../../sui/use-invalidate-chain';
 import { formatSui } from '../lib/sui-amount';
 
 export interface PlatformTreasuryState {
-  /** Shared `PlatformTreasury` objectId resolved from `NEXT_PUBLIC_PLATFORM_TREASURY_ID`. */
+  /** Shared `PlatformTreasury` objectId resolved per-active-network. */
   treasuryId: string | null;
   /** Current pool balance in MIST. */
   balanceMist: bigint;
@@ -38,7 +39,7 @@ export interface UsePlatformTreasuryResult extends PlatformTreasuryState {
  * `PlatformAdminCap` by querying owned objects filtered on `originalPackageId
  * ::template::PlatformAdminCap` — whoever holds the cap is the admin, no
  * hardcoded address. The treasury id comes from
- * `NEXT_PUBLIC_PLATFORM_TREASURY_ID` (shared object, one per package).
+ * `useActivePlatformTreasuryId()` (shared object, one per package per network).
  *
  * The withdraw tx is signed and paid by the admin's connected wallet per the
  * project-wide user-paid policy — no server route.
@@ -49,7 +50,7 @@ export function usePlatformTreasury(): UsePlatformTreasuryResult {
   const invalidateChain = useInvalidateChainQueries();
   const { isAdmin, adminCapId, isLoading: isCapLoading } = useIsPlatformAdmin();
 
-  const treasuryId = process.env.NEXT_PUBLIC_PLATFORM_TREASURY_ID ?? null;
+  const treasuryId = useActivePlatformTreasuryId();
 
   const treasuryQuery = useSuiClientQuery(
     'getObject',

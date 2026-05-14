@@ -12,7 +12,7 @@ import { registerEnokiWallets, isEnokiNetwork } from '@mysten/enoki';
 import { getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
 import '@mysten/dapp-kit/dist/index.css';
 
-export type WalFormNetwork = 'testnet' | 'mainnet' | 'devnet';
+export type WalFormNetwork = 'testnet' | 'mainnet';
 
 const { networkConfig } = createNetworkConfig({
   testnet: {
@@ -25,19 +25,20 @@ const { networkConfig } = createNetworkConfig({
     network: 'mainnet',
     variables: { network: 'mainnet' as const },
   },
-  devnet: {
-    url: getJsonRpcFullnodeUrl('devnet'),
-    network: 'devnet',
-    variables: { network: 'devnet' as const },
-  },
 });
 
 export const NETWORK_STORAGE_KEY = 'walform:network';
 
+function envDefaultNetwork(): WalFormNetwork {
+  const v = process.env.NEXT_PUBLIC_DEFAULT_NETWORK;
+  return v === 'mainnet' ? 'mainnet' : 'testnet';
+}
+
 function readStoredNetwork(): WalFormNetwork {
-  if (typeof window === 'undefined') return 'testnet';
+  if (typeof window === 'undefined') return envDefaultNetwork();
   const v = window.localStorage.getItem(NETWORK_STORAGE_KEY);
-  return v === 'mainnet' || v === 'testnet' || v === 'devnet' ? v : 'testnet';
+  if (v === 'mainnet' || v === 'testnet') return v;
+  return envDefaultNetwork();
 }
 
 function EnokiRegistrar() {

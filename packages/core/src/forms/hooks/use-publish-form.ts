@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-import { getSealClient, sealEncryptSchema } from '../../crypto';
+import { sealEncryptSchema, useSealClient } from '../../crypto';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
 import { extractPublishIds } from '../../sui/tx/extract-form-ids';
 import { buildCreateTreasuryTx } from '../../sui/tx/create-treasury';
@@ -55,6 +55,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
   const packageId = useActivePackageId();
   const originalPackageId = useOriginalPackageId();
   const suiClient = useSuiClient();
+  const seal = useSealClient();
   const { execute, sender } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
   const setPublishState = usePublishStore((s) => s.setPublishState);
@@ -90,14 +91,14 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
           throw new Error('Publish succeeded but Form/FormOwnerCap ids missing from effects');
         }
 
-        if (needsSealedSchemaFollowUp && originalPackageId) {
+        if (needsSealedSchemaFollowUp && originalPackageId && seal) {
           await runSealedSchemaFollowUp({
             formId,
             packageId,
             originalPackageId,
             formObjectId: ids.formObjectId,
             formOwnerCapId: ids.formOwnerCapId,
-            suiClient,
+            seal,
             execute,
           });
         }
@@ -142,6 +143,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
       packageId,
       originalPackageId,
       suiClient,
+      seal,
       execute,
       invalidateChain,
       setPublishState,
@@ -163,7 +165,7 @@ interface SealedSchemaFollowUpInput {
   originalPackageId: string;
   formObjectId: string;
   formOwnerCapId: string;
-  suiClient: ReturnType<typeof useSuiClient>;
+  seal: NonNullable<ReturnType<typeof useSealClient>>;
   execute: ReturnType<typeof useExecuteTransaction>['execute'];
 }
 
@@ -174,10 +176,9 @@ interface SealedSchemaFollowUpInput {
  * publishable-but-unreadable; recoverable by re-running.
  */
 async function runSealedSchemaFollowUp(input: SealedSchemaFollowUpInput): Promise<void> {
-  const { formId, packageId, originalPackageId, formObjectId, formOwnerCapId, suiClient, execute } =
+  const { formId, packageId, originalPackageId, formObjectId, formOwnerCapId, seal, execute } =
     input;
   try {
-    const seal = getSealClient(suiClient);
     const stored = await formDb.getById(formId);
     if (!stored) throw new Error('Draft missing — cannot encrypt schema');
     const plaintext = new TextEncoder().encode(JSON.stringify(stored.schema));

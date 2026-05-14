@@ -22,6 +22,7 @@ export class WalrusWalletSigner extends Signer {
       transaction: Transaction;
       chain?: `sui:${string}`;
     }) => Promise<{ digest: string; rawEffects?: unknown }>,
+    private readonly network: 'testnet' | 'mainnet' = 'testnet',
   ) {
     super();
   }
@@ -46,7 +47,7 @@ export class WalrusWalletSigner extends Signer {
     // configured fullnode — querying us immediately can fail with "Could
     // not find the referenced transaction". Poll with backoff, swallowing
     // not-found until propagation catches up. Cap at ~30s.
-    const block = await waitForTxIndexed(client, result.digest);
+    const block = await waitForTxIndexed(client, result.digest, this.network);
     return block as ReturnType<Signer['signAndExecuteTransaction']> extends Promise<infer R>
       ? R
       : never;
@@ -76,12 +77,13 @@ export class WalrusWalletSigner extends Signer {
  * absorbing "Could not find the referenced transaction" errors as retryable.
  * Then, since the upload-relay independently queries chain to verify the tip
  * payment and may use a different RPC node, also wait on Mysten's public
- * testnet fullnode — most relays trust that endpoint and will see the tx
- * shortly after it indexes there.
+ * fullnode for the active network — most relays trust that endpoint and
+ * will see the tx shortly after it indexes there.
  */
 async function waitForTxIndexed(
   client: ClientWithCoreApi,
   digest: string,
+  network: 'testnet' | 'mainnet',
   opts: { timeoutMs?: number; pollSchedule?: number[] } = {},
 ): Promise<unknown> {
   const timeoutMs = opts.timeoutMs ?? 60_000;
@@ -101,11 +103,18 @@ async function waitForTxIndexed(
     'fullnode',
   );
 
-  // Then make sure Mysten's public testnet RPC sees it too. Walrus
-  // upload-relays typically query a public RPC to verify the tip-payment tx
-  // before accepting the upload — if that RPC lags behind ours, the relay
-  // returns "Could not find the referenced transaction".
-  await pollUntilFound(() => verifyOnPublicRpc(digest), digest, timeoutMs, schedule, 'public RPC');
+  // Then make sure Mysten's public RPC for the *active* network sees it too.
+  // Walrus upload-relays typically query a public RPC to verify the tip-
+  // payment tx before accepting the upload — if that RPC lags behind ours,
+  // or if it's a different network entirely, the relay returns "Could not
+  // find the referenced transaction".
+  await pollUntilFound(
+    () => verifyOnPublicRpc(digest, network),
+    digest,
+    timeoutMs,
+    schedule,
+    `public RPC (${network})`,
+  );
 
   return block;
 }
@@ -143,8 +152,8 @@ async function pollUntilFound<T>(
   );
 }
 
-async function verifyOnPublicRpc(digest: string): Promise<void> {
-  const res = await fetch('https://fullnode.testnet.sui.io', {
+async function verifyOnPublicRpc(digest: string, network: 'testnet' | 'mainnet'): Promise<void> {
+  const res = await fetch(`https://fullnode.${network}.sui.io`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

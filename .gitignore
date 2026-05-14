@@ -33,3 +33,5 @@ apps/contracts/Move.lock
 
 # tsconfig.tsbuildinfo
 **/tsconfig.tsbuildinfo
+
+/refrences/*

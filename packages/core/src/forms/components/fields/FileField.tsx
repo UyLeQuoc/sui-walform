@@ -18,8 +18,8 @@ interface FileFieldProps {
 
 /** Hard cap to keep a single Walrus blob within sane testnet bounds. */
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
-/** Walrus epoch count for attachments — matches submission body retention (~1 year on testnet). */
-const ATTACHMENT_EPOCHS = 53;
+/** Walrus epoch count for attachments — matches submission body retention. */
+const ATTACHMENT_EPOCHS = 10;
 
 /**
  * Two-step upload-to-Walrus flow. The user picks any file (≤100 MiB), sees
@@ -157,7 +157,7 @@ export function FileField({ field, control }: FileFieldProps) {
                     <>
                       <span className="tabular-nums">{formatWal(cost.cost.totalCost)} WAL</span>
                       <span className="text-muted-foreground/70">
-                        ({ATTACHMENT_EPOCHS} epochs · ~1 year)
+                        ({ATTACHMENT_EPOCHS} epochs)
                       </span>
                     </>
                   )}

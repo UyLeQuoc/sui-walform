@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { Logo } from '../../../ui/logo';
 import { Spinner } from '../../../ui/spinner';
-import { WalletButton } from '../../../sui/wallet-ui/WalletButton';
+import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
 import { WalletConnectModal } from '../../../sui/wallet-ui/WalletConnectModal';
 import { CoverImageView } from '../editor/CoverImage';
 import { ThemeToggle } from '../editor/ThemeToggle';
@@ -68,6 +68,7 @@ export function SubmitForm({ form }: SubmitFormProps) {
           </span>
         </Link>
         <div className="flex items-center gap-2">
+          <NetworkBadge />
           <ThemeToggle />
           <WalletButton />
         </div>
