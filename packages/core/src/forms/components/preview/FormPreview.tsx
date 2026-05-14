@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../../../ui/button';
 import { cn } from '../../../lib/utils';
 import { useFormPreview } from '../../hooks/use-form-preview';
@@ -22,7 +24,32 @@ export interface FormPreviewProps {
 }
 
 export function FormPreview({ schema, onSubmit, prefill }: FormPreviewProps) {
-  const { form, handleSubmit } = useFormPreview({ schema, onSubmit, prefill });
+  const {
+    form,
+    handleSubmit,
+    pages,
+    currentPageIndex,
+    isFirstPage,
+    isLastPage,
+    progress,
+    navigation,
+    goNext,
+    goPrevious,
+    pageError,
+  } = useFormPreview({ schema, onSubmit, prefill });
+
+  // Slide direction: 1 = went forward (Next), -1 = went back (Previous).
+  // Used to flip the page-content animation between slide-in-from-right
+  // and slide-in-from-left so motion matches the navigation intent.
+  // Declared before the early-return so hook order stays stable across renders.
+  const prevIndexRef = useRef(currentPageIndex);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  useEffect(() => {
+    if (currentPageIndex !== prevIndexRef.current) {
+      setDirection(currentPageIndex > prevIndexRef.current ? 1 : -1);
+      prevIndexRef.current = currentPageIndex;
+    }
+  }, [currentPageIndex]);
 
   if (schema.fields.length === 0) {
     return (
@@ -34,10 +61,31 @@ export function FormPreview({ schema, onSubmit, prefill }: FormPreviewProps) {
     );
   }
 
+  const currentPage = pages[currentPageIndex];
+  const isMultiPage = pages.length > 1;
+  const currentFields = (currentPage?.fieldIds ?? [])
+    .map((id) => schema.fields.find((f) => f.id === id))
+    .filter((f): f is NonNullable<typeof f> => Boolean(f));
+
+  const alignment = schema.settings.submitAlignment;
+  const submitLabel = schema.settings.submitLabel;
+  const nextLabel = schema.settings.nextLabel?.trim() || 'Next';
+  const previousLabel = schema.settings.previousLabel?.trim() || 'Previous';
+  // When alignment is `center`, the button row stretches edge to edge and
+  // each button takes `flex-1` (matches the single-page Submit `w-full`
+  // behavior). `left` / `right` keep natural width and hug the chosen edge.
+  const isCenter = alignment === 'center';
+  const rowAlignClass = cn(
+    'flex items-center gap-2 px-6 pb-8 pt-4',
+    alignment === 'right' && 'justify-end',
+    alignment === 'left' && 'justify-start',
+    isCenter && 'justify-stretch',
+  );
+  const buttonWidthClass = isCenter ? 'flex-1' : '';
+
   return (
     <FormAppearanceProvider borderRadiusIndex={schema.settings.borderRadius}>
       <div>
-        {/* Title block — 24px horizontal inset matches field content (outer px-3 + PreviewField px-3). */}
         <div className="px-6 pt-8 pb-6">
           {schema.title && <h1 className="text-3xl leading-tight font-bold">{schema.title}</h1>}
           {schema.description && (
@@ -45,28 +93,89 @@ export function FormPreview({ schema, onSubmit, prefill }: FormPreviewProps) {
           )}
         </div>
 
-        <form onSubmit={handleSubmit}>
-          {/* Field list — matches editor FormCard field wrapper padding */}
-          <div className="flex flex-col px-3">
-            {schema.fields.map((field) => (
-              <PreviewFieldRenderer key={field.id} field={field} control={form.control} />
-            ))}
+        {isMultiPage && navigation.showProgress && (
+          <div className="px-6 pb-3">
+            <div className="bg-muted h-1 w-full overflow-hidden rounded-full">
+              <div
+                className="bg-primary h-full transition-[width] duration-200"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+            </div>
+            <p className="text-muted-foreground mt-1 text-[11px]">
+              Page {currentPageIndex + 1} of {pages.length}
+              {currentPage?.title ? ` · ${currentPage.title}` : ''}
+            </p>
           </div>
+        )}
 
-          {/* Submit — total inset matches PreviewField's (px-3 outer + px-3 inner). */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (isLastPage) {
+              void handleSubmit(e);
+            } else {
+              void goNext();
+            }
+          }}
+        >
           <div
+            key={currentPage?.id ?? 'page-0'}
             className={cn(
-              'flex px-6 pb-8',
-              schema.settings.submitAlignment === 'right' && 'justify-end',
+              'animate-in fade-in duration-200 ease-out',
+              isMultiPage &&
+                (direction === 1 ? 'slide-in-from-right-8' : 'slide-in-from-left-8'),
             )}
           >
-            <Button
-              type="submit"
-              disabled={form.formState.isSubmitting}
-              className={cn(schema.settings.submitAlignment === 'center' && 'w-full')}
-            >
-              {schema.settings.submitLabel}
-            </Button>
+            {isMultiPage && currentPage && (currentPage.title || currentPage.description) && (
+              <div className="px-6 pb-2">
+                {currentPage.title && (
+                  <h2 className="text-lg font-semibold">{currentPage.title}</h2>
+                )}
+                {currentPage.description && (
+                  <p className="text-muted-foreground mt-1 text-sm">{currentPage.description}</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col px-3">
+              {currentFields.map((field) => (
+                <PreviewFieldRenderer key={field.id} field={field} control={form.control} />
+              ))}
+            </div>
+          </div>
+
+          {pageError && (
+            <div className="px-6 pt-2">
+              <p className="text-destructive text-xs">{pageError}</p>
+            </div>
+          )}
+
+          <div className={rowAlignClass}>
+            {isMultiPage && navigation.allowBack && !isFirstPage && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={goPrevious}
+                className={buttonWidthClass}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                {previousLabel}
+              </Button>
+            )}
+            {isMultiPage && !isLastPage ? (
+              <Button type="submit" className={buttonWidthClass}>
+                {nextLabel}
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                disabled={form.formState.isSubmitting}
+                className={cn(buttonWidthClass, !isMultiPage && isCenter && 'w-full')}
+              >
+                {submitLabel}
+              </Button>
+            )}
           </div>
         </form>
       </div>

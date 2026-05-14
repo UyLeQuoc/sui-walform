@@ -7,6 +7,7 @@ import { SCHEMA_VERSION } from '../lib/schema-version';
 import type {
   FieldType,
   FormField,
+  FormPage,
   FormSchema,
   FormSettings,
   HistoryEntry,
@@ -94,6 +95,67 @@ function pushHistory(past: HistoryEntry[], schema: FormSchema, label: string): H
   return [...past, { schema, label, timestamp: Date.now() }].slice(-50);
 }
 
+/**
+ * Ensure `schema.pages` exists. Materializes a single default page containing
+ * every existing field if pages are absent. Safe to call any number of times.
+ */
+function ensurePages(schema: FormSchema): FormSchema {
+  if (schema.pages && schema.pages.length > 0) return schema;
+  const page: FormPage = {
+    id: crypto.randomUUID(),
+    fieldIds: schema.fields.map((f) => f.id),
+  };
+  return { ...schema, pages: [page] };
+}
+
+function appendFieldIdToActivePage(
+  schema: FormSchema,
+  fieldId: string,
+  activePageId: string | null,
+): FormSchema {
+  if (!schema.pages || schema.pages.length === 0) return schema;
+  const targetIdx =
+    activePageId !== null
+      ? Math.max(
+          0,
+          schema.pages.findIndex((p) => p.id === activePageId),
+        )
+      : schema.pages.length - 1;
+  const pages = schema.pages.map((p, i) =>
+    i === targetIdx ? { ...p, fieldIds: [...p.fieldIds, fieldId] } : p,
+  );
+  return { ...schema, pages };
+}
+
+function insertFieldIdNearAnchor(
+  schema: FormSchema,
+  fieldId: string,
+  anchorFieldId: string | null,
+  offset: 0 | 1,
+): FormSchema {
+  if (!schema.pages || schema.pages.length === 0) return schema;
+  if (!anchorFieldId) return appendFieldIdToActivePage(schema, fieldId, null);
+  const pages = schema.pages.map((p) => {
+    const idx = p.fieldIds.indexOf(anchorFieldId);
+    if (idx === -1) return p;
+    const next = [...p.fieldIds];
+    next.splice(idx + offset, 0, fieldId);
+    return { ...p, fieldIds: next };
+  });
+  return { ...schema, pages };
+}
+
+function dropFieldIdFromPages(schema: FormSchema, fieldId: string): FormSchema {
+  if (!schema.pages || schema.pages.length === 0) return schema;
+  const pages = schema.pages.map((p) =>
+    p.fieldIds.includes(fieldId)
+      ? { ...p, fieldIds: p.fieldIds.filter((id) => id !== fieldId) }
+      : p,
+  );
+  return { ...schema, pages };
+}
+
+
 // Module-level deferred edit state — avoids polluting store with UI-only timers.
 let deferredSnapshot: FormSchema | null = null;
 let deferredTimer: ReturnType<typeof setTimeout> | null = null;
@@ -154,15 +216,37 @@ interface FormBuilderState {
   activeMode: 'edit' | 'preview' | 'history';
   /** Timestamp from StoredForm; 0 means no form is loaded. */
   createdAt: number;
+  /**
+   * The page currently focused in the canvas — new fields added via the
+   * palette land here, and the page header inspector keys off it. `null`
+   * when no pages exist (single implicit-page mode) or before the first
+   * page is materialized.
+   */
+  activePageId: string | null;
 }
 
 interface FormBuilderActions {
   /** Populate the store from a stored form (called by FormEditorClient on mount). */
   loadFromDb: (stored: StoredForm) => void;
   addField: (type: FieldType) => void;
-  addFieldAt: (type: FieldType, insertAfterIndex: number) => void;
+  /**
+   * Insert a new field at the given flat index. When `targetPageId` is
+   * provided, the field is also placed inside that page (at the position
+   * implied by the flat index); otherwise it lands on the active page.
+   */
+  addFieldAt: (type: FieldType, insertAfterIndex: number, targetPageId?: string) => void;
   removeField: (id: string) => void;
   duplicateField: (id: string) => void;
+  /** Add a new page after the given page (or at the end if `null`). Materializes
+   * `schema.pages` if it wasn't already. */
+  addPage: (afterPageId?: string | null) => void;
+  removePage: (id: string) => void;
+  renamePage: (id: string, title: string) => void;
+  reorderPages: (fromIndex: number, toIndex: number) => void;
+  /** Move a field from its current page to another. `toIndex` is the position
+   * inside the destination page's `fieldIds`; pass `-1` to append. */
+  moveFieldToPage: (fieldId: string, toPageId: string, toIndex: number) => void;
+  setActivePageId: (id: string | null) => void;
   /** Discrete change (toggle, select, calendar) — pushes history immediately. */
   updateField: (id: string, updates: Partial<FormField>) => void;
   /**
@@ -217,6 +301,7 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
   isCoverSelected: false,
   activeMode: 'edit' as const,
   createdAt: 0,
+  activePageId: null,
 
   loadFromDb: (stored) => {
     cancelDeferred();
@@ -230,29 +315,82 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
       isSubmitSelected: false,
       isCoverSelected: false,
       activeMode: 'edit',
+      activePageId: stored.schema.pages?.[0]?.id ?? null,
     });
   },
 
   addField: (type) => {
     const newField = buildDefaultField(type);
-    set((state) => ({
-      schema: {
+    set((state) => {
+      let next: FormSchema = {
         ...state.schema,
         fields: [...state.schema.fields, newField],
-      },
-      past: pushHistory(state.past, state.schema, state.currentLabel),
-      future: [],
-      currentLabel: `Added ${DEFAULT_LABELS[type]}`,
-    }));
+      };
+      if (next.pages && next.pages.length > 0) {
+        next = appendFieldIdToActivePage(next, newField.id, state.activePageId);
+        const pages = next.pages ?? [];
+        const fieldsById = new Map(next.fields.map((f) => [f.id, f]));
+        next = {
+          ...next,
+          fields: pages.flatMap((p) =>
+            p.fieldIds.map((id) => fieldsById.get(id)!).filter(Boolean),
+          ),
+        };
+      }
+      return {
+        schema: next,
+        past: pushHistory(state.past, state.schema, state.currentLabel),
+        future: [],
+        currentLabel: `Added ${DEFAULT_LABELS[type]}`,
+      };
+    });
   },
 
-  addFieldAt: (type, insertAfterIndex) => {
+  addFieldAt: (type, insertAfterIndex, targetPageId) => {
     const newField = buildDefaultField(type);
     set((state) => {
       const fields = [...state.schema.fields];
       fields.splice(insertAfterIndex, 0, newField);
+      let next: FormSchema = { ...state.schema, fields };
+      // Page placement priority:
+      //   1. Anchor in target/active page → insert next to the anchor.
+      //   2. No anchor on target/active page → append to that page.
+      if (next.pages && next.pages.length > 0) {
+        const pageId = targetPageId ?? state.activePageId ?? null;
+        const targetPage = pageId ? next.pages.find((p) => p.id === pageId) : null;
+        const anchorBefore = state.schema.fields[insertAfterIndex - 1]?.id ?? null;
+        const anchorAfter = state.schema.fields[insertAfterIndex]?.id ?? null;
+        const anchorInPage =
+          targetPage &&
+          ((anchorBefore && targetPage.fieldIds.includes(anchorBefore)) ||
+            (anchorAfter && targetPage.fieldIds.includes(anchorAfter)))
+            ? anchorBefore && targetPage.fieldIds.includes(anchorBefore)
+              ? anchorBefore
+              : anchorAfter
+            : null;
+        if (anchorInPage) {
+          next = insertFieldIdNearAnchor(
+            next,
+            newField.id,
+            anchorInPage,
+            anchorInPage === anchorBefore ? 1 : 0,
+          );
+        } else {
+          next = appendFieldIdToActivePage(next, newField.id, pageId);
+        }
+        // Re-sync flat order with page partition so subsequent indexing stays
+        // consistent (page strip + canvas reads pages directly).
+        const pages = next.pages ?? [];
+        const fieldsById = new Map(next.fields.map((f) => [f.id, f]));
+        next = {
+          ...next,
+          fields: pages.flatMap((p) =>
+            p.fieldIds.map((id) => fieldsById.get(id)!).filter(Boolean),
+          ),
+        };
+      }
       return {
-        schema: { ...state.schema, fields },
+        schema: next,
         past: pushHistory(state.past, state.schema, state.currentLabel),
         future: [],
         currentLabel: `Added ${DEFAULT_LABELS[type]}`,
@@ -272,8 +410,10 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
       };
       const fields = [...state.schema.fields];
       fields.splice(index + 1, 0, copy);
+      let next: FormSchema = { ...state.schema, fields };
+      next = insertFieldIdNearAnchor(next, copy.id, original.id, 1);
       return {
-        schema: { ...state.schema, fields },
+        schema: next,
         past: pushHistory(state.past, state.schema, state.currentLabel),
         future: [],
         currentLabel: `Duplicated "${original.label}"`,
@@ -284,17 +424,150 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
   removeField: (id) =>
     set((state) => {
       const field = state.schema.fields.find((f) => f.id === id);
+      let next: FormSchema = {
+        ...state.schema,
+        fields: state.schema.fields.filter((f) => f.id !== id),
+      };
+      next = dropFieldIdFromPages(next, id);
       return {
-        schema: {
-          ...state.schema,
-          fields: state.schema.fields.filter((f) => f.id !== id),
-        },
+        schema: next,
         past: pushHistory(state.past, state.schema, state.currentLabel),
         future: [],
         currentLabel: `Removed "${field?.label ?? 'field'}"`,
         selectedFieldId: state.selectedFieldId === id ? null : state.selectedFieldId,
       };
     }),
+
+  addPage: (afterPageId) =>
+    set((state) => {
+      const seeded = ensurePages(state.schema);
+      const pages = seeded.pages!;
+      const insertIdx =
+        afterPageId === undefined || afterPageId === null
+          ? pages.length
+          : Math.max(0, pages.findIndex((p) => p.id === afterPageId) + 1);
+      const newPage: FormPage = {
+        id: crypto.randomUUID(),
+        title: `Page ${pages.length + 1}`,
+        fieldIds: [],
+      };
+      const nextPages = [...pages];
+      nextPages.splice(insertIdx, 0, newPage);
+      return {
+        schema: { ...seeded, pages: nextPages },
+        past: pushHistory(state.past, state.schema, state.currentLabel),
+        future: [],
+        currentLabel: `Added ${newPage.title}`,
+        activePageId: newPage.id,
+      };
+    }),
+
+  removePage: (id) =>
+    set((state) => {
+      if (!state.schema.pages || state.schema.pages.length <= 1) return state;
+      const target = state.schema.pages.find((p) => p.id === id);
+      if (!target) return state;
+      const remaining = state.schema.pages.filter((p) => p.id !== id);
+      // Re-home displaced fields onto the previous page (or first remaining).
+      const idx = state.schema.pages.findIndex((p) => p.id === id);
+      const homeIdx = Math.max(0, Math.min(remaining.length - 1, idx - 1));
+      const home = remaining[homeIdx]!;
+      const merged = remaining.map((p, i) =>
+        i === homeIdx ? { ...p, fieldIds: [...home.fieldIds, ...target.fieldIds] } : p,
+      );
+      return {
+        schema: {
+          ...state.schema,
+          pages: merged,
+        },
+        past: pushHistory(state.past, state.schema, state.currentLabel),
+        future: [],
+        currentLabel: `Removed "${target.title ?? 'page'}"`,
+        activePageId: state.activePageId === id ? merged[homeIdx]!.id : state.activePageId,
+      };
+    }),
+
+  renamePage: (id, title) => {
+    scheduleDeferredCommit(
+      () => get().schema,
+      (snapshot) => {
+        const current = get();
+        if (JSON.stringify(snapshot.pages) === JSON.stringify(current.schema.pages)) return;
+        set((s) => ({
+          past: pushHistory(s.past, snapshot, s.currentLabel),
+          future: [],
+          currentLabel: 'Renamed page',
+        }));
+      },
+    );
+    set((state) => ({
+      schema: {
+        ...state.schema,
+        pages: state.schema.pages?.map((p) => (p.id === id ? { ...p, title } : p)),
+      },
+    }));
+  },
+
+  reorderPages: (fromIndex, toIndex) =>
+    set((state) => {
+      if (!state.schema.pages) return state;
+      const pages = [...state.schema.pages];
+      const moved = pages[fromIndex];
+      if (!moved) return state;
+      pages.splice(fromIndex, 1);
+      pages.splice(toIndex, 0, moved);
+      // Mirror the new page order into the flat fields array so downstream
+      // consumers that still iterate `schema.fields` see the same sequence.
+      const fieldsById = new Map(state.schema.fields.map((f) => [f.id, f]));
+      const fields = pages.flatMap((p) =>
+        p.fieldIds.map((id) => fieldsById.get(id)!).filter(Boolean),
+      );
+      return {
+        schema: { ...state.schema, pages, fields },
+        past: pushHistory(state.past, state.schema, state.currentLabel),
+        future: [],
+        currentLabel: 'Reordered pages',
+      };
+    }),
+
+  moveFieldToPage: (fieldId, toPageId, toIndex) =>
+    set((state) => {
+      if (!state.schema.pages) return state;
+      const fromPage = state.schema.pages.find((p) => p.fieldIds.includes(fieldId));
+      if (!fromPage) return state;
+      const pages = state.schema.pages.map((p) => {
+        if (p.id === fromPage.id && p.id === toPageId) {
+          // Reorder within same page.
+          const ids = p.fieldIds.filter((id) => id !== fieldId);
+          const i = toIndex < 0 || toIndex > ids.length ? ids.length : toIndex;
+          ids.splice(i, 0, fieldId);
+          return { ...p, fieldIds: ids };
+        }
+        if (p.id === fromPage.id) {
+          return { ...p, fieldIds: p.fieldIds.filter((id) => id !== fieldId) };
+        }
+        if (p.id === toPageId) {
+          const ids = [...p.fieldIds];
+          const i = toIndex < 0 || toIndex > ids.length ? ids.length : toIndex;
+          ids.splice(i, 0, fieldId);
+          return { ...p, fieldIds: ids };
+        }
+        return p;
+      });
+      // Re-sync flat field order to match the new page partition.
+      const fieldsById = new Map(state.schema.fields.map((f) => [f.id, f]));
+      const fields = pages.flatMap((p) =>
+        p.fieldIds.map((id) => fieldsById.get(id)!).filter(Boolean),
+      );
+      return {
+        schema: { ...state.schema, pages, fields },
+        past: pushHistory(state.past, state.schema, state.currentLabel),
+        future: [],
+        currentLabel: 'Moved field',
+      };
+    }),
+
+  setActivePageId: (id) => set({ activePageId: id }),
 
   updateField: (id, updates) =>
     set((state) => {
@@ -363,8 +636,60 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
       if (!moved) return state;
       fields.splice(fromIndex, 1);
       fields.splice(toIndex, 0, moved);
+      let nextSchema: FormSchema = { ...state.schema, fields };
+      // Keep page partitions consistent with the new flat order. We rebuild
+      // each page's `fieldIds` by intersecting the flat order with the
+      // existing per-page membership. A field that moved across pages keeps
+      // its old page assignment unless it crossed a page boundary in the
+      // flat order; in that case we infer the new page from its neighbors.
+      if (nextSchema.pages && nextSchema.pages.length > 0) {
+        const fromPage = state.schema.pages?.find((p) => p.fieldIds.includes(moved.id));
+        // Determine target page by looking at the neighbor at the destination.
+        const after = fields[toIndex + 1];
+        const before = fields[toIndex - 1];
+        const targetPage =
+          (after && state.schema.pages?.find((p) => p.fieldIds.includes(after.id))) ||
+          (before && state.schema.pages?.find((p) => p.fieldIds.includes(before.id))) ||
+          fromPage ||
+          nextSchema.pages[0]!;
+        const pages = nextSchema.pages.map((p) => {
+          if (p.id === fromPage?.id && p.id === targetPage.id) {
+            const ids = p.fieldIds.filter((id) => id !== moved.id);
+            // Insert at position of the destination neighbor inside the page.
+            let pos = ids.length;
+            if (after) {
+              const i = ids.indexOf(after.id);
+              if (i !== -1) pos = i;
+            } else if (before) {
+              const i = ids.indexOf(before.id);
+              if (i !== -1) pos = i + 1;
+            }
+            const nextIds = [...ids];
+            nextIds.splice(pos, 0, moved.id);
+            return { ...p, fieldIds: nextIds };
+          }
+          if (p.id === fromPage?.id) {
+            return { ...p, fieldIds: p.fieldIds.filter((id) => id !== moved.id) };
+          }
+          if (p.id === targetPage.id) {
+            const ids = [...p.fieldIds];
+            let pos = ids.length;
+            if (after) {
+              const i = ids.indexOf(after.id);
+              if (i !== -1) pos = i;
+            } else if (before) {
+              const i = ids.indexOf(before.id);
+              if (i !== -1) pos = i + 1;
+            }
+            ids.splice(pos, 0, moved.id);
+            return { ...p, fieldIds: ids };
+          }
+          return p;
+        });
+        nextSchema = { ...nextSchema, pages };
+      }
       return {
-        schema: { ...state.schema, fields },
+        schema: nextSchema,
         past: pushHistory(state.past, state.schema, state.currentLabel),
         future: [],
         currentLabel: 'Reordered fields',
@@ -441,6 +766,10 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
           ...state.future,
         ].slice(0, 50),
         selectedFieldId: null,
+        activePageId:
+          previous.schema.pages?.find((p) => p.id === state.activePageId)?.id ??
+          previous.schema.pages?.[0]?.id ??
+          null,
       };
     }),
 
@@ -456,6 +785,10 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
         past: pushHistory(state.past, state.schema, state.currentLabel),
         future,
         selectedFieldId: null,
+        activePageId:
+          next.schema.pages?.find((p) => p.id === state.activePageId)?.id ??
+          next.schema.pages?.[0]?.id ??
+          null,
       };
     }),
 
@@ -480,6 +813,7 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
         past: combined.slice(0, combinedIndex),
         future: combined.slice(combinedIndex + 1),
         selectedFieldId: null,
+        activePageId: target.schema.pages?.[0]?.id ?? null,
       };
     }),
 
@@ -509,12 +843,14 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
         title: 'Untitled Form',
         description: '',
         fields: [],
+        pages: undefined,
       },
       past: pushHistory(state.past, state.schema, state.currentLabel),
       future: [],
       currentLabel: 'Cleared form',
       selectedFieldId: null,
       activeMode: 'edit',
+      activePageId: null,
     }));
   },
 
@@ -526,6 +862,9 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
         title: next.title,
         description: next.description,
         fields: next.fields,
+        // AI returns a flat field list — drop any prior page state so we
+        // don't carry references to deleted field ids.
+        pages: undefined,
         ...(next.tags !== undefined ? { tags: next.tags } : {}),
       },
       past: pushHistory(state.past, state.schema, state.currentLabel),
@@ -535,6 +874,7 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
       isSubmitSelected: false,
       isCoverSelected: false,
       activeMode: 'edit',
+      activePageId: null,
     }));
   },
 }));

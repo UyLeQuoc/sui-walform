@@ -21,6 +21,7 @@ export function SubmitSettingsPanel({ className }: SubmitSettingsPanelProps) {
   const { schema, updateSettings, setIsSubmitSelected } = useFormBuilderStore();
   const { settings } = schema;
   const alignment = settings.submitAlignment ?? 'left';
+  const isMultiPage = (schema.pages?.length ?? 0) > 1;
 
   return (
     <div className={cn('flex h-full flex-col', className)}>
@@ -46,7 +47,7 @@ export function SubmitSettingsPanel({ className }: SubmitSettingsPanelProps) {
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="submit-label">Button label</FieldLabel>
+            <FieldLabel htmlFor="submit-label">Submit label</FieldLabel>
             <Input
               id="submit-label"
               value={settings.submitLabel}
@@ -55,8 +56,32 @@ export function SubmitSettingsPanel({ className }: SubmitSettingsPanelProps) {
             />
           </Field>
 
+          {isMultiPage && (
+            <>
+              <Field>
+                <FieldLabel htmlFor="next-label">Next button label</FieldLabel>
+                <Input
+                  id="next-label"
+                  value={settings.nextLabel ?? ''}
+                  onChange={(e) => updateSettings({ nextLabel: e.target.value })}
+                  placeholder="Next"
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="previous-label">Previous button label</FieldLabel>
+                <Input
+                  id="previous-label"
+                  value={settings.previousLabel ?? ''}
+                  onChange={(e) => updateSettings({ previousLabel: e.target.value })}
+                  placeholder="Previous"
+                />
+              </Field>
+            </>
+          )}
+
           <Field>
-            <FieldLabel>Alignment</FieldLabel>
+            <FieldLabel>Alignment / width</FieldLabel>
             <ToggleGroup
               type="single"
               value={alignment}
