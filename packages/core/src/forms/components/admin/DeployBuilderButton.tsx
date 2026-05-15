@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Globe, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -33,6 +33,7 @@ import {
   isWalrusPortalLocal,
   walrusSitePublicUrl,
 } from '../../../sui/tx/extract-walrus-site-id';
+import { builderSiteCache, type PendingBuilderDeploy } from '../../services/builder-site-cache';
 import { LinkSuinsPanel } from '../list/LinkSuinsPanel';
 
 interface BundleIndex {
@@ -73,153 +74,251 @@ export function DeployBuilderButton() {
   const [siteObjectId, setSiteObjectId] = useState<string | null>(null);
   const [siteUrl, setSiteUrl] = useState<string | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  // Resume state for partial deploys. Stored in IDB keyed on the connected
+  // wallet so a different wallet starting from scratch doesn't see a foreign
+  // cache entry.
+  const [pending, setPending] = useState<PendingBuilderDeploy | null>(null);
+  // Track an ageMin once at load time — re-rendering Date.now() in JSX violates
+  // react-hooks purity.
+  const [pendingAgeMin, setPendingAgeMin] = useState<number>(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!account?.address) {
+      setPending(null);
+      return;
+    }
+    builderSiteCache
+      .get()
+      .then((entry) => {
+        if (cancelled) return;
+        if (!entry) {
+          setPending(null);
+          return;
+        }
+        // Only surface the resume option if it matches the active wallet AND
+        // network — otherwise the user can't sign for the same Site anyway.
+        if (entry.signer !== account.address || entry.network !== net) {
+          setPending(null);
+          return;
+        }
+        setPending(entry);
+        setPendingAgeMin(Math.max(1, Math.round((Date.now() - entry.createdAt) / 60000)));
+      })
+      .catch(() => {
+        // IDB unavailable; just don't offer resume.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.address, net]);
 
   const disabled = !sitePackageId || !account;
   const inProgress =
     stage === 'loading-bundle' || stage === 'uploading-walrus' || stage === 'deploying';
 
-  const handleDeploy = async () => {
+  /**
+   * Resume-aware deploy. When `resumeFrom` is supplied, skips already-paid-for
+   * steps:
+   *   - `resumeFrom.manifest` set → skip bundle hashing + Walrus upload.
+   *   - `resumeFrom.siteObjectId` set + `chunksCompleted ≥ 1` → skip chunks
+   *     that already ran on-chain, resume from `chunksCompleted`.
+   *
+   * Checkpoints are persisted to IDB (`builderSiteCache`) after each step:
+   * Walrus upload (manifest), then after each Sui PTB. A failed step leaves
+   * the cache with the last successful checkpoint, surfacing a Resume CTA on
+   * next mount.
+   */
+  const handleDeploy = async (resumeFrom?: PendingBuilderDeploy) => {
     if (!account || !sitePackageId) return;
-    setStage('loading-bundle');
     setErrMsg(null);
     setProgress(null);
     try {
-      const indexRes = await fetch('/walform-builder-bundle/index.json');
-      if (!indexRes.ok) {
-        throw new Error(
-          `Bundle not found (HTTP ${indexRes.status}). Run \`bun run --cwd apps/builder builder:export\` first.`,
-        );
-      }
-      const index = (await indexRes.json()) as BundleIndex;
-      if (index.files.length === 0) throw new Error('Bundle is empty');
+      let manifest: WalrusSiteManifest;
+      let walrusUploadDigest = resumeFrom?.walrusUploadDigest ?? '';
 
-      // CRITICAL: byte-wise sort, NOT localeCompare. Walrus SDK's `encodeQuilt`
-      // sorts blobs by identifier using JS string `<`/`>` (UTF-16 code unit
-      // comparison, byte-wise for ASCII), and `writeFiles` returns results in
-      // that order. `localeCompare` can produce a different ordering (e.g. for
-      // mixed `_`/letters), which mis-aligns `results[i]` with `walrusFiles[i]`
-      // → portal returns 422 "Hash mismatch" because the bytes pulled from the
-      // aggregator hash to a different value than the on-chain `blob_hash`.
-      const sortedFiles = [...index.files].sort((a, b) =>
-        a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
-      );
-      const blobHashesU256: string[] = [];
-      const walrusFiles: WalrusFile[] = [];
-
-      for (let i = 0; i < sortedFiles.length; i++) {
-        const f = sortedFiles[i]!;
-        const res = await fetch(`/walform-builder-bundle${f.path}`);
-        if (!res.ok) {
-          throw new Error(`Failed to fetch ${f.path} (HTTP ${res.status})`);
+      if (resumeFrom?.manifest) {
+        manifest = resumeFrom.manifest;
+      } else {
+        // ── Step 1: load bundle + hash ─────────────────────────────────────
+        setStage('loading-bundle');
+        const indexRes = await fetch('/walform-builder-bundle/index.json');
+        if (!indexRes.ok) {
+          throw new Error(
+            `Bundle not found (HTTP ${indexRes.status}). Run \`bun run --cwd apps/builder builder:export\` first.`,
+          );
         }
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        const digest = await crypto.subtle.digest('SHA-256', bytes);
-        const u256 = sha256LeU256(new Uint8Array(digest));
-        blobHashesU256.push(u256);
-        walrusFiles.push(WalrusFile.from({ contents: bytes, identifier: f.path }));
-        setProgress({ done: i + 1, total: sortedFiles.length });
+        const index = (await indexRes.json()) as BundleIndex;
+        if (index.files.length === 0) throw new Error('Bundle is empty');
+
+        // CRITICAL: byte-wise sort, NOT localeCompare. Walrus SDK's `encodeQuilt`
+        // sorts blobs by identifier using JS string `<`/`>` (UTF-16 code unit
+        // comparison, byte-wise for ASCII). `localeCompare` can produce a
+        // different ordering and mis-align `results[i]` with `walrusFiles[i]`
+        // → portal returns 422 "Hash mismatch".
+        const sortedFiles = [...index.files].sort((a, b) =>
+          a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+        );
+        const blobHashesU256: string[] = [];
+        const walrusFiles: WalrusFile[] = [];
+
+        for (let i = 0; i < sortedFiles.length; i++) {
+          const f = sortedFiles[i]!;
+          const res = await fetch(`/walform-builder-bundle${f.path}`);
+          if (!res.ok) {
+            throw new Error(`Failed to fetch ${f.path} (HTTP ${res.status})`);
+          }
+          const bytes = new Uint8Array(await res.arrayBuffer());
+          const digest = await crypto.subtle.digest('SHA-256', bytes);
+          blobHashesU256.push(sha256LeU256(new Uint8Array(digest)));
+          walrusFiles.push(WalrusFile.from({ contents: bytes, identifier: f.path }));
+          setProgress({ done: i + 1, total: sortedFiles.length });
+        }
+
+        // ── Step 2: Walrus upload (1 wallet prompt) ────────────────────────
+        setStage('uploading-walrus');
+        const walrus = new WalrusClient({
+          network: net,
+          suiClient,
+          uploadRelay: {
+            host: getWalrusUploadRelayHost(net),
+            sendTip: { max: getWalrusUploadRelayTipMaxMist(net) },
+          },
+        });
+        const walrusSigner = new WalrusWalletSigner(
+          account.address,
+          async (args) => {
+            const r = await signAndExecuteTransaction({
+              transaction: args.transaction,
+              chain: args.chain ?? `sui:${net}`,
+            });
+            // Capture the registration digest for the resume cache so a
+            // failed-later deploy still records which Walrus tx was paid for.
+            walrusUploadDigest = r.digest;
+            return { digest: r.digest };
+          },
+          net,
+        );
+        const results = await walrus.writeFiles({
+          files: walrusFiles,
+          signer: walrusSigner,
+          epochs: 15,
+          deletable: false,
+        });
+        const quiltBlobId = results[0]?.blobId;
+        if (!quiltBlobId) throw new Error('Walrus writeFiles returned no results');
+        const quiltBlobIdU256 = blobIdToInt(quiltBlobId).toString();
+        const aggregator = getWalrusAggregatorUrl(net);
+        manifest = {
+          publishedAt: new Date().toISOString(),
+          network: net,
+          epochs: 15,
+          signer: account.address,
+          quiltBlobId,
+          quiltBlobIdU256,
+          files: sortedFiles.map((f, i) => ({
+            path: f.path,
+            patchId: results[i]!.id,
+            quiltPatchInternalIdHex: quiltPatchInternalHex(results[i]!.id),
+            url: `${aggregator}/v1/blobs/by-quilt-patch-id/${results[i]!.id}`,
+            sizeBytes: f.sizeBytes,
+            contentType: f.contentType,
+            blobHashU256: blobHashesU256[i]!,
+          })),
+        };
+
+        // CHECKPOINT 1: persist manifest BEFORE the first Sui PTB so a
+        // wallet rejection / network drop on the next step is resumable.
+        const allChunks: WalrusSiteManifest['files'][] = [];
+        for (let i = 0; i < manifest.files.length; i += BUILDER_CHUNK_SIZE) {
+          allChunks.push(manifest.files.slice(i, i + BUILDER_CHUNK_SIZE));
+        }
+        try {
+          await builderSiteCache.put({
+            manifest,
+            walrusUploadDigest,
+            network: net,
+            signer: account.address,
+            chunksCompleted: 0,
+            chunkCount: allChunks.length,
+          });
+        } catch (e) {
+          console.warn('[deploy-builder] cache put after Walrus failed:', e);
+        }
       }
 
-      setStage('uploading-walrus');
-      const walrus = new WalrusClient({
-        network: net,
-        suiClient,
-        uploadRelay: {
-          host: getWalrusUploadRelayHost(net),
-          sendTip: { max: getWalrusUploadRelayTipMaxMist(net) },
-        },
-      });
-      const walrusSigner = new WalrusWalletSigner(
-        account.address,
-        async (args) => {
-          const r = await signAndExecuteTransaction({
-            transaction: args.transaction,
-            chain: args.chain ?? `sui:${net}`,
-          });
-          return { digest: r.digest };
-        },
-        net,
-      );
-      const results = await walrus.writeFiles({
-        files: walrusFiles,
-        signer: walrusSigner,
-        epochs: 15,
-        deletable: false,
-      });
-      const quiltBlobId = results[0]?.blobId;
-      if (!quiltBlobId) throw new Error('Walrus writeFiles returned no results');
-      const quiltBlobIdU256 = blobIdToInt(quiltBlobId).toString();
-      const aggregator = getWalrusAggregatorUrl(net);
-      const manifest: WalrusSiteManifest = {
-        publishedAt: new Date().toISOString(),
-        network: net,
-        epochs: 15,
-        signer: account.address,
-        quiltBlobId,
-        quiltBlobIdU256,
-        files: sortedFiles.map((f, i) => ({
-          path: f.path,
-          patchId: results[i]!.id,
-          quiltPatchInternalIdHex: quiltPatchInternalHex(results[i]!.id),
-          url: `${aggregator}/v1/blobs/by-quilt-patch-id/${results[i]!.id}`,
-          sizeBytes: f.sizeBytes,
-          contentType: f.contentType,
-          blobHashU256: blobHashesU256[i]!,
-        })),
-      };
-
+      // ── Step 3: Sui PTB chunks (1+ wallet prompts) ───────────────────────
       setStage('deploying');
-      // Chunk per Sui PTB 1024-command cap. 6 commands per file resource +
-      // ~5 fixed → 150 files/tx leaves safe headroom. For ~209 files this is
-      // 2 wallet prompts; for larger bundles it scales linearly.
       const chunks: WalrusSiteManifest['files'][] = [];
       for (let i = 0; i < manifest.files.length; i += BUILDER_CHUNK_SIZE) {
         chunks.push(manifest.files.slice(i, i + BUILDER_CHUNK_SIZE));
       }
-      setChunkProgress({ done: 0, total: chunks.length });
+      const startChunk = resumeFrom?.chunksCompleted ?? 0;
+      let siteId: string | null = resumeFrom?.siteObjectId ?? null;
+      setChunkProgress({ done: startChunk, total: chunks.length });
 
-      // First tx: create site + first chunk of files + transfer. Routes go
-      // onto the LAST chunk so partial deploys (e.g. user rejects later
-      // wallet prompts) don't end up with a site that has routes pointing
-      // at resources that don't exist yet.
-      const singleChunk = chunks.length === 1;
-      const firstTx = buildBuilderSiteFirstChunk({
-        sitePackageId,
-        name: 'WalForm builder',
-        recipient: account.address,
-        manifest,
-        filesChunk: chunks[0]!,
-        routes: singleChunk ? WALFORM_BUILDER_ROUTES : undefined,
-        transfer: true,
-      });
-      const { digest } = await signAndExecuteTransaction({
-        transaction: firstTx,
-        chain: `sui:${net}`,
-      });
-      const siteId = await extractWalrusSiteId(suiClient, digest, sitePackageId);
-      if (!siteId) throw new Error('Deploy succeeded but Site object id missing from effects');
-      setChunkProgress({ done: 1, total: chunks.length });
-
-      // Subsequent chunks add more resources to the (now-owned) site.
-      for (let i = 1; i < chunks.length; i++) {
+      for (let i = startChunk; i < chunks.length; i++) {
         const isLast = i === chunks.length - 1;
-        const chunkTx = buildBuilderSiteAddChunk({
-          sitePackageId,
-          siteObjectId: siteId,
-          manifest,
-          filesChunk: chunks[i]!,
-          routes: isLast ? WALFORM_BUILDER_ROUTES : undefined,
-        });
-        await signAndExecuteTransaction({
-          transaction: chunkTx,
+        const isFirst = i === 0;
+        const tx = isFirst
+          ? buildBuilderSiteFirstChunk({
+              sitePackageId,
+              name: 'WalForm builder',
+              recipient: account.address,
+              manifest,
+              filesChunk: chunks[i]!,
+              // Routes only go on the LAST chunk so a partial deploy doesn't
+              // leave a site with routes pointing at resources not yet added.
+              routes: isLast ? WALFORM_BUILDER_ROUTES : undefined,
+              transfer: true,
+            })
+          : buildBuilderSiteAddChunk({
+              sitePackageId,
+              siteObjectId: siteId!,
+              manifest,
+              filesChunk: chunks[i]!,
+              routes: isLast ? WALFORM_BUILDER_ROUTES : undefined,
+            });
+
+        const { digest } = await signAndExecuteTransaction({
+          transaction: tx,
           chain: `sui:${net}`,
         });
-        setChunkProgress({ done: i + 1, total: chunks.length });
+
+        if (isFirst) {
+          siteId = await extractWalrusSiteId(suiClient, digest, sitePackageId);
+          if (!siteId)
+            throw new Error('First chunk succeeded but Site object id missing from effects');
+        }
+        const completed = i + 1;
+        setChunkProgress({ done: completed, total: chunks.length });
+
+        // CHECKPOINT N: update progress after each successful chunk.
+        try {
+          await builderSiteCache.put({
+            manifest,
+            walrusUploadDigest,
+            network: net,
+            signer: account.address,
+            siteObjectId: siteId ?? undefined,
+            chunksCompleted: completed,
+            chunkCount: chunks.length,
+          });
+        } catch (e) {
+          console.warn('[deploy-builder] cache update failed:', e);
+        }
       }
 
-      setSiteObjectId(siteId);
-      // Builder app has no specific form path — public URL is just the root.
-      const pubUrl = walrusSitePublicUrl(siteId, '', net).replace(/#\/f\/$/, '');
+      // All chunks done — clear the resume cache.
+      try {
+        await builderSiteCache.clear();
+      } catch (e) {
+        console.warn('[deploy-builder] cache clear failed:', e);
+      }
+      setPending(null);
+
+      setSiteObjectId(siteId!);
+      const pubUrl = walrusSitePublicUrl(siteId!, '', net).replace(/#\/f\/$/, '');
       setSiteUrl(pubUrl);
       setStage('done');
       toast.success('Builder deployed to Walrus Site');
@@ -228,7 +327,28 @@ export function DeployBuilderButton() {
       setErrMsg(msg);
       setStage('error');
       toast.error(`Deploy failed: ${msg}`);
+      // Refresh resume state so the UI shows what's recoverable.
+      builderSiteCache
+        .get()
+        .then((entry) => {
+          if (entry && entry.signer === account.address && entry.network === net) {
+            setPending(entry);
+            setPendingAgeMin(Math.max(1, Math.round((Date.now() - entry.createdAt) / 60000)));
+          }
+        })
+        .catch(() => {});
     }
+  };
+
+  const handleDiscardPending = async () => {
+    try {
+      await builderSiteCache.clear();
+    } catch {
+      /* ignore */
+    }
+    setPending(null);
+    setStage('idle');
+    setErrMsg(null);
   };
 
   const reset = () => {
@@ -258,7 +378,7 @@ export function DeployBuilderButton() {
           )}
         </div>
 
-        {stage === 'idle' && (
+        {stage === 'idle' && !pending && (
           <Button
             onClick={() => void handleDeploy()}
             disabled={disabled}
@@ -268,6 +388,38 @@ export function DeployBuilderButton() {
             <Globe className="mr-1.5 h-3.5 w-3.5" />
             Deploy now
           </Button>
+        )}
+
+        {stage === 'idle' && pending && (
+          <div className="border-primary/30 bg-primary/5 flex flex-col gap-2 rounded-md border p-3 text-xs">
+            <div className="font-medium">Resume a previous deploy?</div>
+            <p className="text-muted-foreground">
+              {pending.chunksCompleted === 0
+                ? `Walrus upload completed ${pendingAgeMin}m ago. Resume to skip re-uploading (~${(pending.manifest.files.reduce((s, f) => s + f.sizeBytes, 0) / 1024 / 1024).toFixed(1)} MB / ${pending.manifest.files.length} files) and only sign the remaining ${pending.chunkCount} Sui PTB${pending.chunkCount === 1 ? '' : 's'}.`
+                : `Last attempt completed ${pending.chunksCompleted}/${pending.chunkCount} Sui PTBs (${pendingAgeMin}m ago). Resume to sign only the remaining ${pending.chunkCount - pending.chunksCompleted}.`}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={() => void handleDeploy(pending)}
+                disabled={disabled}
+                className="h-7"
+              >
+                <Globe className="mr-1 h-3 w-3" />
+                Resume deploy
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void handleDiscardPending()}
+                className="h-7"
+                title="Drop the cached manifest. Next deploy starts fresh (re-uploads + pays WAL again)."
+              >
+                <X className="mr-1 h-3 w-3" />
+                Discard
+              </Button>
+            </div>
+          </div>
         )}
 
         {inProgress && (
