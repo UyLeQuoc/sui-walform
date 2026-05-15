@@ -3,6 +3,8 @@
 import { useState, type ReactNode } from 'react';
 import { BarChart3, Maximize2 } from 'lucide-react';
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -37,11 +39,18 @@ import { FileAttachmentView } from './FileAttachmentView';
 import {
   bucketize,
   chartVariantFor,
+  dateHistogram,
+  fileSummary,
   isChartableField,
+  isFileField,
+  isLongTextField,
   isTextField,
+  numericHistogram,
   summarizeField,
+  topKeywords,
   topTextAnswers,
   type AggregateBucket,
+  type FieldSummary,
 } from '../../lib/aggregate-submissions';
 import type { FormField } from '../../../types';
 
@@ -73,7 +82,9 @@ export function AggregateCharts({
   submissionRows,
   decryptedById,
 }: AggregateChartsProps) {
-  const summarizable = fields.filter((f) => isChartableField(f) || isTextField(f));
+  const summarizable = fields.filter(
+    (f) => isChartableField(f) || isTextField(f) || isLongTextField(f) || isFileField(f),
+  );
   if (summarizable.length === 0) return null;
 
   return (
@@ -127,26 +138,7 @@ function FieldCard({ field, rows, submissionRows, decryptedById }: FieldCardProp
             )}
           </div>
         </div>
-        <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-          <span>
-            <span className="text-foreground font-medium tabular-nums">{summary.answered}</span>{' '}
-            answered
-          </span>
-          {summary.skipped > 0 && (
-            <span>
-              <span className="text-foreground tabular-nums">{summary.skipped}</span> skipped (
-              {skipPct}%)
-            </span>
-          )}
-          {Number.isFinite(summary.average) && (
-            <span>
-              avg{' '}
-              <span className="text-foreground font-medium tabular-nums">
-                {summary.average.toFixed(2)}
-              </span>
-            </span>
-          )}
-        </div>
+        <FieldStatLine field={field} summary={summary} skipPct={skipPct} />
         <FieldViz field={field} rows={rows} answered={summary.answered} />
       </CardContent>
       {canShowAll && (
@@ -159,6 +151,53 @@ function FieldCard({ field, rows, submissionRows, decryptedById }: FieldCardProp
         />
       )}
     </Card>
+  );
+}
+
+export function FieldStatLine({
+  field,
+  summary,
+  skipPct,
+}: {
+  field: FormField;
+  summary: FieldSummary;
+  skipPct: number;
+}) {
+  return (
+    <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+      <span>
+        <span className="text-foreground font-medium tabular-nums">{summary.answered}</span>{' '}
+        answered
+      </span>
+      {summary.skipped > 0 && (
+        <span>
+          <span className="text-foreground tabular-nums">{summary.skipped}</span> skipped (
+          {skipPct}%)
+        </span>
+      )}
+      {Number.isFinite(summary.average) && (
+        <span>
+          avg{' '}
+          <span className="text-foreground font-medium tabular-nums">
+            {summary.average.toFixed(field.type === 'number' ? 2 : 1)}
+          </span>
+        </span>
+      )}
+      {field.type === 'number' && Number.isFinite(summary.median) && (
+        <>
+          <span>
+            median{' '}
+            <span className="text-foreground tabular-nums">{summary.median.toFixed(2)}</span>
+          </span>
+          <span>
+            range{' '}
+            <span className="text-foreground tabular-nums">
+              {summary.min.toFixed(2)}–{summary.max.toFixed(2)}
+            </span>
+          </span>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -286,19 +325,52 @@ interface FieldVizProps {
   answered: number;
 }
 
-function FieldViz({ field, rows, answered }: FieldVizProps) {
-  if (isTextField(field)) {
+/**
+ * Variant dispatch — every input type lands on its best chart:
+ *  pie       single_choice ≤4 / yes_no
+ *  hbar      single_choice >4 / multiple_choice / select
+ *  histogram rating / linear_scale
+ *  numeric   number (mini-histogram + min/median/avg/max in stat line)
+ *  date      date / time (chronological area chart)
+ *  top-text  email / phone / url / short_text (frequency list)
+ *  keywords  long_text (token frequency cloud)
+ *  files     file (count + sample thumbs)
+ */
+export function FieldViz({ field, rows, answered }: FieldVizProps) {
+  const variant = chartVariantFor(field);
+
+  if (variant === 'top-text') {
     const top = topTextAnswers(field, rows);
     if (top.length === 0) return <EmptyHint>No text responses yet</EmptyHint>;
     return <TextTopList items={top} total={answered} />;
   }
+  if (variant === 'keywords') {
+    const tokens = topKeywords(field, rows);
+    if (tokens.length === 0) return <EmptyHint>No text responses yet</EmptyHint>;
+    return <KeywordCloud items={tokens} />;
+  }
+  if (variant === 'files') {
+    const sum = fileSummary(field, rows);
+    if (sum.totalFiles === 0) return <EmptyHint>No files uploaded yet</EmptyHint>;
+    return <FilesSummary field={field} rows={rows} summary={sum} />;
+  }
+  if (variant === 'numeric') {
+    const buckets = numericHistogram(field, rows);
+    if (buckets.length === 0) return <EmptyHint>No numeric responses yet</EmptyHint>;
+    return <HistogramViz buckets={buckets} />;
+  }
+  if (variant === 'date') {
+    const buckets = dateHistogram(field, rows);
+    if (buckets.length === 0) return <EmptyHint>No dates submitted yet</EmptyHint>;
+    return <DateAreaViz buckets={buckets} />;
+  }
   if (!isChartableField(field)) return null;
+
   const buckets = bucketize(field, rows);
   const total = buckets.reduce((s, b) => s + b.count, 0);
   if (total === 0) return <EmptyHint>No data yet</EmptyHint>;
 
-  const variant = chartVariantFor(field);
-  if (variant === 'donut') return <DonutViz buckets={buckets} />;
+  if (variant === 'pie') return <PieViz buckets={buckets} />;
   if (variant === 'hbar') return <HBarViz buckets={buckets} />;
   return <HistogramViz buckets={buckets} />;
 }
@@ -307,7 +379,7 @@ function EmptyHint({ children }: { children: ReactNode }) {
   return <p className="text-muted-foreground py-2 text-xs italic">{children}</p>;
 }
 
-function DonutViz({ buckets }: { buckets: AggregateBucket[] }) {
+function PieViz({ buckets }: { buckets: AggregateBucket[] }) {
   const total = buckets.reduce((s, b) => s + b.count, 0);
   return (
     <div className="grid grid-cols-[140px_1fr] items-center gap-3">
@@ -411,6 +483,34 @@ function HistogramViz({ buckets }: { buckets: AggregateBucket[] }) {
   );
 }
 
+function DateAreaViz({ buckets }: { buckets: AggregateBucket[] }) {
+  return (
+    <ChartContainer config={CHART_CONFIG} className="aspect-[16/7] max-h-40 w-full">
+      <AreaChart accessibilityLayer data={buckets} margin={{ left: 0, right: 8, top: 12 }}>
+        <CartesianGrid vertical={false} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={6} fontSize={11} />
+        <YAxis
+          allowDecimals={false}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={4}
+          fontSize={11}
+          width={24}
+        />
+        <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+        <Area
+          type="monotone"
+          dataKey="count"
+          stroke={PALETTE[0]}
+          fill={PALETTE[0]}
+          fillOpacity={0.18}
+          strokeWidth={1.5}
+        />
+      </AreaChart>
+    </ChartContainer>
+  );
+}
+
 function TextTopList({ items, total }: { items: AggregateBucket[]; total: number }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -436,6 +536,76 @@ function TextTopList({ items, total }: { items: AggregateBucket[]; total: number
       </Table>
     </div>
   );
+}
+
+/**
+ * Keyword "cloud" — scales font size with frequency so the eye picks up the
+ * dominant terms first. Not a true word cloud (no random rotation) but reads
+ * faster than a bar list for high-cardinality long-text responses.
+ */
+function KeywordCloud({ items }: { items: AggregateBucket[] }) {
+  const maxCount = items.reduce((m, it) => Math.max(m, it.count), 1);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-muted-foreground text-[11px] tracking-wide uppercase">
+        Top keywords
+      </p>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        {items.map((it) => {
+          const ratio = it.count / maxCount;
+          const fontSize = 12 + Math.round(ratio * 12);
+          const opacity = 0.55 + ratio * 0.45;
+          return (
+            <span
+              key={it.label}
+              className="text-foreground inline-flex items-baseline gap-1 font-medium"
+              style={{ fontSize, opacity }}
+            >
+              {it.label}
+              <span className="text-muted-foreground text-[10px] font-normal tabular-nums">
+                {it.count}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FilesSummary({
+  field,
+  rows,
+  summary,
+}: {
+  field: FormField;
+  rows: Record<string, unknown>[];
+  summary: { totalFiles: number; totalBytes: number };
+}) {
+  const attachments = rows
+    .map((row) => row[field.id])
+    .filter(isFileAttachmentValue)
+    .slice(0, 6);
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-muted-foreground text-[11px] tracking-wide uppercase">
+        {summary.totalFiles} file{summary.totalFiles === 1 ? '' : 's'}
+        {summary.totalBytes > 0 && ` · ${formatBytes(summary.totalBytes)}`}
+      </p>
+      <div className="flex flex-col gap-1">
+        {attachments.map((att, i) => (
+          <FileAttachmentView key={`${att.url}-${i}`} value={att} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 /**

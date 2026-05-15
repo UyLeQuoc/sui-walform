@@ -160,7 +160,16 @@ export function SubmissionsDataTable({
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  const openRow = rows.find((r) => r.submissionId === openId) ?? null;
+  const openIndex = openId ? rows.findIndex((r) => r.submissionId === openId) : -1;
+  const openRow = openIndex >= 0 ? rows[openIndex]! : null;
+  const goPrev = () => {
+    if (openIndex > 0) setOpenId(rows[openIndex - 1]!.submissionId);
+  };
+  const goNext = () => {
+    if (openIndex >= 0 && openIndex < rows.length - 1) {
+      setOpenId(rows[openIndex + 1]!.submissionId);
+    }
+  };
 
   const pageCount = table.getPageCount();
   const totalCount = rows.length;
@@ -289,6 +298,10 @@ export function SubmissionsDataTable({
                 onDecrypt={() => onDecrypt(openRow)}
                 fields={fields}
                 network={network}
+                index={openIndex}
+                total={rows.length}
+                onPrev={openIndex > 0 ? goPrev : undefined}
+                onNext={openIndex >= 0 && openIndex < rows.length - 1 ? goNext : undefined}
               />
             )}
           </DialogContent>
@@ -332,6 +345,10 @@ interface SubmissionDetailProps {
   onDecrypt: () => void;
   fields: FormField[];
   network: ExplorerNetwork;
+  index: number;
+  total: number;
+  onPrev?: () => void;
+  onNext?: () => void;
 }
 
 function SubmissionDetail({
@@ -343,11 +360,42 @@ function SubmissionDetail({
   onDecrypt,
   fields,
   network,
+  index,
+  total,
+  onPrev,
+  onNext,
 }: SubmissionDetailProps) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle className="font-mono text-sm">{shortAddr(row.submissionId)}</DialogTitle>
+        <div className="flex items-center justify-between gap-2">
+          <DialogTitle className="font-mono text-sm">{shortAddr(row.submissionId)}</DialogTitle>
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {index + 1} / {total}
+            </span>
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-7 w-7"
+              disabled={!onPrev}
+              onClick={onPrev}
+              aria-label="Previous response"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-7 w-7"
+              disabled={!onNext}
+              onClick={onNext}
+              aria-label="Next response"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
         <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span>
             from <code className="font-mono">{shortAddr(row.submitter)}</code>

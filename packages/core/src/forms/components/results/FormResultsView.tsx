@@ -67,6 +67,7 @@ import { DeployToWalrusSiteButton } from '../list/DeployToWalrusSiteButton';
 import { FormStatusBadge } from '../list/FormStatusBadge';
 import { WithdrawTreasuryButton } from '../list/WithdrawTreasuryButton';
 import { AggregateCharts } from './AggregateCharts';
+import { ByQuestionPanel } from './ByQuestionPanel';
 import { ResponseTimeline } from './ResponseTimeline';
 import { ReviewersPanel } from './ReviewersPanel';
 import { SeedResponsesButton } from './SeedResponsesButton';
@@ -78,7 +79,7 @@ interface FormResultsViewProps {
   formId: string;
 }
 
-type ResultsTab = 'summary' | 'individual' | 'reviewers' | 'manage';
+type ResultsTab = 'summary' | 'by-question' | 'individual' | 'reviewers' | 'manage';
 
 /**
  * Creator's Results dashboard.
@@ -385,6 +386,12 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
             Summary
           </TabsTrigger>
           <TabsTrigger
+            value="by-question"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
+          >
+            By question ({inputFields.length})
+          </TabsTrigger>
+          <TabsTrigger
             value="individual"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
           >
@@ -432,6 +439,26 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
                 />
               )}
             </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="by-question" className="mt-4 flex flex-col gap-3">
+          {rowsLoading && <div className="bg-muted h-24 animate-pulse rounded-xl" />}
+          {!rowsLoading && rows.length === 0 ? (
+            <EmptyResponses formId={formId} />
+          ) : decryptedRows.length === 0 ? (
+            <DecryptCallout
+              total={rows.length}
+              canDecrypt={canDecrypt}
+              isDecrypting={isDecryptingAny}
+              onDecrypt={() => void decryption.decryptAll(rows)}
+            />
+          ) : (
+            <ByQuestionPanel
+              fields={inputFields}
+              submissionRows={rows}
+              decryptedById={decryptedById}
+            />
           )}
         </TabsContent>
 
