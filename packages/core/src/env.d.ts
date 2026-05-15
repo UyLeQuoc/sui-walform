@@ -10,6 +10,8 @@
  * pairs — resolver hooks in `sui/env-network.ts` pick the active one based
  * on `useSuiClientContext().network`.
  */
+declare module '*.css';
+
 declare const process: {
   env: {
     NEXT_PUBLIC_DEFAULT_NETWORK?: 'testnet' | 'mainnet';

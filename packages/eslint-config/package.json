@@ -14,7 +14,7 @@
     "next.js"
   ],
   "peerDependencies": {
-    "eslint": ">=9"
+    "eslint": ">=9 <11"
   },
   "dependencies": {
     "@eslint/js": "latest",
