@@ -35,3 +35,6 @@ apps/contracts/Move.lock
 **/tsconfig.tsbuildinfo
 
 /refrences/*
+
+# walform-builder-bundle
+apps/builder/public/walform-builder-bundle/*

@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
+    "bundle:mirror": "bun run scripts/mirror-bundle.ts",
+    "builder:export": "rm -rf public/walform-builder-bundle && NEXT_EXPORT=1 next build && bun run scripts/mirror-bundle.ts",
     "start": "next start --port 3000",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

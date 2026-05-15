@@ -4,11 +4,11 @@ import { motion } from 'framer-motion';
 
 const STACK = [
   { label: 'Sui', sub: 'Object model' },
-  { label: 'Walrus', sub: 'Storage' },
+  { label: 'Walrus', sub: 'Storage + Sites' },
   { label: 'Seal', sub: 'E2E encryption' },
-  { label: 'Enoki', sub: 'Sponsored gas' },
+  { label: 'SuiNS', sub: 'Custom URL' },
   { label: 'zkLogin', sub: 'Any Google login' },
-  { label: 'Kiosk', sub: 'Template market' },
+  { label: 'dApp Kit', sub: 'Wallet transport' },
 ];
 
 export function LogoStrip() {

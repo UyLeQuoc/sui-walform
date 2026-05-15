@@ -6,7 +6,7 @@ import { SectionHeader } from './features';
 const CASES = [
   {
     title: 'DAO governance survey',
-    body: 'Token-gated, sponsored gas. Members vote without paying, you decrypt everything, each voter keeps a receipt only they can read.',
+    body: 'Token-gated by Coin<T> balance. Members sign + pay their own gas, you decrypt everything, each voter keeps a receipt only they can read.',
     tag: 'Encrypted · Token-gated',
   },
   {
@@ -26,8 +26,8 @@ const CASES = [
   },
   {
     title: 'Template marketplace',
-    body: 'Publish a reusable form as a Sui Kiosk listing. Buyers clone it in one click. 10% royalty routes to you on every purchase.',
-    tag: 'Sui Kiosk · Royalties',
+    body: 'Publish a reusable form as a TemplateListing. Buyers clone in one click. 10% royalty routes to you on every clone, even N-th buyer.',
+    tag: 'Multi-buyer · Royalties',
   },
   {
     title: 'AI-generated surveys',

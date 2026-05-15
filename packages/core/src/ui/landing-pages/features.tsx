@@ -12,11 +12,11 @@ const FEATURES = [
     badge: 'Seal',
   },
   {
-    title: 'Gasless for respondents',
-    body: 'Enoki sponsors every submission from our app quota. Your respondents never see a wallet prompt for gas — regardless of whether they use Slush, Sui Wallet, or zkLogin.',
+    title: 'No app server — ever',
+    body: 'Every Sui tx (publish, submit, clone, pay, deploy) is signed and paid by the connected wallet. No app-level sponsorship, no quota to run out, no server with your secrets. Walrus stores blobs, Seal holds keys, your wallet signs.',
     icon: BoltIcon,
     span: '',
-    badge: 'Enoki',
+    badge: 'User-paid',
   },
   {
     title: 'Forms that can’t be taken down',

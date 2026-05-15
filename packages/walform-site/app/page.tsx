@@ -4,30 +4,62 @@ import { useEffect, useState } from "react";
 import { FormSubmissionView } from "@walform/core/forms/components/submit";
 
 /**
- * Mode B entry point: Walrus-hosted static shell that hash-routes to a form id.
+ * Mode B entry point: Walrus-hosted static shell.
  *
- * - URL pattern: `https://<site-id>.wal.app/#/f/{formId}`
- * - The shell reads the hash on mount + on `hashchange` so a single static
- *   bundle serves any number of forms without needing per-form deploys.
- * - Cross-origin API calls (sponsor, walrus upload) are served by the builder
- *   app at `walform.app` — both routes already CORS-allowlist `*.wal.app`.
+ * Two routing modes:
  *
- * For local dev: open `http://localhost:3002/#/f/<formId>` after
- * `bun run dev --filter=@walform/walform-site`.
+ *  1. **Hash routed (shared shell)** — `https://<site-id>.wal.app/#/f/{formId}`.
+ *     A single bundle serves any form. The deploy button injects no config.
+ *
+ *  2. **Root routed (per-form site)** — `https://<creator-name>.wal.app/`.
+ *     The deploy button bakes a `config.json` with `{formId}` into the bundle
+ *     before pushing to Walrus. The shell loads that config on mount and
+ *     renders the form at the root path — no slug, no hash, just the SuiNS
+ *     subdomain. Falls back to the hash router if no config exists, so the
+ *     same code path works for both modes.
+ *
+ * For local dev: open `http://localhost:3002/#/f/<formId>`.
  */
 export default function ShellPage() {
   const [formId, setFormId] = useState<string | null>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const readHash = () => {
       const m = /^#\/f\/([0-9a-zA-Zx]+)\/?$/.exec(window.location.hash);
-      setFormId(m?.[1] ?? null);
+      if (m?.[1]) setFormId(m[1]);
     };
+    // Hash always wins if present — lets a per-form site still serve other
+    // forms via `?#/f/<otherId>` for debugging.
     readHash();
     window.addEventListener("hashchange", readHash);
-    return () => window.removeEventListener("hashchange", readHash);
+
+    // No hash → try baked-in config.json.
+    if (!window.location.hash) {
+      void fetch("/config.json")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((cfg) => {
+          if (cancelled) return;
+          if (cfg && typeof cfg.formId === "string" && cfg.formId.startsWith("0x")) {
+            setFormId(cfg.formId);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setConfigLoaded(true);
+        });
+    } else {
+      setConfigLoaded(true);
+    }
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("hashchange", readHash);
+    };
   }, []);
 
+  if (!configLoaded) return null;
   if (!formId) return <Landing />;
   return <FormSubmissionView formId={formId} />;
 }
