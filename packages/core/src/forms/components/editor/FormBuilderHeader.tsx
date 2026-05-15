@@ -47,7 +47,7 @@ export function FormBuilderHeader({
           <Button variant="ghost" asChild className="gap-1.5">
             <Link href="/forms">
               <ArrowLeft className="h-4 w-4" />
-              Forms
+              WalForms
             </Link>
           </Button>
         </div>

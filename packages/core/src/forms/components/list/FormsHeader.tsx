@@ -24,7 +24,7 @@ export function FormsHeader() {
           className="hover:text-foreground/80 flex items-center gap-2 text-xl font-semibold transition-colors"
         >
           <Logo className="size-6" />
-          Forms
+          WalForms
         </Link>
         <div className="flex items-center gap-2">
           <NetworkBadge />

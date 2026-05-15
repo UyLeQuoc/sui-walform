@@ -8,7 +8,7 @@ import { Button } from '../button';
 import { ArrowRight } from 'lucide-react';
 import { ThemeToggle } from '../../forms/components/editor/ThemeToggle';
 import { Logo } from '../logo';
-import { NetworkBadge, WalletButton } from '../../sui/wallet-ui';
+import { WalletButton } from '../../sui/wallet-ui';
 
 const links = [
   { label: 'Features', href: '#features' },
@@ -41,19 +41,19 @@ export function Navbar() {
         )}
       >
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-2">
-          <Link href="/" className="flex items-center gap-2">
-            <Logo variant="primary" className="size-7" />
-            <span className="font-mono text-lg font-bold">WalForm</span>
-            <NetworkBadge className="ml-1 hidden sm:inline-flex" />
-          </Link>
-
-          <nav className="hidden items-center gap-1 md:flex">
-            {links.map((l) => (
-              <Link key={l.href} href={l.href}>
-                <Button variant="ghost">{l.label}</Button>
-              </Link>
-            ))}
-          </nav>
+          <div className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
+              <Logo variant="primary" className="size-7" />
+              <span className="font-mono text-lg font-bold">WalForm</span>
+            </Link>
+            <nav className="hidden items-center gap-1 md:flex">
+              {links.map((l) => (
+                <Link key={l.href} href={l.href}>
+                  <Button variant="ghost">{l.label}</Button>
+                </Link>
+              ))}
+            </nav>
+          </div>
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
