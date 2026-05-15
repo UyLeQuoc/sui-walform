@@ -33,6 +33,7 @@ import {
 } from '../../../sui/tx/extract-walrus-site-id';
 import { formSiteCache } from '../../services/form-site-cache';
 import type { OnChainForm } from '../../hooks/use-on-chain-forms';
+import { LinkSuinsPanel } from './LinkSuinsPanel';
 import { WalrusSiteManageDialog } from './WalrusSiteManageDialog';
 
 export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
@@ -50,6 +51,12 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
   const [manageOpen, setManageOpen] = useState(false);
   const [costInfo, setCostInfo] = useState<{ deployMist: bigint; fileCount: number } | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  // When `rootPath` is on, the bundle gets a `config.json` injected with this
+  // form's id, and the deployed Walrus Site renders that form at the root
+  // path `/` (no `#/f/<id>` slug). Lets a creator link a SuiNS name so the
+  // form is reachable at `https://<their-name>.wal.app/`.
+  const [rootPath, setRootPath] = useState(false);
+  const [deployedSiteId, setDeployedSiteId] = useState<string | null>(null);
   // Partial-state recovery: if a previous deploy attempt finished Walrus
   // upload but failed/got rejected at the Sui PTB stage, the manifest is
   // cached in IDB. We surface a "Resume" branch so the user doesn't pay WAL
@@ -151,7 +158,28 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
         // would map each on-chain Resource's `blob_hash` to a DIFFERENT file's
         // patch id → portal returns 422 "Hash mismatch" because the bytes it
         // pulls from the aggregator hash to a different value.
-        const sortedFiles = [...index.files].sort((a, b) =>
+        // Inject a baked config so the shell can render the form at root path
+        // when no hash is present. The on-disk file list doesn't have this —
+        // it's synthesized per-form per-deploy and uploaded as one of the
+        // quilt blobs.
+        const synthFiles: Array<{
+          path: string;
+          contentType: string;
+          sizeBytes: number;
+          bytes?: Uint8Array;
+        }> = [];
+        if (rootPath) {
+          const configBytes = new TextEncoder().encode(
+            JSON.stringify({ formId: form.formId, network: net }),
+          );
+          synthFiles.push({
+            path: '/config.json',
+            contentType: 'application/json',
+            sizeBytes: configBytes.byteLength,
+            bytes: configBytes,
+          });
+        }
+        const sortedFiles = [...index.files, ...synthFiles].sort((a, b) =>
           a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
         );
 
@@ -161,13 +189,20 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
         const blobHashesU256: string[] = [];
         for (let i = 0; i < sortedFiles.length; i++) {
           const f = sortedFiles[i]!;
-          const fileRes = await fetch(`/walform-site-bundle${f.path}`, { cache: 'no-store' });
-          if (!fileRes.ok) {
-            throw new Error(
-              `Failed to fetch /walform-site-bundle${f.path} (${fileRes.status}). Bundle is out of sync — re-run bundle:mirror.`,
-            );
+          let bytes: Uint8Array;
+          const synthetic = (f as { bytes?: Uint8Array }).bytes;
+          if (synthetic) {
+            // Synthetic file (config.json) — bytes already in memory, no fetch.
+            bytes = synthetic;
+          } else {
+            const fileRes = await fetch(`/walform-site-bundle${f.path}`, { cache: 'no-store' });
+            if (!fileRes.ok) {
+              throw new Error(
+                `Failed to fetch /walform-site-bundle${f.path} (${fileRes.status}). Bundle is out of sync — re-run bundle:mirror.`,
+              );
+            }
+            bytes = new Uint8Array(await fileRes.arrayBuffer());
           }
-          const bytes = new Uint8Array(await fileRes.arrayBuffer());
           const hash = await sha256ToU256DecimalLE(bytes);
           blobHashesU256.push(hash);
           // Match upstream `site-builder` exactly: identifier = "/path", NO
@@ -288,8 +323,12 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
       }
       setPendingDeploy(null);
 
-      const url = walrusSitePublicUrl(siteObjectId, form.formId, net);
+      // Public URL form depends on the root-path toggle: rootPath = no hash,
+      // shell reads form id from baked config.json. Default = hash routed.
+      const hashUrl = walrusSitePublicUrl(siteObjectId, form.formId, net);
+      const url = rootPath ? hashUrl.replace(/#\/f\/.+$/, '') : hashUrl;
       setSiteUrl(url);
+      setDeployedSiteId(siteObjectId);
       setCostInfo({
         deployMist: deployCost?.netMist ?? 0n,
         fileCount: manifest.files.length,
@@ -466,6 +505,24 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
           </a>
           .
         </p>
+      )}
+      {stage === 'idle' && (
+        <label className="text-muted-foreground flex items-center gap-2 text-[11px]">
+          <input
+            type="checkbox"
+            checked={rootPath}
+            onChange={(e) => setRootPath(e.target.checked)}
+            className="size-3"
+          />
+          <span>
+            Render at root path <code className="font-mono">/</code> (no{' '}
+            <code className="font-mono">#/f/&lt;id&gt;</code>). Best paired with a SuiNS name so
+            the URL is <code className="font-mono">your-name.wal.app</code>.
+          </span>
+        </label>
+      )}
+      {stage === 'done' && deployedSiteId && (
+        <LinkSuinsPanel siteObjectId={deployedSiteId} />
       )}
       {stage === 'error' && errMsg && <p className="text-destructive text-[11px]">{errMsg}</p>}
     </div>

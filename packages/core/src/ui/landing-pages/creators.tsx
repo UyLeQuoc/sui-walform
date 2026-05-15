@@ -18,7 +18,7 @@ const CREATORS = [
   {
     handle: 'Uydev',
     role: 'Fullstack dev',
-    bio: 'Move contracts, Sui object model, Kiosk royalties — if it runs on-chain, Uy wrote it.',
+    bio: 'Move contracts, Sui object model, TemplateListing royalties — if it runs on-chain, Uy wrote it.',
     accent: 'from-primary/30 via-primary/10 to-transparent',
     initials: 'UY',
     image: '/creators/uydev.jpg',

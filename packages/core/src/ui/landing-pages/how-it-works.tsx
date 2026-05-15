@@ -24,8 +24,8 @@ const STEPS = [
   {
     k: '03',
     title: 'Collect',
-    body: 'Respondents sign in with any wallet or zkLogin. Submissions are Seal-encrypted client-side. Gas is sponsored by Enoki.',
-    tag: 'Seal + Enoki',
+    body: 'Respondents sign in with any Sui wallet or zkLogin. Submissions are Seal-encrypted client-side. The respondent pays their own gas and Walrus storage — no app-level sponsorship, no quota.',
+    tag: 'Seal + Wallet-paid',
   },
   {
     k: '04',

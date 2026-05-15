@@ -77,7 +77,27 @@ export interface BuildCreateWalrusSiteTxInput {
   /** Address that will own the Site (only this address can call update_metadata). */
   recipient: string;
   manifest: WalrusSiteManifest;
+  /**
+   * Optional SPA-style routes (path → resource path). Required for shipping
+   * Next.js `output: 'export'` apps with dynamic segments: every `/forms/<id>`
+   * is rewritten to a single `[id]='_'` placeholder bundle, and the client
+   * router reads the real id at runtime via `useParams()`.
+   */
+  routes?: Record<string, string>;
 }
+
+/**
+ * Canonical routes table for the full builder app under static export.
+ * Order matters: most-specific patterns first since the portal walks the
+ * VecMap and stops at the first glob match.
+ */
+export const WALFORM_BUILDER_ROUTES: Record<string, string> = {
+  '/forms/*/preview': '/forms/_/preview/index.html',
+  '/forms/*/results': '/forms/_/results/index.html',
+  '/forms/*': '/forms/_/index.html',
+  '/f/*/receipt': '/f/_/receipt/index.html',
+  '/f/*': '/f/_/index.html',
+};
 
 export interface BuildDeployWalrusSiteTxInput extends BuildCreateWalrusSiteTxInput {
   /** WalForm package id — used to call `form::set_site_object_id_obj` atomically. */
@@ -200,7 +220,179 @@ function appendSiteCreationCalls(
     });
   }
 
+  // SPA routes table — initializes the dynamic field via `create_routes` then
+  // bulk-inserts (from, to) pairs via `fill_routes`. Skipped when no routes
+  // are configured (per-form deploys don't need rewrites — they're served at
+  // the root path with a hash-based slug).
+  if (input.routes && Object.keys(input.routes).length > 0) {
+    tx.moveCall({
+      target: `${pkg}::site::create_routes`,
+      arguments: [site],
+    });
+    const fromKeys = Object.keys(input.routes);
+    const toValues = fromKeys.map((k) => input.routes![k]!);
+    tx.moveCall({
+      target: `${pkg}::site::fill_routes`,
+      arguments: [site, tx.pure.vector('string', fromKeys), tx.pure.vector('string', toValues)],
+    });
+  }
+
   return site as unknown as TransactionObjectArgument;
+}
+
+/**
+ * Standalone Walrus Site deploy — no per-form mirror, no walform package
+ * coupling. Used by the `/admin` "Deploy builder" flow to push the entire
+ * static-exported builder. Callers pass `WALFORM_BUILDER_ROUTES` so the
+ * SPA rewrites resolve. Returns a tx that transfers the Site to the
+ * recipient.
+ */
+export function buildBuilderSiteTx(input: BuildCreateWalrusSiteTxInput): Transaction {
+  return buildCreateWalrusSiteTx(input);
+}
+
+/**
+ * Per Sui's PTB cap, a single tx tops out at 1024 commands. Each file
+ * resource costs 6 commands (new_range_option + new_resource + 3× add_header
+ * + add_resource), plus ~5 fixed commands (metadata + new_site + transfer +
+ * optional routes). Cap chunk size at 150 files → 905 commands max, leaving
+ * headroom for routes + extra metadata. The full builder bundle (~209 files)
+ * splits into 2 chunks.
+ */
+export const BUILDER_CHUNK_SIZE = 150;
+
+function appendFileResources(
+  tx: Transaction,
+  pkg: string,
+  site: TransactionObjectArgument,
+  files: WalrusSiteManifest['files'],
+  quiltBlobIdU256: string,
+): void {
+  for (const file of files) {
+    const range = tx.moveCall({
+      target: `${pkg}::site::new_range_option`,
+      arguments: [tx.pure.option('u64', null), tx.pure.option('u64', null)],
+    });
+    const resource = tx.moveCall({
+      target: `${pkg}::site::new_resource`,
+      arguments: [
+        tx.pure.string(file.path),
+        tx.pure.u256(quiltBlobIdU256),
+        tx.pure.u256(file.blobHashU256),
+        range,
+      ],
+    }) as unknown as TransactionObjectArgument;
+    tx.moveCall({
+      target: `${pkg}::site::add_header`,
+      arguments: [resource, tx.pure.string('content-encoding'), tx.pure.string('identity')],
+    });
+    tx.moveCall({
+      target: `${pkg}::site::add_header`,
+      arguments: [resource, tx.pure.string('content-type'), tx.pure.string(file.contentType)],
+    });
+    tx.moveCall({
+      target: `${pkg}::site::add_header`,
+      arguments: [
+        resource,
+        tx.pure.string('x-wal-quilt-patch-internal-id'),
+        tx.pure.string(`0x${file.quiltPatchInternalIdHex}`),
+      ],
+    });
+    tx.moveCall({
+      target: `${pkg}::site::add_resource`,
+      arguments: [site, resource],
+    });
+  }
+}
+
+function appendRoutes(
+  tx: Transaction,
+  pkg: string,
+  site: TransactionObjectArgument,
+  routes: Record<string, string>,
+): void {
+  if (Object.keys(routes).length === 0) return;
+  tx.moveCall({
+    target: `${pkg}::site::create_routes`,
+    arguments: [site],
+  });
+  const fromKeys = Object.keys(routes);
+  const toValues = fromKeys.map((k) => routes[k]!);
+  tx.moveCall({
+    target: `${pkg}::site::fill_routes`,
+    arguments: [site, tx.pure.vector('string', fromKeys), tx.pure.vector('string', toValues)],
+  });
+}
+
+export interface BuildBuilderSiteFirstChunkInput {
+  sitePackageId: string;
+  name: string;
+  recipient: string;
+  manifest: WalrusSiteManifest;
+  /** Slice of `manifest.files` to include in this tx (≤ BUILDER_CHUNK_SIZE). */
+  filesChunk: WalrusSiteManifest['files'];
+  /** When true, add the routes table + transfer in this tx (bundle fits in one chunk). */
+  routes?: Record<string, string>;
+  /** When false, leave the Site untransferred so subsequent chunks can mutate it. */
+  transfer: boolean;
+}
+
+/**
+ * First tx of a chunked builder-site deploy: metadata + new_site +
+ * `filesChunk` resources + (optionally routes) + (optionally transfer).
+ * For bundles that fit in one chunk, set `transfer: true` and pass the full
+ * routes map — equivalent to the single-tx path. For multi-chunk bundles,
+ * the first call should set `transfer: true` so subsequent chunks can
+ * operate on the now-owned site without contention; routes get appended
+ * by the LAST chunk via `buildBuilderSiteAddChunk`.
+ */
+export function buildBuilderSiteFirstChunk(input: BuildBuilderSiteFirstChunkInput): Transaction {
+  const tx = new Transaction();
+  const pkg = input.sitePackageId;
+
+  const metadata = tx.moveCall({
+    target: `${pkg}::metadata::new_metadata`,
+    arguments: [
+      tx.pure.option('string', null),
+      tx.pure.option('string', null),
+      tx.pure.option('string', null),
+      tx.pure.option('string', null),
+      tx.pure.option('string', null),
+    ],
+  });
+  const site = tx.moveCall({
+    target: `${pkg}::site::new_site`,
+    arguments: [tx.pure.string(input.name), metadata],
+  }) as unknown as TransactionObjectArgument;
+
+  appendFileResources(tx, pkg, site, input.filesChunk, input.manifest.quiltBlobIdU256);
+  if (input.routes) appendRoutes(tx, pkg, site, input.routes);
+  if (input.transfer) tx.transferObjects([site], input.recipient);
+  return tx;
+}
+
+export interface BuildBuilderSiteAddChunkInput {
+  sitePackageId: string;
+  siteObjectId: string;
+  manifest: WalrusSiteManifest;
+  filesChunk: WalrusSiteManifest['files'];
+  /** Set on the LAST chunk to also write the routes table. */
+  routes?: Record<string, string>;
+}
+
+/**
+ * Subsequent tx of a chunked deploy. Operates on an already-owned site by
+ * objectId (no transfer needed). The connected wallet must be the owner;
+ * any other sender will fail with InsufficientAuthorization.
+ */
+export function buildBuilderSiteAddChunk(input: BuildBuilderSiteAddChunkInput): Transaction {
+  const tx = new Transaction();
+  const pkg = input.sitePackageId;
+  const site = tx.object(input.siteObjectId) as unknown as TransactionObjectArgument;
+
+  appendFileResources(tx, pkg, site, input.filesChunk, input.manifest.quiltBlobIdU256);
+  if (input.routes) appendRoutes(tx, pkg, site, input.routes);
+  return tx;
 }
 
 export function buildCreateWalrusSiteTx(input: BuildCreateWalrusSiteTxInput): Transaction {

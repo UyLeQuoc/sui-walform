@@ -84,6 +84,7 @@
     "@mysten/enoki": "latest",
     "@mysten/seal": "latest",
     "@mysten/sui": "latest",
+    "@mysten/suins": "latest",
     "@mysten/walrus": "latest",
     "@tanstack/react-query": "^5.100.1",
     "@tanstack/react-table": "^8.21.3",

@@ -11,7 +11,9 @@ import {
   Video,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '../../../ui/button';
+import { Spinner } from '../../../ui/spinner';
 import {
   coerceFileAttachment,
   formatBytes,
@@ -41,15 +43,40 @@ const KIND_ICON: Record<MediaKind, LucideIcon> = {
  */
 export function FileAttachmentView({ value }: FileAttachmentViewProps) {
   const attachment = coerceFileAttachment(value);
+  const [downloading, setDownloading] = useState(false);
   if (!attachment) return null;
 
   const kind = mimeKind(attachment);
   const Icon = KIND_ICON[kind];
-  // Walrus aggregator URLs are content-addressed and don't carry the
-  // original filename. We append it via the `?filename=` query so most
-  // browsers honor it in the Download dialog. Walrus ignores unknown
-  // query params; aggregator still returns the blob.
-  const downloadUrl = appendFilenameParam(attachment.url, attachment.name);
+
+  // Walrus aggregator URLs are content-addressed (path = /v1/blobs/<blobId>)
+  // and the aggregator strict-rejects unknown query params, so we can't suggest
+  // a filename via `?filename=`. The HTML `download` attribute is also ignored
+  // on cross-origin links by browser security policy. Workaround: fetch the
+  // bytes, wrap in a blob:// URL (same-origin → `download` honored), then
+  // trigger the click programmatically with the original filename.
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(attachment.url);
+      if (!res.ok) throw new Error(`Aggregator returned ${res.status}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = attachment.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Download failed: ${msg}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -76,11 +103,19 @@ export function FileAttachmentView({ value }: FileAttachmentViewProps) {
             Open
           </a>
         </Button>
-        <Button asChild size="sm" variant="outline" className="h-7 px-2 text-[11px]">
-          <a href={downloadUrl} download={attachment.name}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-[11px]"
+          disabled={downloading}
+          onClick={() => void handleDownload()}
+        >
+          {downloading ? (
+            <Spinner className="mr-1 size-3" />
+          ) : (
             <Download className="mr-1 h-3 w-3" />
-            Download
-          </a>
+          )}
+          Download
         </Button>
       </div>
 
@@ -150,12 +185,3 @@ function Preview({
   return null;
 }
 
-function appendFilenameParam(url: string, name: string): string {
-  try {
-    const u = new URL(url);
-    u.searchParams.set('filename', name);
-    return u.toString();
-  } catch {
-    return url;
-  }
-}

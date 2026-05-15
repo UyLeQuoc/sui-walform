@@ -84,10 +84,11 @@ async function waitForTxIndexed(
   client: ClientWithCoreApi,
   digest: string,
   network: 'testnet' | 'mainnet',
-  opts: { timeoutMs?: number; pollSchedule?: number[] } = {},
+  opts: { timeoutMs?: number; pollSchedule?: number[]; postSuccessDelayMs?: number } = {},
 ): Promise<unknown> {
   const timeoutMs = opts.timeoutMs ?? 60_000;
   const schedule = opts.pollSchedule ?? [250, 500, 750, 1000, 1500, 2000, 2500, 3000];
+  const postSuccessDelayMs = opts.postSuccessDelayMs ?? 5_000;
 
   // Wait on our SuiClient first — required for the SDK's subsequent calls
   // that read effects from this same client.
@@ -115,6 +116,15 @@ async function waitForTxIndexed(
     schedule,
     `public RPC (${network})`,
   );
+
+  // The upload-relay's own RPC pool is often a few seconds behind Mysten's
+  // public fullnode. Without this grace delay, the relay still 404s the tip-
+  // payment tx ("Could not find the referenced transaction") on the very
+  // next request — even though both our node and the public node have
+  // already indexed it. 5s is empirically enough; tune via opts if needed.
+  if (postSuccessDelayMs > 0) {
+    await new Promise((r) => setTimeout(r, postSuccessDelayMs));
+  }
 
   return block;
 }
