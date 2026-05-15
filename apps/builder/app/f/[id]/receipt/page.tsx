@@ -1,5 +1,9 @@
 import { SubmitterReceiptView } from '@walform/core/forms/components/results';
 
+export function generateStaticParams() {
+  return [{ id: '_' }];
+}
+
 interface PageProps {
   params: Promise<{ id: string }>;
 }

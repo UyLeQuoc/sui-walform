@@ -1,6 +1,10 @@
 import { FormResultsView } from '@walform/core/forms/components/results';
 import { FormsHeader } from '@walform/core/forms/components/list';
 
+export function generateStaticParams() {
+  return [{ id: '_' }];
+}
+
 interface PageProps {
   params: Promise<{ id: string }>;
 }
