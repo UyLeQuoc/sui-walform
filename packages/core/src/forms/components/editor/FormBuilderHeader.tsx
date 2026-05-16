@@ -1,19 +1,14 @@
 'use client';
 
-import { Eye, History, Redo2, Settings2, Sparkles, Undo2 } from 'lucide-react';
+import { Eye, History, Redo2, Settings, Sparkles, Undo2 } from 'lucide-react';
 import Link from 'next/link';
+import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
 import { Button } from '../../../ui/button';
 import { ButtonGroup } from '../../../ui/button-group';
 import { Kbd, KbdGroup } from '../../../ui/kbd';
 import { Logo } from '../../../ui/logo';
 import { Separator } from '../../../ui/separator';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '../../../ui/tooltip';
-import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../../ui/tooltip';
 import type { SaveStatus } from '../../hooks/use-auto-save';
 import type { RightSidebarMode } from '../../hooks/use-right-sidebar-mode';
 import { formsRoute } from '../../lib/routes';
@@ -97,7 +92,7 @@ export function FormBuilderHeader({
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
-                    size="icon-sm"
+                    size="icon"
                     onClick={onUndo}
                     disabled={!canUndo}
                     aria-label="Undo"
@@ -117,7 +112,7 @@ export function FormBuilderHeader({
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
-                    size="icon-sm"
+                    size="icon"
                     onClick={onRedo}
                     disabled={!canRedo}
                     aria-label="Redo"
@@ -141,7 +136,7 @@ export function FormBuilderHeader({
                 <TooltipTrigger asChild>
                   <Button
                     variant={rightMode === 'history' ? 'default' : 'outline'}
-                    size="icon-sm"
+                    size="icon"
                     aria-label="History"
                     aria-pressed={rightMode === 'history'}
                     onClick={onToggleHistory}
@@ -155,12 +150,12 @@ export function FormBuilderHeader({
                 <TooltipTrigger asChild>
                   <Button
                     variant={rightMode === 'settings' ? 'default' : 'outline'}
-                    size="icon-sm"
+                    size="icon"
                     aria-label="Form settings"
                     aria-pressed={rightMode === 'settings'}
                     onClick={onToggleSettings}
                   >
-                    <Settings2 className="h-4 w-4" />
+                    <Settings className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Form settings</TooltipContent>

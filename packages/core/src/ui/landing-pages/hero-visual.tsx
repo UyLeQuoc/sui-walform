@@ -1,7 +1,18 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 
-import { useRef } from 'react';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import Image from 'next/image';
+import { useEffect, useRef, useState } from 'react';
+import {
+  AnimatePresence,
+  motion,
+  useScroll,
+  useTransform,
+  type MotionValue,
+} from 'framer-motion';
+import { useTheme } from '@teispace/next-themes';
+import { Blocks, Palette, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 export function HeroVisual() {
   const ref = useRef<HTMLDivElement>(null);
@@ -13,8 +24,16 @@ export function HeroVisual() {
   const rightY = useTransform(scrollYProgress, [0, 1], [0, 80]);
   const tiltY = useTransform(scrollYProgress, [0, 0.5, 1], [10, 0, -6]);
 
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const isDark = mounted && resolvedTheme === 'dark';
+  const imageSrc = isDark
+    ? '/images/editor_form_setting_dark.png'
+    : '/images/editor_form_setting.png';
+
   return (
-    <div ref={ref} className="relative mx-auto w-full max-w-5xl">
+    <div ref={ref} className="relative mx-auto w-full max-w-6xl">
       {/* glow */}
       <div
         aria-hidden
@@ -26,13 +45,13 @@ export function HeroVisual() {
       />
 
       <motion.div
-        initial={{ rotateX: 12 }}
-        animate={{ rotateX: 0 }}
+        initial={{ rotateX: 12, opacity: 0 }}
+        animate={{ rotateX: 0, opacity: 1 }}
         transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
         style={{ perspective: 1600, rotateX: tiltY }}
-        className="group border-border/80 bg-card/80 relative overflow-hidden rounded-2xl border shadow-[0_30px_80px_-30px_rgba(0,0,0,0.35)] backdrop-blur-xl"
+        className="border-border/80 bg-card/80 relative overflow-hidden rounded-2xl border shadow-[0_30px_80px_-30px_rgba(0,0,0,0.45)] backdrop-blur-xl"
       >
-        {/* top chrome */}
+        {/* Browser chrome */}
         <div className="border-border/60 bg-muted/40 flex items-center gap-2 border-b px-4 py-2.5">
           <div className="flex gap-1.5">
             <span className="bg-destructive/60 size-2.5 rounded-full" />
@@ -41,164 +60,156 @@ export function HeroVisual() {
           </div>
           <div className="bg-background/80 text-muted-foreground mx-auto flex items-center gap-2 rounded-md px-3 py-1 text-xs">
             <LockIcon className="text-primary size-3" />
-            walform.app/f/governance-q2
+            walform.app/forms/edit?formId=hackathon-signup
           </div>
           <div className="w-12" />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr_260px]">
-          {/* sidebar blocks */}
-          <div className="border-border/60 hidden flex-col gap-1.5 border-r p-3 md:flex">
-            <p className="text-muted-foreground mb-2 px-2 text-[10px] font-semibold tracking-wider uppercase">
-              Blocks
-            </p>
-            {[
-              'Short answer',
-              'Multiple choice',
-              'Rating',
-              'File upload',
-              'Payment',
-              'Wallet connect',
-            ].map((b, i) => (
-              <motion.div
-                key={b}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 1 + i * 0.06, duration: 0.35 }}
-                className="text-foreground/80 hover:bg-accent flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
-              >
-                <span className="bg-primary size-1.5 rounded-full" /> {b}
-              </motion.div>
-            ))}
-          </div>
-
-          {/* canvas */}
-          <div className="from-background to-muted/30 flex flex-col gap-4 bg-gradient-to-b p-6">
+        {/* Screenshot — crossfade on theme switch */}
+        <div className="relative aspect-[16/9] w-full bg-background">
+          <AnimatePresence initial={false} mode="sync">
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.0, duration: 0.6 }}
+              key={imageSrc}
+              initial={{ opacity: 0, scale: 1.02 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.99 }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              className="absolute inset-0"
             >
-              <p className="text-primary text-[10px] font-semibold tracking-wider uppercase">
-                Q1 · Required
-              </p>
-              <h3 className="text-foreground mt-1 text-lg font-semibold">
-                What&apos;s your biggest priority for the DAO this quarter?
-              </h3>
-              <div className="mt-3 space-y-2">
-                {['Treasury', 'Governance', 'Community growth', 'Product'].map((opt, i) => (
-                  <motion.label
-                    key={opt}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1.15 + i * 0.07, duration: 0.35 }}
-                    className="border-border bg-card flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm"
-                  >
-                    <span
-                      className={`grid size-4 place-items-center rounded-full border ${
-                        i === 1 ? 'border-primary bg-primary/20' : 'border-border'
-                      }`}
-                    >
-                      {i === 1 && <span className="bg-primary size-2 rounded-full" />}
-                    </span>
-                    {opt}
-                  </motion.label>
-                ))}
-              </div>
+              <Image
+                src={imageSrc}
+                alt="WalForm editor — field palette on the left, live form canvas in the middle, form settings on the right"
+                fill
+                sizes="(min-width: 1280px) 1152px, 100vw"
+                className="object-cover object-top"
+                priority
+              />
             </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.45, duration: 0.6 }}
-              className="border-primary/50 bg-primary/5 text-foreground/80 rounded-lg border border-dashed p-3 text-xs"
-            >
-              <div className="text-primary flex items-center gap-2 font-medium">
-                <SparkleIcon className="size-3.5" /> AI suggests: add a follow-up question about
-                timeline
-              </div>
-            </motion.div>
-          </div>
-
-          {/* right inspector */}
-          <div className="border-border/60 bg-background/60 hidden flex-col gap-3 border-l p-4 md:flex">
-            <p className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
-              Encryption
-            </p>
-            <div className="border-primary/30 bg-primary/5 flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
-              <LockIcon className="text-primary size-3.5" />
-              <span className="font-medium">Seal whitelist</span>
-            </div>
-            <p className="text-muted-foreground mt-1 text-[10px] font-semibold tracking-wider uppercase">
-              Storage
-            </p>
-            <div className="bg-muted/50 flex items-center justify-between rounded-md px-3 py-2 text-xs">
-              <span>Walrus blob</span>
-              <span className="text-primary font-mono">0x4a…e2</span>
-            </div>
-            <p className="text-muted-foreground mt-1 text-[10px] font-semibold tracking-wider uppercase">
-              Signer
-            </p>
-            <div className="bg-muted/50 flex items-center justify-between rounded-md px-3 py-2 text-xs">
-              <span>Your wallet</span>
-              <span className="text-primary">Self-paid</span>
-            </div>
-
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 1.6, duration: 0.5 }}
-              className="bg-primary text-primary-foreground mt-auto rounded-lg p-3 text-center text-sm font-semibold"
-            >
-              Publish form
-            </motion.div>
-          </div>
+          </AnimatePresence>
         </div>
       </motion.div>
 
-      {/* floating encryption chip */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1.8, duration: 0.6 }}
-        style={{ y: leftY }}
-        className="border-border/80 bg-card/90 absolute top-28 -left-6 hidden rounded-xl border p-3 shadow-xl backdrop-blur lg:block"
-      >
-        <motion.div
-          animate={{ y: [0, -6, 0] }}
-          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-        >
-          <div className="flex items-center gap-2 text-xs font-medium">
-            <LockIcon className="text-primary size-4" />
-            Encrypted client-side
-          </div>
-          <div className="text-muted-foreground mt-1 font-mono text-[10px]">0xsealed:9f3b…42a1</div>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 2, duration: 0.6 }}
-        style={{ y: rightY }}
-        className="border-border/80 bg-card/90 absolute -right-4 bottom-24 hidden rounded-xl border p-3 shadow-xl backdrop-blur lg:block"
-      >
-        <motion.div
-          animate={{ y: [0, 5, 0] }}
-          transition={{
-            duration: 3.5,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            delay: 0.6,
-          }}
-        >
-          <div className="text-muted-foreground text-[10px] font-semibold tracking-wider uppercase">
-            Respondent pays
-          </div>
-          <div className="text-primary mt-0.5 text-xl font-semibold">0 SUI</div>
-        </motion.div>
-      </motion.div>
+      {/* Floating feature callouts — hug the corners of the frame on lg+ */}
+      <Callout
+        className="top-16 -left-4 hidden lg:flex lg:-left-6"
+        y={leftY}
+        delay={1.35}
+        accent="violet"
+        icon={<Blocks className="size-5" />}
+        title="14+ field types"
+      />
+      <Callout
+        className="top-16 -right-4 hidden lg:flex lg:-right-6"
+        y={rightY}
+        delay={1.5}
+        accent="amber"
+        icon={<Sparkles className="size-5" />}
+        title="Generate with AI"
+      />
+      <Callout
+        className="bottom-12 -left-4 hidden lg:flex lg:-left-6"
+        y={leftY}
+        delay={1.65}
+        accent="emerald"
+        icon={<ShieldCheck className="size-5" />}
+        title="End-to-end encrypted"
+      />
+      <Callout
+        className="bottom-12 -right-4 hidden lg:flex lg:-right-6"
+        y={rightY}
+        delay={1.8}
+        accent="rose"
+        icon={<Palette className="size-5" />}
+        title="Fully customizable"
+      />
+      <Callout
+        className="-bottom-6 left-1/2 hidden -translate-x-1/2 lg:flex"
+        y={rightY}
+        delay={1.95}
+        accent="primary"
+        icon={<Zap className="size-5" />}
+        title="1-click publish"
+      />
     </div>
+  );
+}
+
+type Accent = 'violet' | 'amber' | 'sky' | 'rose' | 'emerald' | 'primary';
+
+const accentMap: Record<Accent, { ring: string; iconBg: string; iconText: string; dot: string }> = {
+  violet: {
+    ring: 'ring-violet-500/30 dark:ring-violet-400/30',
+    iconBg: 'bg-violet-500/10 dark:bg-violet-400/15',
+    iconText: 'text-violet-600 dark:text-violet-300',
+    dot: 'bg-violet-500',
+  },
+  amber: {
+    ring: 'ring-amber-500/30 dark:ring-amber-400/30',
+    iconBg: 'bg-amber-500/10 dark:bg-amber-400/15',
+    iconText: 'text-amber-600 dark:text-amber-300',
+    dot: 'bg-amber-500',
+  },
+  sky: {
+    ring: 'ring-sky-500/30 dark:ring-sky-400/30',
+    iconBg: 'bg-sky-500/10 dark:bg-sky-400/15',
+    iconText: 'text-sky-600 dark:text-sky-300',
+    dot: 'bg-sky-500',
+  },
+  rose: {
+    ring: 'ring-rose-500/30 dark:ring-rose-400/30',
+    iconBg: 'bg-rose-500/10 dark:bg-rose-400/15',
+    iconText: 'text-rose-600 dark:text-rose-300',
+    dot: 'bg-rose-500',
+  },
+  emerald: {
+    ring: 'ring-emerald-500/30 dark:ring-emerald-400/30',
+    iconBg: 'bg-emerald-500/10 dark:bg-emerald-400/15',
+    iconText: 'text-emerald-600 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+  },
+  primary: {
+    ring: 'ring-primary/30',
+    iconBg: 'bg-primary/10',
+    iconText: 'text-primary',
+    dot: 'bg-primary',
+  },
+};
+
+interface CalloutProps {
+  className: string;
+  y: MotionValue<number>;
+  delay: number;
+  accent: Accent;
+  icon: React.ReactNode;
+  title: string;
+}
+
+function Callout({ className, y, delay, accent, icon, title }: CalloutProps) {
+  const palette = accentMap[accent];
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      style={{ y }}
+      className={cn(
+        'border-border bg-background absolute flex items-center gap-2.5 rounded-2xl border px-3.5 py-2.5 shadow-2xl ring-4',
+        palette.ring,
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          'flex size-9 shrink-0 items-center justify-center rounded-xl',
+          palette.iconBg,
+          palette.iconText,
+        )}
+      >
+        {icon}
+      </span>
+      <div className="text-foreground text-sm font-semibold whitespace-nowrap">{title}</div>
+      <span aria-hidden className={cn('size-1.5 rounded-full', palette.dot)} />
+    </motion.div>
   );
 }
 
@@ -207,19 +218,6 @@ function LockIcon({ className }: { className?: string }) {
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
       <rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.75" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.75" />
-    </svg>
-  );
-}
-
-function SparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
-      <path
-        d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-      />
     </svg>
   );
 }
