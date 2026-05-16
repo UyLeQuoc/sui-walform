@@ -47,6 +47,7 @@ import type { OnChainForm } from '../../hooks/use-on-chain-forms';
 import { useCloseForm } from '../../hooks/use-close-form';
 import { useSeededSubmissions } from '../../hooks/use-seeded-submissions';
 import { useFormReviewers } from '../../hooks/use-form-reviewers';
+import { useTabQuery } from '../../hooks/use-tab-query';
 import { useSubmissionDecryption } from '../../hooks/use-submission-decryption';
 import { useSubmissionTags } from '../../hooks/use-submission-tags';
 import {
@@ -115,7 +116,13 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
   const decryption = useSubmissionDecryption({ formId });
   const tags = useSubmissionTags(formId);
   const reviewersState = useFormReviewers(formId);
-  const [tab, setTab] = useState<ResultsTab>('summary');
+  const [tab, setTab] = useTabQuery<ResultsTab>('tab', 'summary', [
+    'summary',
+    'by-question',
+    'individual',
+    'reviewers',
+    'manage',
+  ]);
   const [shareOpen, setShareOpen] = useState(false);
   const [submissionFilters, setSubmissionFilters] = useState<SubmissionsFilterState>(
     DEFAULT_SUBMISSION_FILTERS,

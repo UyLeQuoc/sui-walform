@@ -55,17 +55,24 @@ const FEATURES = [
   },
   {
     title: 'Two distribution modes, one schema',
-    body: 'Default Mode A renders the form at walform.app/f/{id}. Optional Mode B pushes a static shell to Walrus with one click — the form lives at {base36}.wal.app/#/f/{id}, fully on-chain.',
+    body: 'Default: form lives at walform.wal.app/f?formId=… on the builder\'s own Walrus Site. Optional: one-click deploy a static per-form shell to Walrus — link a SuiNS name and the URL becomes your-name.wal.app, no formId in sight.',
     icon: ShieldIcon,
     span: '',
     badge: 'Mode A + Mode B',
   },
   {
-    title: 'Multi-buyer template marketplace with on-chain voting',
-    body: 'Publish a reusable schema as a TemplateListing. N buyers can clone; a 10% royalty routes to the platform on every paid clone. Voters upvote / downvote each listing on-chain — no off-chain ratings store.',
-    icon: StoreIcon,
+    title: 'One-click per-form Walrus Site — no platform fee',
+    body: 'Same outcome as paid services like Walgo, but the platform takes zero. The creator\'s wallet pays Walrus storage + Sui gas directly; nothing routes through us. Each deploy bakes one tiny config.json into the shell — the rest of the bundle is shared, so re-deploys are cheap.',
+    icon: GlobeIcon,
     span: 'md:col-span-2',
-    badge: 'Sui Kiosk + voting',
+    badge: 'Walrus Sites',
+  },
+  {
+    title: 'Multi-buyer template marketplace with on-chain voting',
+    body: 'Publish a reusable schema as a TemplateListing. N buyers can clone; a 10% royalty routes to the platform treasury on every paid clone (free clones cost nothing). Voters upvote / downvote each listing on-chain — no off-chain ratings store.',
+    icon: StoreIcon,
+    span: '',
+    badge: 'Marketplace + voting',
   },
   {
     title: 'Built-in results dashboard',
@@ -333,6 +340,14 @@ function UploadIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+function GlobeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }

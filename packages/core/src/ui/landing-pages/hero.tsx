@@ -60,7 +60,7 @@ export function Hero() {
             href={badgeHref}
             target="_blank"
             rel="noreferrer"
-            className="border-border/80 bg-background/70 text-muted-foreground hover:text-foreground inline-flex items-center gap-2 border px-3 py-1 text-xs font-medium shadow-sm backdrop-blur transition-colors"
+            className="border-border/80 bg-background/70 text-muted-foreground hover:text-foreground inline-flex items-center gap-2 border px-3 py-2.5 max-h-9 text-xs font-medium shadow-sm backdrop-blur transition-colors"
           >
             <span className="relative flex size-2">
               <span className="bg-primary absolute inline-flex size-full animate-ping opacity-75" />

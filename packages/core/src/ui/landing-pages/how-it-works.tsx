@@ -12,25 +12,31 @@ const STEPS = [
   {
     k: '01',
     title: 'Design',
-    body: 'Drag-and-drop blocks on a Notion-style canvas. Add logic, limits, and access control — paid, token-gated, or allowlisted.',
+    body: 'Drag-and-drop 18 input field types on a Notion-style canvas. Pick from 8 web fonts, 11 accent palettes, 5 radius scales. Or describe the form to AI (BYOK OpenRouter) and hydrate the schema in one prompt.',
     tag: 'Builder',
   },
   {
     k: '02',
-    title: 'Publish',
-    body: 'Schema is stored inline in a Sui object. Optionally deploy to a Walrus Site and attach a SuiNS name for {name}.wal.app.',
-    tag: 'Sui + Walrus',
+    title: 'Publish on-chain',
+    body: 'Schema lives as a Sui object. Pick access mode at publish — Public, allowlist Private, token-gated, or paid-per-submit. Private forms also encrypt the schema itself with Seal.',
+    tag: 'Sui + Seal',
   },
   {
     k: '03',
-    title: 'Collect',
-    body: 'Respondents sign in with any Sui wallet or zkLogin. Submissions are Seal-encrypted client-side. Gas is sponsored by our Enoki key on testnet + mainnet, with a clean fallback to wallet-paid if the sponsor route is unavailable.',
-    tag: 'Seal + Sponsored gas',
+    title: 'Optional — clean URL on Walrus',
+    body: 'One click on the form\'s manage page bakes config.json + uploads a static shell to Walrus. The form lives at <base36>.wal.app/ — or your-name.wal.app/ once you link a SuiNS. Zero platform fee; you pay Walrus storage directly.',
+    tag: 'Walrus Sites',
   },
   {
     k: '04',
+    title: 'Collect',
+    body: 'Respondents sign in with any Sui wallet or Google zkLogin. Submissions are Seal-encrypted client-side. Gas is sponsored by our Enoki key, with a graceful fallback to wallet-paid if the sponsor route is unavailable.',
+    tag: 'Seal + Sponsored gas',
+  },
+  {
+    k: '05',
     title: 'Decrypt',
-    body: 'Only you (and each submitter for their own receipt) hold the key. Results decrypt in your browser — nothing we can read.',
+    body: 'Only you (and each submitter for their own receipt, or co-reviewers you whitelisted) hold the key. Aggregate charts, by-question panel, CSV export — everything decrypts in your browser. Nothing we can read.',
     tag: 'Seal policy',
   },
 ];
@@ -95,8 +101,8 @@ export function HowItWorks() {
       <div className="mx-auto max-w-6xl px-6">
         <SectionHeader
           eyebrow="How it works"
-          title="From blank canvas to encrypted receipts — in four steps."
-          description="The full flow, from builder to on-chain submission, stays under two minutes."
+          title="From blank canvas to encrypted receipts."
+          description="The base flow stays under two minutes. Walrus Sites + SuiNS are one extra click each."
         />
 
         <div ref={track} className="relative mt-20">

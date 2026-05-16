@@ -15,6 +15,7 @@ export * from './use-palette-search';
 export * from './use-right-sidebar-mode';
 export * from './use-selected-field';
 export * from './use-stored-form';
+export * from './use-tab-query';
 export * from './use-on-chain-forms';
 export * from './use-marketplace-templates';
 export * from './use-template-listing';
