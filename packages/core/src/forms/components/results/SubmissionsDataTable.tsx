@@ -56,7 +56,7 @@ interface SubmissionsDataTableProps {
   fields: FormField[];
   network: ExplorerNetwork;
   canDecrypt: boolean;
-  pendingId: string | null;
+  pendingIds: ReadonlySet<string>;
   onDecrypt: (row: SubmissionRow) => void;
   tagFor: (id: string) => { status: SubmissionStatus; priority: SubmissionPriority };
   onStatusChange: (id: string, next: SubmissionStatus) => void;
@@ -70,7 +70,7 @@ export function SubmissionsDataTable({
   fields,
   network,
   canDecrypt,
-  pendingId,
+  pendingIds,
   onDecrypt,
   tagFor,
   onStatusChange,
@@ -301,7 +301,7 @@ export function SubmissionsDataTable({
                 row={openRow}
                 decrypted={decryptedById[openRow.submissionId]}
                 error={errorById[openRow.submissionId]}
-                isPending={pendingId === openRow.submissionId}
+                isPending={pendingIds.has(openRow.submissionId)}
                 canDecrypt={canDecrypt}
                 onDecrypt={() => onDecrypt(openRow)}
                 fields={fields}

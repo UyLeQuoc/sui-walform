@@ -255,7 +255,8 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
           return sum + (answered / inputFields.length) * 100;
         }, 0) / decryptedRows.length;
   const canDecrypt = !!activePackageId && !!originalPackageId;
-  const isDecryptingAny = decryption.isSessionInitializing || !!decryption.pendingId;
+  const isDecryptingAny =
+    decryption.isSessionInitializing || decryption.pendingIds.size > 0;
   const timestamps = rows.map((r) => r.submittedAtMs);
 
   return (
@@ -481,7 +482,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
               fields={inputFields}
               network={network}
               canDecrypt={canDecrypt}
-              pendingId={decryption.pendingId}
+              pendingIds={decryption.pendingIds}
               onDecrypt={(row) => void decryption.decryptOne(row)}
               tagFor={(id) => tags.tagFor(id)}
               onStatusChange={(id, next) => void tags.setStatus(id, next)}

@@ -14,8 +14,9 @@ export type DecryptedRow = Record<string, unknown>;
 export interface UseSubmissionDecryptionResult {
   decryptedById: Record<string, DecryptedRow>;
   errorById: Record<string, string>;
-  /** The submissionId currently being decrypted; null when idle. */
-  pendingId: string | null;
+  /** Set of submissionIds currently being decrypted. `decryptAll` fans out
+   * concurrently, so this can hold many ids at once. */
+  pendingIds: ReadonlySet<string>;
   decryptOne: (row: SubmissionRow) => Promise<void>;
   decryptAll: (rows: SubmissionRow[]) => Promise<void>;
   /** True while the Seal session key is initializing (first call only). */
@@ -52,13 +53,30 @@ export function useSubmissionDecryption(
 
   const [decryptedById, setDecryptedById] = useState<Record<string, DecryptedRow>>({});
   const [errorById, setErrorById] = useState<Record<string, string>>({});
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(() => new Set());
+
+  const addPending = useCallback((id: string) => {
+    setPendingIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+  const removePending = useCallback((id: string) => {
+    setPendingIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
 
   const decryptOne = useCallback(
     async (row: SubmissionRow) => {
       if (!originalPackageId || !activePackageId || !seal) return;
       if (network !== 'testnet' && network !== 'mainnet') return;
-      setPendingId(row.submissionId);
+      addPending(row.submissionId);
       setErrorById((prev) => {
         if (!(row.submissionId in prev)) return prev;
         const next = { ...prev };
@@ -110,7 +128,7 @@ export function useSubmissionDecryption(
         const msg = err instanceof Error ? err.message : String(err);
         setErrorById((prev) => ({ ...prev, [row.submissionId]: msg }));
       } finally {
-        setPendingId(null);
+        removePending(row.submissionId);
       }
     },
     [
@@ -122,23 +140,36 @@ export function useSubmissionDecryption(
       suiClient,
       formId,
       reviewersState.reviewersId,
+      addPending,
+      removePending,
     ],
   );
 
   const decryptAll = useCallback(
     async (rows: SubmissionRow[]) => {
-      for (const row of rows) {
-        if (decryptedById[row.submissionId]) continue;
-        await decryptOne(row);
+      // Pre-warm the Seal session FIRST so the wallet only pops one signature
+      // prompt — concurrent decryptOne calls would otherwise each see
+      // `sessionRef.current === null` through their own captured closures
+      // (the `inFlightRef` inside useSealSession dedupes this, but doing the
+      // ensureSession up-front makes the intent explicit and the failure
+      // case fail fast). Then fan out via `Promise.allSettled` so a single
+      // bad row doesn't poison the rest.
+      try {
+        await sealSession.ensureSession();
+      } catch {
+        // ensureSession already set its own error state; let decryptOne
+        // surface the per-row error.
       }
+      const todo = rows.filter((r) => !decryptedById[r.submissionId]);
+      await Promise.allSettled(todo.map((row) => decryptOne(row)));
     },
-    [decryptedById, decryptOne],
+    [decryptedById, decryptOne, sealSession],
   );
 
   return {
     decryptedById,
     errorById,
-    pendingId,
+    pendingIds,
     decryptOne,
     decryptAll,
     isSessionInitializing: sealSession.isInitializing,

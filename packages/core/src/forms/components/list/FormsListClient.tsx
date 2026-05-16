@@ -21,11 +21,19 @@ export function FormsListClient() {
   const router = useRouter();
   const { isConnected } = useCurrentWallet();
   const { forms, isLoading: draftsLoading, error: draftsError, deleteForm } = useForms();
-  const { running, isLoading: chainLoading, error: chainError, packageMissing } = useOnChainForms();
+  const {
+    running,
+    ended,
+    isLoading: chainLoading,
+    error: chainError,
+    packageMissing,
+  } = useOnChainForms();
   const reviewing = useReviewingForms();
   const [top, setTop] = useState<TopTab>('forms');
 
-  const formsCount = forms.length + (isConnected ? running.length + reviewing.reviewing.length : 0);
+  const formsCount =
+    forms.length +
+    (isConnected ? running.length + ended.length + reviewing.reviewing.length : 0);
   const isLoading = draftsLoading || (isConnected && (chainLoading || reviewing.isLoading));
   const error = draftsError ?? chainError ?? reviewing.error;
   const showRunningEmpty = isConnected && !packageMissing;
@@ -79,7 +87,10 @@ export function FormsListClient() {
                 title="walform package not configured"
                 description="Set NEXT_PUBLIC_PACKAGE_ID_TESTNET / _MAINNET in .env.local to load on-chain forms."
               />
-            ) : forms.length === 0 && running.length === 0 && reviewing.reviewing.length === 0 ? (
+            ) : forms.length === 0 &&
+              running.length === 0 &&
+              ended.length === 0 &&
+              reviewing.reviewing.length === 0 ? (
               <EmptyState
                 icon={<FileText className="text-muted-foreground h-8 w-8" />}
                 title="No forms yet"
@@ -120,6 +131,13 @@ export function FormsListClient() {
                     <FormCard key={form.id} form={form} onDelete={deleteForm} />
                   ))}
                 </Section>
+                {ended.length > 0 && (
+                  <Section title="Closed" count={ended.length} emptyHint={null}>
+                    {ended.map((f) => (
+                      <OnChainFormCard key={f.formId} form={f} />
+                    ))}
+                  </Section>
+                )}
               </div>
             )}
           </TabsContent>
