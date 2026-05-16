@@ -20,7 +20,9 @@ import { encodeBodyPointer, useWalrusWalletUpload } from '../../walrus';
 import { formatSui } from '../lib/sui-amount';
 import { useFormAllowlist } from './use-form-allowlist';
 import { useFormTreasury } from './use-form-treasury';
+import { useTxSteps, type UseTxStepsResult } from './use-tx-steps';
 import type { FormOnChainDetail } from './use-form-on-chain';
+import type { FileAttachmentValue } from '../../types';
 
 /**
  * Off-chain token-balance gate state. Renderers use this to disable Submit
@@ -50,6 +52,10 @@ export interface UseFormSubmissionResult {
    */
   submit: (values: FieldValues) => Promise<void>;
   isSubmitting: boolean;
+  /** Step-by-step progress for the submit flow. View layer renders this
+   * via `<TxSteps>` to show the user where the wallet sign / Walrus upload /
+   * broadcast currently is. */
+  steps: UseTxStepsResult;
   /** Most recently completed submission for this session, or null. The view
    * layer flips to a thank-you screen when this is set. */
   submitted: SubmittedSummary | null;
@@ -109,6 +115,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingSubmission, setPendingSubmission] = useState<FieldValues | null>(null);
   const [submitted, setSubmitted] = useState<SubmittedSummary | null>(null);
+  const steps = useTxSteps();
 
   const submit = useCallback(
     async (values: FieldValues): Promise<void> => {
@@ -175,7 +182,54 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       }
 
       setIsSubmitting(true);
+      // File auto-upload step is only listed when there are pending File
+      // objects in `values` — keeps the step list tight when no attachments.
+      const pendingFiles = collectPendingFiles(values);
+      const flow: Array<{ id: string; label: string }> = [];
+      if (pendingFiles.length > 0) {
+        flow.push({
+          id: 'files',
+          label:
+            pendingFiles.length === 1
+              ? 'Uploading attachment to Walrus'
+              : `Uploading ${pendingFiles.length} attachments to Walrus`,
+        });
+      }
+      flow.push(
+        { id: 'encrypt', label: 'Encrypting your response with Seal' },
+        { id: 'walrus', label: 'Storing encrypted body on Walrus' },
+        { id: 'sign', label: 'Sign the transaction in your wallet' },
+        { id: 'broadcast', label: 'Broadcasting to Sui' },
+        { id: 'confirm', label: 'Confirming on-chain' },
+      );
+      steps.start(flow);
       try {
+        // 1. Auto-upload any pending File attachments to Walrus and replace
+        //    the File instance in `values` with a serializable attachment
+        //    object before we encrypt. The submitter pays for both the
+        //    attachment WAL and the body WAL.
+        if (pendingFiles.length > 0) {
+          steps.advance('files', 'Wallet may prompt to sign Walrus storage txs.');
+          for (let i = 0; i < pendingFiles.length; i++) {
+            const { fieldId, file } = pendingFiles[i]!;
+            steps.advance(
+              'files',
+              `Uploading ${file.name}${pendingFiles.length > 1 ? ` (${i + 1}/${pendingFiles.length})` : ''}…`,
+            );
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const { url } = await uploadBlob(bytes, { epochs: 10 });
+            const next: FileAttachmentValue = {
+              url,
+              name: file.name,
+              size: file.size,
+              type: file.type || '',
+            };
+            (values as Record<string, unknown>)[fieldId] = next;
+          }
+        }
+
+        // 2. Encrypt the serialized form values (now with file URLs).
+        steps.advance('encrypt');
         const plaintext = new TextEncoder().encode(JSON.stringify(values));
         const { ciphertext, nonce } = await sealEncryptSubmission({
           seal,
@@ -185,19 +239,14 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           plaintext,
         });
 
-        // Walrus body pivot (hackathon spec compliance): the Seal ciphertext
-        // lives on Walrus; the Sui Submission stores only a short pointer in
-        // `encrypted_body`. The submitter's wallet pays SUI gas for the
-        // Walrus registration tx + WAL for storage.
-        toast.loading('Uploading encrypted response to Walrus…', {
-          id: 'walrus-body',
-        });
+        // 3. Walrus body pivot: Seal ciphertext goes to Walrus; the Sui
+        //    Submission keeps only a short pointer in `encrypted_body`.
+        steps.advance('walrus', 'Wallet may prompt to sign a Walrus storage tx.');
         const { blobId } = await uploadBlob(ciphertext, { epochs: 10 });
-        toast.success('Stored on Walrus — broadcasting Sui receipt…', {
-          id: 'walrus-body',
-        });
         const bodyPointer = encodeBodyPointer(blobId);
 
+        // 4. Build + sign the Sui submission tx.
+        steps.advance('sign', 'Approve the transaction in your wallet.');
         const tx =
           form.accessMode === 3
             ? await buildPaid({
@@ -219,11 +268,11 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
                 share: true,
               });
 
+        steps.advance('broadcast');
         const { digest } = await execute({ transaction: tx });
+        steps.advance('confirm');
         await invalidateChain(digest);
-        toast.success(
-          form.schema?.settings.successMessage ?? 'Thanks — your response was recorded',
-        );
+        steps.finishOk();
         setPendingSubmission(null);
         setSubmitted({
           digest,
@@ -231,7 +280,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           submittedAtMs: Date.now(),
         });
       } catch (err) {
-        toast.dismiss('walrus-body');
+        steps.finishError();
         if (err instanceof InsufficientSuiError) {
           toast.error(`Need at least ${formatSui(err.required)} SUI to pay the submission fee.`);
         } else {
@@ -270,6 +319,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       invalidateChain,
       uploadBlob,
       walrusReady,
+      steps,
     ],
   );
 
@@ -286,6 +336,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
   return {
     submit,
     isSubmitting,
+    steps,
     submitted,
     resetSubmitted,
     connectOpen,
@@ -300,6 +351,22 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
     },
     account,
   };
+}
+
+/**
+ * Walks the form values for raw `File` instances (auto-stored by the new
+ * FileField when a respondent picks a file). Returns the (fieldId, file)
+ * pairs so the submit flow can upload them to Walrus and rewrite the values
+ * with serializable attachment URLs before encryption.
+ */
+function collectPendingFiles(values: FieldValues): Array<{ fieldId: string; file: File }> {
+  const out: Array<{ fieldId: string; file: File }> = [];
+  for (const [fieldId, v] of Object.entries(values)) {
+    if (typeof File !== 'undefined' && v instanceof File) {
+      out.push({ fieldId, file: v });
+    }
+  }
+  return out;
 }
 
 interface ResolveAllowlistInput {

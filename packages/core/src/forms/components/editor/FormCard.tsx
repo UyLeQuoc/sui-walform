@@ -16,6 +16,7 @@ import { Input } from '../../../ui/input';
 import { cn } from '../../../lib/utils';
 import { useFormBuilderStore } from '../../store/form-builder-store';
 import type { FormField, FormPage } from '../../../types';
+import { isInputField } from '../../lib/field-types';
 import { CoverImageEditor } from './CoverImage';
 import { FieldBlock } from './FieldBlock';
 import { FormHeader } from './FormHeader';
@@ -130,14 +131,20 @@ export function FormCard({ formAreaStyle, paletteDropIndex, isPaletteDragging }:
       </div>
 
       <div className="relative w-full max-w-2xl">
-        {isMultiPage && (
-          <PageStrip
-            pages={pages!}
-            activePageId={activePageId}
-            onSelect={setActivePageId}
-            onAdd={() => addPage(null)}
-          />
-        )}
+        <PageStrip
+          pages={
+            isMultiPage
+              ? pages!
+              : // Synthesize a virtual "Page 1" so the strip is visible the
+                // moment the form opens — clicking + materializes pages[].
+                ([{ id: '__virtual_page_1', title: '', fieldIds: [] }] as FormPage[])
+          }
+          activePageId={isMultiPage ? activePageId : '__virtual_page_1'}
+          onSelect={(id) => {
+            if (id !== '__virtual_page_1') setActivePageId(id);
+          }}
+          onAdd={() => addPage(null)}
+        />
 
         <div
           ref={setCardDroppableRef}
@@ -221,21 +228,6 @@ export function FormCard({ formAreaStyle, paletteDropIndex, isPaletteDragging }:
             )}
             </div>
           </div>
-
-          {!isMultiPage && (
-            <div className="mt-2 px-6 pb-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => addPage(null)}
-                className="text-muted-foreground hover:text-foreground -ml-2"
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Add page break
-              </Button>
-            </div>
-          )}
 
           <div className="px-3 pb-6">
             <div
@@ -370,12 +362,17 @@ function FieldListWithIndicators({
   selectedFieldId,
   renderIndicator,
 }: FieldListProps) {
+  // Question numbering — only count input fields. Layout blocks (heading,
+  // description, markdown, divider, space) get no number. Numbers reset per
+  // page render since `fields` is the current page's view.
+  let questionCounter = 0;
   return (
     <div className="flex flex-col">
       {fields.map((field, localIdx) => {
         const flatIdx = flatStartIndex + localIdx;
         const showIndicatorAbove = isPaletteDragging && paletteDropIndex === flatIdx;
         const isDimmed = anySelected && selectedFieldId !== field.id;
+        const questionNumber = isInputField(field) ? ++questionCounter : null;
         return (
           <div key={field.id} data-field-id={field.id}>
             {showIndicatorAbove && renderIndicator()}
@@ -385,7 +382,7 @@ function FieldListWithIndicators({
                 isDimmed && 'opacity-60 blur-[1.5px]',
               )}
             >
-              <FieldBlock field={field} index={flatIdx} />
+              <FieldBlock field={field} index={flatIdx} questionNumber={questionNumber} />
             </div>
           </div>
         );

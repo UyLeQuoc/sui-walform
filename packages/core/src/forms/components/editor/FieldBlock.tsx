@@ -24,6 +24,10 @@ import { SlashCommandMenu } from './SlashCommandMenu';
 interface FieldBlockProps {
   field: FormField;
   index: number;
+  /** 1-based ordinal among input fields on this page; null for layout
+   * blocks (heading, description, markdown, divider, space). When provided,
+   * a muted-foreground "1." prefix is rendered before the type icon. */
+  questionNumber?: number | null;
 }
 
 interface CanvasBlockShellProps {
@@ -195,7 +199,7 @@ const MarkdownCanvasBlock = memo(function MarkdownCanvasBlock({
   );
 });
 
-function FieldBlockImpl({ field, index }: FieldBlockProps) {
+function FieldBlockImpl({ field, index, questionNumber }: FieldBlockProps) {
   const selectedFieldId = useFormBuilderStore((s) => s.selectedFieldId);
   const setSelectedFieldId = useFormBuilderStore((s) => s.setSelectedFieldId);
   const isSelected = selectedFieldId === field.id;
@@ -300,7 +304,15 @@ function FieldBlockImpl({ field, index }: FieldBlockProps) {
       )}
     >
       {/* Label row */}
-      <div className="relative flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0">
+      <div className="relative flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0">
+        {questionNumber != null && (
+          <span
+            aria-hidden
+            className="text-muted-foreground shrink-0 font-mono text-[11px] tabular-nums select-none"
+          >
+            {questionNumber}.
+          </span>
+        )}
         <FieldTypeIcon type={field.type} className="text-muted-foreground/50 mr-1 shrink-0" />
         <EditorContent editor={editor} {...stopDragActivation} className={LABEL_EDITOR_CLASS} />
         {field.required && (

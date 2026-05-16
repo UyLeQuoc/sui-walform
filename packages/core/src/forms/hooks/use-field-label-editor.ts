@@ -4,7 +4,7 @@ import { Extension } from '@tiptap/core';
 import Placeholder from '@tiptap/extension-placeholder';
 import StarterKit from '@tiptap/starter-kit';
 import { useEditor, type Editor } from '@tiptap/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FieldType } from '../../types';
 import { useFormBuilderStore } from '../store/form-builder-store';
 
@@ -63,6 +63,18 @@ export function useFieldLabelEditor({
       updateFieldLabel(fieldId, text);
     },
   });
+
+  // External label edits (right-sidebar FieldSettings input, undo/redo,
+  // AI-generated renames) must round-trip back into the TipTap editor so
+  // the canvas reflects them without a page reload. `setContent` with the
+  // same text would still re-fire onUpdate → infinite loop, so we gate on
+  // a strict text inequality first.
+  useEffect(() => {
+    if (!editor) return;
+    const current = editor.getText();
+    if (current === initialLabel) return;
+    editor.commands.setContent(initialLabel, { emitUpdate: false });
+  }, [editor, initialLabel]);
 
   const handleSlashSelect = (type: FieldType) => {
     editor?.commands.clearContent();

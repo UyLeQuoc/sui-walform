@@ -16,6 +16,7 @@ import { uploadCoverImageIfNeeded } from '../lib/upload-cover-on-publish';
 import type { PublishOptions } from '../components/publish/PublishDialog';
 import { formDb } from '../services/form-db';
 import { usePublishStore } from '../store/publish-store';
+import { useTxSteps, type UseTxStepsResult } from './use-tx-steps';
 
 export interface UsePublishFormInput {
   formId: string;
@@ -36,6 +37,8 @@ export interface UsePublishFormResult {
   publish: (options: PublishOptions) => Promise<PublishedFormRefs | null>;
   /** True iff the active network has a deployed walform package. */
   isReady: boolean;
+  /** Step indicator state — render via `<TxSteps steps={steps.steps} />`. */
+  steps: UseTxStepsResult;
 }
 
 /**
@@ -62,6 +65,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
   const { uploadBlob } = useWalrusWalletUpload();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const steps = useTxSteps();
 
   const publish = useCallback(
     async (options: PublishOptions): Promise<PublishedFormRefs | null> => {
@@ -71,10 +75,34 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
       }
       setIsSubmitting(true);
       setPublishState(formId, 'publishing');
-      try {
-        const stored = await formDb.getById(formId);
-        if (!stored) throw new Error('Form not found locally');
 
+      // Compose the step list based on what this publish actually needs.
+      const stored = await formDb.getById(formId);
+      if (!stored) {
+        setIsSubmitting(false);
+        setPublishState(formId, 'error');
+        toast.error('Form not found locally');
+        return null;
+      }
+      const hasCover = !!stored.schema.coverImage?.startsWith('data:');
+      const isSealed =
+        options.mode === 'on-chain' && options.access === 'private';
+      const isPaid = options.mode === 'on-chain' && options.access === 'paid';
+      const flow: Array<{ id: string; label: string }> = [];
+      if (hasCover) flow.push({ id: 'cover', label: 'Uploading cover image to Walrus' });
+      flow.push(
+        { id: 'sign', label: 'Sign the publish transaction in your wallet' },
+        { id: 'broadcast', label: 'Broadcasting to Sui' },
+        { id: 'confirm', label: 'Confirming on-chain' },
+      );
+      if (isSealed) flow.push({ id: 'seal', label: 'Sealing schema (private form)' });
+      if (isPaid) flow.push({ id: 'treasury', label: 'Setting up paid-form treasury' });
+      steps.start(flow);
+
+      try {
+        if (hasCover) {
+          steps.advance('cover', 'Wallet may prompt to sign a Walrus storage tx.');
+        }
         const publishSchema = await uploadCoverImageIfNeeded(stored, uploadBlob);
 
         const { tx, needsSealedSchemaFollowUp } = buildPublishTx({
@@ -84,14 +112,18 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
           options,
         });
 
+        steps.advance('sign', 'Approve the transaction in your wallet.');
         const { digest } = await execute({ transaction: tx });
+        steps.advance('broadcast');
 
+        steps.advance('confirm');
         const ids = await extractPublishIds(suiClient, digest, originalPackageId ?? packageId);
         if (!ids.formObjectId || !ids.formOwnerCapId) {
           throw new Error('Publish succeeded but Form/FormOwnerCap ids missing from effects');
         }
 
         if (needsSealedSchemaFollowUp && originalPackageId && seal) {
+          steps.advance('seal', 'Encrypting schema with Seal — one extra wallet sign.');
           await runSealedSchemaFollowUp({
             formId,
             packageId,
@@ -104,6 +136,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
         }
 
         if (options.mode === 'on-chain' && options.access === 'paid') {
+          steps.advance('treasury', 'Creating an on-chain treasury to collect submission fees.');
           await runTreasuryFollowUp({
             packageId,
             formOwnerCapId: ids.formOwnerCapId,
@@ -122,6 +155,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
         usePublishStore.getState().clearPublished(formId);
         await invalidateChain(digest);
 
+        steps.finishOk();
         toast.success(buildSuccessMessage(options));
         return {
           formObjectId: ids.formObjectId,
@@ -129,6 +163,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
           mode: options.mode === 'on-chain' ? 'on-chain' : 'template',
         };
       } catch (err) {
+        steps.finishError();
         setPublishState(formId, 'error');
         const msg = err instanceof Error ? err.message : String(err);
         toast.error(`Publish failed: ${msg}`);
@@ -149,6 +184,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
       setPublishState,
       uploadBlob,
       formId,
+      steps,
     ],
   );
 
@@ -156,6 +192,7 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
     isSubmitting,
     publish,
     isReady: Boolean(packageId),
+    steps,
   };
 }
 

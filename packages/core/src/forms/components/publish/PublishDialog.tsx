@@ -18,6 +18,7 @@ import { Textarea } from '../../../ui/textarea';
 import { Separator } from '../../../ui/separator';
 import { cn } from '../../../lib/utils';
 import { dataUrlToBytes, formatWal, useStorageCost } from '../../../walrus';
+import { TxSteps, type TxStep } from '../shared/TxSteps';
 
 export type PublishMode = 'on-chain' | 'marketplace';
 export type PublishAccess = 'public' | 'private' | 'token' | 'paid';
@@ -64,6 +65,9 @@ interface PublishDialogProps {
    */
   coverImageDataUrl?: string;
   isSubmitting?: boolean;
+  /** Step-by-step publish progress from `usePublishForm().steps`. Rendered
+   * above the dialog footer while `isSubmitting`. */
+  txSteps?: TxStep[];
   onSubmit: (options: PublishOptions) => Promise<void> | void;
 }
 
@@ -83,6 +87,7 @@ export function PublishDialog({
   formTags,
   coverImageDataUrl,
   isSubmitting,
+  txSteps,
   onSubmit,
 }: PublishDialogProps) {
   const [mode, setMode] = useState<PublishMode>('on-chain');
@@ -117,10 +122,18 @@ export function PublishDialog({
 
   const allowlist = useMemo(
     () =>
-      allowlistRaw
-        .split(/[\n,]/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      // Permissive parser: accept comma, semicolon, any whitespace (newline,
+      // tab, space). Strip surrounding quotes/brackets/angle-brackets so
+      // pastes like `["0x…", "0x…"]` or `<0x…>` Just Work. Dedup case-
+      // sensitively (Sui addresses are lowercase).
+      Array.from(
+        new Set(
+          allowlistRaw
+            .split(/[\s,;]+/)
+            .map((s) => s.trim().replace(/^[\[\]"'<>(){}]+|[\[\]"'<>(){}]+$/g, ''))
+            .filter((s) => s.startsWith('0x') && s.length >= 3),
+        ),
+      ),
     [allowlistRaw],
   );
 
@@ -137,10 +150,14 @@ export function PublishDialog({
   const storageCost = useStorageCost(coverBytes, 5);
   const tags = useMemo(
     () =>
-      tagsRaw
-        .split(/[\n,]/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      Array.from(
+        new Set(
+          tagsRaw
+            .split(/[\s,;]+/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+        ),
+      ),
     [tagsRaw],
   );
 
@@ -254,6 +271,15 @@ export function PublishDialog({
             isLoading={storageCost.isLoading}
             error={storageCost.error}
           />
+        )}
+
+        {isSubmitting && txSteps && txSteps.length > 0 && (
+          <div className="bg-muted/30 rounded-md border p-3">
+            <p className="text-foreground mb-2 text-[11px] font-medium tracking-wide uppercase">
+              Publishing your form
+            </p>
+            <TxSteps steps={txSteps} />
+          </div>
         )}
 
         <DialogFooter>
@@ -383,16 +409,17 @@ function OnChainFields({
 
       {access === 'private' && (
         <div className="flex flex-col gap-1.5">
-          <Label>Allowlist (one address per line or comma-separated)</Label>
+          <Label>Allowlist</Label>
           <Textarea
             value={allowlistRaw}
             onChange={(e) => setAllowlistRaw(e.target.value)}
-            placeholder="0xabc…&#10;0xdef…"
+            placeholder={'Paste addresses in any format — separated by commas, spaces, or new lines.\n0xabc…\n0xdef…'}
             rows={4}
             className="font-mono text-xs"
           />
           <span className="text-muted-foreground text-xs">
-            {allowlistCount} {allowlistCount === 1 ? 'address' : 'addresses'}
+            {allowlistCount} {allowlistCount === 1 ? 'address' : 'addresses'} · separators:
+            commas, spaces, or new lines (quotes/brackets stripped)
           </span>
         </div>
       )}

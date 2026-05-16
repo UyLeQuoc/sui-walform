@@ -24,7 +24,7 @@ export function PublishFormButton({ formId, formTitle }: PublishFormButtonProps)
   const router = useRouter();
   const { isConnected } = useCurrentWallet();
   const { coverDataUrl, description, tags, refresh: refreshCover } = useDraftCoverDataUrl(formId);
-  const { isSubmitting, publish, isReady } = usePublishForm({ formId });
+  const { isSubmitting, publish, isReady, steps: txSteps } = usePublishForm({ formId });
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -74,6 +74,7 @@ export function PublishFormButton({ formId, formTitle }: PublishFormButtonProps)
         formTags={tags}
         coverImageDataUrl={coverDataUrl}
         isSubmitting={isSubmitting}
+        txSteps={txSteps.steps}
         onSubmit={async (options) => {
           const result = await publish(options);
           setDialogOpen(false);

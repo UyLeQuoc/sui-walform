@@ -9,7 +9,9 @@ import { useFormPreview } from '../../hooks/use-form-preview';
 import { FormAppearanceProvider } from '../../lib/form-appearance-context';
 import type { FormSchema } from '../../../types';
 import type { FieldValues } from 'react-hook-form';
+import { isInputField } from '../../lib/field-types';
 import { PreviewFieldRenderer } from './PreviewFieldRenderer';
+import { QuestionNumberProvider } from './PreviewField';
 
 export interface FormPreviewProps {
   /** The form schema to render. Builder pulls this from its Zustand store;
@@ -156,9 +158,22 @@ export function FormPreview({ schema, onSubmit, prefill, isSubmitting }: FormPre
               )}
 
               <div className="flex flex-col px-3">
-                {currentFields.map((field) => (
-                  <PreviewFieldRenderer key={field.id} field={field} control={form.control} />
-                ))}
+                {(() => {
+                  // Question numbering for preview + Mode A renderer — only
+                  // input fields are counted, layout blocks (heading,
+                  // description, markdown, divider, space) pass null so they
+                  // render without a number. Numbers reset per page so a
+                  // multi-page form starts each page at 1.
+                  let questionCounter = 0;
+                  return currentFields.map((field) => {
+                    const questionNumber = isInputField(field) ? ++questionCounter : null;
+                    return (
+                      <QuestionNumberProvider key={field.id} value={questionNumber}>
+                        <PreviewFieldRenderer field={field} control={form.control} />
+                      </QuestionNumberProvider>
+                    );
+                  });
+                })()}
               </div>
             </div>
 

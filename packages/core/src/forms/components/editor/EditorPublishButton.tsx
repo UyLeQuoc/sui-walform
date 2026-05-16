@@ -27,7 +27,7 @@ export function EditorPublishButton({ formId }: EditorPublishButtonProps) {
   const formTags = useFormBuilderStore((s) => s.schema.tags ?? EMPTY_TAGS);
   const { isConnected } = useCurrentWallet();
   const { coverDataUrl, refresh: refreshCover } = useDraftCoverDataUrl(formId);
-  const { isSubmitting, publish, isReady } = usePublishForm({ formId });
+  const { isSubmitting, publish, isReady, steps: txSteps } = usePublishForm({ formId });
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -80,6 +80,7 @@ export function EditorPublishButton({ formId }: EditorPublishButtonProps) {
         formTags={formTags}
         coverImageDataUrl={coverDataUrl}
         isSubmitting={isSubmitting}
+        txSteps={txSteps.steps}
         onSubmit={handleSubmit}
       />
     </>

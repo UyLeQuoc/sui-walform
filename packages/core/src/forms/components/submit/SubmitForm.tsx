@@ -5,13 +5,13 @@ import Link from 'next/link';
 import { useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { Logo } from '../../../ui/logo';
-import { Spinner } from '../../../ui/spinner';
 import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
 import { WalletConnectModal } from '../../../sui/wallet-ui/WalletConnectModal';
 import type { ExplorerNetwork } from '../../../sui/explorer';
 import { CoverImageView } from '../editor/CoverImage';
 import { ThemeToggle } from '../editor/ThemeToggle';
 import { FormPreview } from '../preview/FormPreview';
+import { TxSteps } from '../shared/TxSteps';
 import { useFormSubmission } from '../../hooks/use-form-submission';
 import { useFormSubmissions } from '../../hooks/use-form-submissions';
 import { usePrefillFromHash } from '../../hooks/use-prefill-from-hash';
@@ -52,6 +52,7 @@ export function SubmitForm({ form }: SubmitFormProps) {
     isSubmitting,
     submitted,
     resetSubmitted,
+    steps: txSteps,
   } = submission;
   const prefill = usePrefillFromHash();
   const { network: rawNetwork } = useSuiClientContext();
@@ -160,10 +161,12 @@ export function SubmitForm({ form }: SubmitFormProps) {
             </>
           )}
         </div>
-        {isSubmitting && !submitted && (
-          <div className="text-muted-foreground mt-4 flex items-center gap-2 text-xs">
-            <Spinner className="size-3.5" />
-            Encrypting + submitting on-chain…
+        {isSubmitting && !submitted && txSteps.steps.length > 0 && (
+          <div className="bg-card mt-4 w-full max-w-2xl rounded-xl border p-4 shadow-sm">
+            <p className="text-foreground mb-3 text-xs font-medium tracking-wide uppercase">
+              Submitting your response
+            </p>
+            <TxSteps steps={txSteps.steps} />
           </div>
         )}
         <p className="text-muted-foreground/70 mt-4 max-w-2xl text-center text-[11px]">
