@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Paperclip } from 'lucide-react';
 import { Button } from '../../../ui/button';
 import { Card, CardContent } from '../../../ui/card';
 import {
@@ -14,12 +14,11 @@ import {
 import { Table, TableBody, TableCell, TableRow } from '../../../ui/table';
 import { shortAddr } from '../../lib/format-address';
 import { formatCell } from '../../lib/format-submission-cell';
-import { isFileAttachmentValue } from '../../lib/file-attachment';
+import { coerceFileAttachment, isFileAttachmentValue } from '../../lib/file-attachment';
 import { summarizeField } from '../../lib/aggregate-submissions';
 import type { SubmissionRow } from '../../hooks/use-form-submissions';
 import type { FormField } from '../../../types';
 import { FieldViz, FieldStatLine } from './AggregateCharts';
-import { FileAttachmentView } from './FileAttachmentView';
 
 interface ByQuestionPanelProps {
   fields: FormField[];
@@ -232,7 +231,14 @@ function renderAnswer(field: FormField, value: unknown): ReactNode {
     return <span className="text-muted-foreground/60 text-xs italic">— not answered —</span>;
   }
   if (field.type === 'file' || isFileAttachmentValue(value)) {
-    return <FileAttachmentView value={value} />;
+    const attachment = coerceFileAttachment(value);
+    return (
+      <div className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+        <Paperclip className="size-3" />
+        <span className="font-medium">{attachment?.name ?? 'Attached file'}</span>
+        <span className="text-muted-foreground/70 italic">— view in Individual tab</span>
+      </div>
+    );
   }
   return formatCell(value);
 }

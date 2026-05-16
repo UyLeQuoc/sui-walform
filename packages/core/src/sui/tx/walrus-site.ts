@@ -95,7 +95,6 @@ export const WALFORM_BUILDER_ROUTES: Record<string, string> = {
   '/forms/*/preview': '/forms/_/preview/index.html',
   '/forms/*/results': '/forms/_/results/index.html',
   '/forms/*': '/forms/_/index.html',
-  '/f/*/receipt': '/f/_/receipt/index.html',
   '/f/*': '/f/_/index.html',
 };
 

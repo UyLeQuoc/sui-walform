@@ -14,13 +14,19 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Calendar,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Copy,
   ExternalLink,
+  Hash,
   Lock,
+  User,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Badge } from '../../../ui/badge';
 import { Button } from '../../../ui/button';
 import { Card, CardContent } from '../../../ui/card';
@@ -36,12 +42,11 @@ import { Spinner } from '../../../ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../ui/table';
 import { suivisionUrl, type ExplorerNetwork } from '../../../sui/explorer';
 import { shortAddr } from '../../lib/format-address';
-import { formatCell } from '../../lib/format-submission-cell';
 import type { SubmissionRow } from '../../hooks/use-form-submissions';
 import type { DecryptedRow } from '../../hooks/use-submission-decryption';
 import type { SubmissionPriority, SubmissionStatus } from '../../services/submission-tags-db';
 import type { FormField } from '../../../types';
-import { FileAttachmentView } from './FileAttachmentView';
+import { QuestionCard } from './QuestionCard';
 import { PriorityPill, StatusPill } from './SubmissionTagPills';
 
 interface SubmissionsDataTableProps {
@@ -287,7 +292,10 @@ export function SubmissionsDataTable({
         </div>
 
         <Dialog open={!!openRow} onOpenChange={(o) => !o && setOpenId(null)}>
-          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogContent
+            className="max-h-[90vh] gap-0 overflow-hidden p-0 sm:max-w-3xl"
+            showCloseButton={false}
+          >
             {openRow && (
               <SubmissionDetail
                 row={openRow}
@@ -302,6 +310,7 @@ export function SubmissionsDataTable({
                 total={rows.length}
                 onPrev={openIndex > 0 ? goPrev : undefined}
                 onNext={openIndex >= 0 && openIndex < rows.length - 1 ? goNext : undefined}
+                onClose={() => setOpenId(null)}
               />
             )}
           </DialogContent>
@@ -349,6 +358,7 @@ interface SubmissionDetailProps {
   total: number;
   onPrev?: () => void;
   onNext?: () => void;
+  onClose: () => void;
 }
 
 function SubmissionDetail({
@@ -364,15 +374,30 @@ function SubmissionDetail({
   total,
   onPrev,
   onNext,
+  onClose,
 }: SubmissionDetailProps) {
+  const submittedDate = new Date(row.submittedAtMs);
+  const handleCopyId = async () => {
+    try {
+      await navigator.clipboard.writeText(row.submissionId);
+      toast.success('Submission ID copied');
+    } catch {
+      toast.error('Clipboard unavailable');
+    }
+  };
+
+  // Show every question — including unanswered ones — so the dialog reads like
+  // a completed Google Forms response (number, label, answer in a card).
+  const inputFields = fields;
+
   return (
-    <>
-      <DialogHeader>
+    <div className="flex max-h-[90vh] flex-col">
+      <DialogHeader className="bg-muted/30 flex-shrink-0 gap-3 border-b px-6 py-4">
         <div className="flex items-center justify-between gap-2">
-          <DialogTitle className="font-mono text-sm">{shortAddr(row.submissionId)}</DialogTitle>
-          <div className="flex items-center gap-1">
+          <DialogTitle className="text-base">Response {index + 1}</DialogTitle>
+          <div className="flex items-center gap-1.5">
             <span className="text-muted-foreground text-xs tabular-nums">
-              {index + 1} / {total}
+              {index + 1} of {total}
             </span>
             <Button
               size="icon"
@@ -394,59 +419,123 @@ function SubmissionDetail({
             >
               <ChevronRight className="h-3.5 w-3.5" />
             </Button>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onClose}>
+              Close
+            </Button>
           </div>
         </div>
-        <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          <span>
-            from <code className="font-mono">{shortAddr(row.submitter)}</code>
-          </span>
-          <span>·</span>
-          <span>{new Date(row.submittedAtMs).toLocaleString()}</span>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <MetaItem icon={User} label="Submitter">
+            <code className="font-mono text-xs">{shortAddr(row.submitter)}</code>
+          </MetaItem>
+          <MetaItem icon={Calendar} label="Submitted">
+            <span className="text-xs">
+              {submittedDate.toLocaleDateString()}{' '}
+              <span className="text-muted-foreground">{submittedDate.toLocaleTimeString()}</span>
+            </span>
+          </MetaItem>
+          <MetaItem icon={Hash} label="Submission">
+            <button
+              type="button"
+              onClick={() => void handleCopyId()}
+              className="hover:text-foreground inline-flex items-center gap-1 text-xs underline-offset-2 hover:underline"
+              title="Copy submission ID"
+            >
+              <code className="font-mono">{shortAddr(row.submissionId)}</code>
+              <Copy className="h-3 w-3" />
+            </button>
+          </MetaItem>
+        </div>
+
+        <DialogDescription className="sr-only">
+          Full response from {shortAddr(row.submitter)} submitted at{' '}
+          {submittedDate.toLocaleString()}.
+        </DialogDescription>
+
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           <a
             href={suivisionUrl(network, 'object', row.submissionId)}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-foreground inline-flex items-center gap-1 underline-offset-2 hover:underline"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs underline-offset-2 hover:underline"
           >
-            on explorer
             <ExternalLink className="h-3 w-3" />
+            View on explorer
           </a>
-        </DialogDescription>
+          {decrypted && (
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="h-3 w-3" />
+              Decrypted
+            </span>
+          )}
+        </div>
       </DialogHeader>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto px-6 py-5">
         {!decrypted && (
-          <Button onClick={onDecrypt} disabled={isPending || !canDecrypt} className="self-start">
-            {isPending ? (
-              <Spinner className="mr-1.5 size-3" />
-            ) : (
-              <Lock className="mr-1.5 h-3 w-3" />
-            )}
-            Decrypt
-          </Button>
-        )}
-        {error && <p className="text-destructive text-xs">{error}</p>}
-        {decrypted && (
-          <dl className="flex flex-col gap-3 text-sm">
-            {fields.map((f) => (
-              <div key={f.id} className="flex flex-col gap-0.5">
-                <dt className="text-muted-foreground text-xs font-medium">{f.label || f.id}</dt>
-                <dd className="break-words">{renderCell(f, decrypted[f.id])}</dd>
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+              <Lock className="text-muted-foreground h-8 w-8" />
+              <div className="flex flex-col gap-1">
+                <h3 className="text-sm font-semibold">Response is encrypted</h3>
+                <p className="text-muted-foreground max-w-sm text-xs">
+                  Decrypt this submission to view the submitter&apos;s answers. Your Seal session
+                  unlocks it without another wallet prompt after the first decrypt.
+                </p>
               </div>
+              <Button onClick={onDecrypt} disabled={isPending || !canDecrypt}>
+                {isPending ? (
+                  <Spinner className="mr-1.5 size-3.5" />
+                ) : (
+                  <Lock className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Decrypt response
+              </Button>
+              {error && <p className="text-destructive text-xs">{error}</p>}
+            </CardContent>
+          </Card>
+        )}
+
+        {decrypted && (
+          <div className="flex flex-col gap-3">
+            {inputFields.map((f, i) => (
+              <QuestionCard
+                key={f.id}
+                index={i + 1}
+                field={f}
+                value={decrypted[f.id]}
+              />
             ))}
-          </dl>
+            {inputFields.length === 0 && (
+              <p className="text-muted-foreground py-6 text-center text-sm">
+                This form has no input questions.
+              </p>
+            )}
+          </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
-function renderCell(field: FormField, value: unknown): ReactNode {
-  if (field.type === 'file') {
-    if (!value) return <span className="text-muted-foreground/60">— not answered —</span>;
-    return <FileAttachmentView value={value} />;
-  }
-  const formatted = formatCell(value);
-  if (!formatted) return <span className="text-muted-foreground/60">— not answered —</span>;
-  return formatted;
+function MetaItem({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: typeof User;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-muted-foreground inline-flex items-center gap-1 text-[10px] font-medium tracking-wide uppercase">
+        <Icon className="h-3 w-3" />
+        {label}
+      </span>
+      {children}
+    </div>
+  );
 }
+

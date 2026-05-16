@@ -1,15 +1,19 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSuiClientContext } from '@mysten/dapp-kit';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { Logo } from '../../../ui/logo';
 import { Spinner } from '../../../ui/spinner';
 import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
 import { WalletConnectModal } from '../../../sui/wallet-ui/WalletConnectModal';
+import type { ExplorerNetwork } from '../../../sui/explorer';
 import { CoverImageView } from '../editor/CoverImage';
 import { ThemeToggle } from '../editor/ThemeToggle';
 import { FormPreview } from '../preview/FormPreview';
 import { useFormSubmission } from '../../hooks/use-form-submission';
+import { useFormSubmissions } from '../../hooks/use-form-submissions';
 import { usePrefillFromHash } from '../../hooks/use-prefill-from-hash';
 import { buildFormAreaStyle } from '../../lib/form-appearance';
 import { getFormFont } from '../../lib/form-fonts';
@@ -18,6 +22,7 @@ import { cn } from '../../../lib/utils';
 import type { FormOnChainDetail } from '../../hooks/use-form-on-chain';
 import { AccessModeBanner } from './AccessModeBanner';
 import { PrefillBanner } from './PrefillBanner';
+import { ThankYouScreen } from './ThankYouScreen';
 
 interface SubmitFormProps {
   /** Required to have a non-null `schema`. The schema may have been
@@ -39,8 +44,39 @@ const ACCESS_MODE_LABEL: Record<0 | 1 | 2 | 3, (form: FormOnChainDetail) => stri
  */
 export function SubmitForm({ form }: SubmitFormProps) {
   const submission = useFormSubmission(form);
-  const { account, allowlistQuery, treasuryQuery, tokenGate, isSubmitting } = submission;
+  const {
+    account,
+    allowlistQuery,
+    treasuryQuery,
+    tokenGate,
+    isSubmitting,
+    submitted,
+    resetSubmitted,
+  } = submission;
   const prefill = usePrefillFromHash();
+  const { network: rawNetwork } = useSuiClientContext();
+  const network: ExplorerNetwork =
+    rawNetwork === 'mainnet' || rawNetwork === 'devnet' ? rawNetwork : 'testnet';
+
+  // On reload we lose the in-session `submitted` flag, but the on-chain
+  // SubmissionCreated event still tells us the connected wallet already
+  // responded. Surface that via the same thank-you screen rather than
+  // rendering an empty form. Pick the most-recent prior row.
+  const { rows: chainRows } = useFormSubmissions(form.formObjectId);
+  const myAddr = account?.address ? normalizeSuiAddress(account.address) : null;
+  const myPriorRow = useMemo(() => {
+    if (!myAddr) return null;
+    return chainRows.find((r) => normalizeSuiAddress(r.submitter) === myAddr) ?? null;
+  }, [chainRows, myAddr]);
+  // Once the user dismisses the "already responded" screen via "Submit
+  // another", we hide it for the rest of the session so the form is
+  // editable again even though the prior row still exists on-chain.
+  const [dismissedPriorRow, setDismissedPriorRow] = useState(false);
+  const handleSubmitAnother = () => {
+    resetSubmitted();
+    setDismissedPriorRow(true);
+  };
+  const showAlreadySubmitted = !submitted && !!myPriorRow && !dismissedPriorRow;
 
   const formAreaStyle = useMemo(
     () =>
@@ -85,21 +121,46 @@ export function SubmitForm({ form }: SubmitFormProps) {
             isPageMode ? 'bg-transparent' : 'bg-card border shadow-xl',
           )}
         >
-          {prefill && <PrefillBanner />}
-          <AccessModeBanner
-            form={form}
-            allowlistQuery={allowlistQuery}
-            treasuryQuery={treasuryQuery}
-            tokenGate={tokenGate}
-            accountAddress={account?.address}
-          />
-          <FormPreview
-            schema={form.schema}
-            onSubmit={submission.submit}
-            prefill={prefill ?? undefined}
-          />
+          {submitted ? (
+            <ThankYouScreen
+              form={form}
+              network={network}
+              variant={{ kind: 'just-submitted', digest: submitted.digest }}
+              submitter={submitted.submitter}
+              submittedAtMs={submitted.submittedAtMs}
+              myRow={myPriorRow}
+              onSubmitAnother={handleSubmitAnother}
+            />
+          ) : showAlreadySubmitted && myPriorRow ? (
+            <ThankYouScreen
+              form={form}
+              network={network}
+              variant={{ kind: 'already-submitted', submissionId: myPriorRow.submissionId }}
+              submitter={myPriorRow.submitter}
+              submittedAtMs={myPriorRow.submittedAtMs}
+              myRow={myPriorRow}
+              onSubmitAnother={handleSubmitAnother}
+            />
+          ) : (
+            <>
+              {prefill && <PrefillBanner />}
+              <AccessModeBanner
+                form={form}
+                allowlistQuery={allowlistQuery}
+                treasuryQuery={treasuryQuery}
+                tokenGate={tokenGate}
+                accountAddress={account?.address}
+              />
+              <FormPreview
+                schema={form.schema}
+                onSubmit={submission.submit}
+                prefill={prefill ?? undefined}
+                isSubmitting={isSubmitting}
+              />
+            </>
+          )}
         </div>
-        {isSubmitting && (
+        {isSubmitting && !submitted && (
           <div className="text-muted-foreground mt-4 flex items-center gap-2 text-xs">
             <Spinner className="size-3.5" />
             Encrypting + submitting on-chain…

@@ -4,6 +4,7 @@ import { AlignCenter, AlignLeft, AlignRight, CornerDownLeft, X } from 'lucide-re
 import { Button } from '../../../ui/button';
 import { Field, FieldGroup, FieldLabel } from '../../../ui/field';
 import { Input } from '../../../ui/input';
+import { Textarea } from '../../../ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '../../../ui/toggle-group';
 import { cn } from '../../../lib/utils';
 import { useFormBuilderStore } from '../../store/form-builder-store';
@@ -108,13 +109,17 @@ export function SubmitSettingsPanel({ className }: SubmitSettingsPanelProps) {
           </Field>
 
           <Field>
-            <FieldLabel htmlFor="success-message">Success message</FieldLabel>
-            <Input
+            <FieldLabel htmlFor="success-message">Thank-you message</FieldLabel>
+            <Textarea
               id="success-message"
               value={settings.successMessage}
               onChange={(e) => updateSettings({ successMessage: e.target.value })}
               placeholder="Thank you for your response!"
+              rows={4}
             />
+            <span className="text-muted-foreground text-xs">
+              Shown to respondents after they submit. Line breaks are preserved.
+            </span>
           </Field>
         </FieldGroup>
       </div>

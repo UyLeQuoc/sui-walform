@@ -31,11 +31,11 @@ import {
   DialogTitle,
 } from '../../../ui/dialog';
 import { Table, TableBody, TableCell, TableRow } from '../../../ui/table';
+import { Paperclip } from 'lucide-react';
 import { shortAddr } from '../../lib/format-address';
 import { formatCell } from '../../lib/format-submission-cell';
-import { isFileAttachmentValue } from '../../lib/file-attachment';
+import { coerceFileAttachment, isFileAttachmentValue } from '../../lib/file-attachment';
 import type { SubmissionRow } from '../../hooks/use-form-submissions';
-import { FileAttachmentView } from './FileAttachmentView';
 import {
   bucketize,
   chartVariantFor,
@@ -232,7 +232,7 @@ function AllAnswersDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{field.label || field.id}</DialogTitle>
           <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
@@ -314,9 +314,24 @@ function renderAnswer(field: FormField, value: unknown): ReactNode {
     return <span className="text-muted-foreground/60 text-xs italic">— not answered —</span>;
   }
   if (field.type === 'file' || isFileAttachmentValue(value)) {
-    return <FileAttachmentView value={value} />;
+    return <FilePlaceholder value={value} />;
   }
   return formatCell(value);
+}
+
+/**
+ * Summary-tab file placeholder — names only, no preview/download. Full file
+ * content (image preview, download links) is reserved for the Individual tab.
+ */
+function FilePlaceholder({ value }: { value: unknown }) {
+  const attachment = coerceFileAttachment(value);
+  return (
+    <div className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+      <Paperclip className="size-3" />
+      <span className="font-medium">{attachment?.name ?? 'Attached file'}</span>
+      <span className="text-muted-foreground/70 italic">— view in Individual tab</span>
+    </div>
+  );
 }
 
 interface FieldVizProps {
@@ -382,8 +397,8 @@ function EmptyHint({ children }: { children: ReactNode }) {
 function PieViz({ buckets }: { buckets: AggregateBucket[] }) {
   const total = buckets.reduce((s, b) => s + b.count, 0);
   return (
-    <div className="grid grid-cols-[140px_1fr] items-center gap-3">
-      <ChartContainer config={CHART_CONFIG} className="aspect-square h-32 w-32">
+    <div className="flex flex-wrap items-center gap-4">
+      <ChartContainer config={CHART_CONFIG} className="aspect-square size-32 shrink-0">
         <PieChart>
           <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
           <Pie
@@ -400,30 +415,26 @@ function PieViz({ buckets }: { buckets: AggregateBucket[] }) {
           </Pie>
         </PieChart>
       </ChartContainer>
-      <Table className="text-xs">
-        <TableBody>
-          {buckets.map((b, i) => {
-            const pct = total === 0 ? 0 : Math.round((b.count / total) * 100);
-            return (
-              <TableRow key={b.label}>
-                <TableCell className="w-4 py-1.5 pr-0 pl-0">
-                  <span
-                    aria-hidden
-                    className="inline-block size-2.5 shrink-0 rounded-sm"
-                    style={{ backgroundColor: PALETTE[i % PALETTE.length] }}
-                  />
-                </TableCell>
-                <TableCell className="line-clamp-1 max-w-0 py-1.5 pl-2 whitespace-normal">
-                  {b.label}
-                </TableCell>
-                <TableCell className="text-muted-foreground py-1.5 pr-0 text-right tabular-nums">
-                  {b.count} · {pct}%
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <ul className="flex min-w-0 flex-1 flex-col gap-1.5 text-xs">
+        {buckets.map((b, i) => {
+          const pct = total === 0 ? 0 : Math.round((b.count / total) * 100);
+          return (
+            <li key={b.label} className="flex items-start gap-2">
+              <span
+                aria-hidden
+                className="mt-1 inline-block size-2.5 shrink-0 rounded-sm"
+                style={{ backgroundColor: PALETTE[i % PALETTE.length] }}
+              />
+              <span className="min-w-0 flex-1 break-words" title={b.label}>
+                {b.label}
+              </span>
+              <span className="text-muted-foreground shrink-0 tabular-nums">
+                {b.count} · {pct}%
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -432,31 +443,29 @@ function HBarViz({ buckets }: { buckets: AggregateBucket[] }) {
   const data = [...buckets].sort((a, b) => b.count - a.count);
   const total = data.reduce((s, b) => s + b.count, 0);
   return (
-    <Table className="text-xs">
-      <TableBody>
-        {data.map((b, i) => {
-          const pct = total === 0 ? 0 : Math.round((b.count / total) * 100);
-          return (
-            <TableRow key={b.label}>
-              <TableCell className="max-w-0 py-1.5 pl-0 whitespace-normal">
-                <div className="flex flex-col gap-1">
-                  <span className="line-clamp-1">{b.label}</span>
-                  <div className="bg-muted relative h-1.5 w-full overflow-hidden rounded-full">
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full"
-                      style={{ width: `${pct}%`, backgroundColor: PALETTE[i % PALETTE.length] }}
-                    />
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell className="text-muted-foreground w-20 py-1.5 pr-0 text-right tabular-nums">
+    <ul className="flex flex-col gap-2 text-xs">
+      {data.map((b, i) => {
+        const pct = total === 0 ? 0 : Math.round((b.count / total) * 100);
+        return (
+          <li key={b.label} className="flex flex-col gap-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="min-w-0 flex-1 break-words" title={b.label}>
+                {b.label}
+              </span>
+              <span className="text-muted-foreground shrink-0 tabular-nums">
                 {b.count} · {pct}%
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+              </span>
+            </div>
+            <div className="bg-muted relative h-1.5 w-full overflow-hidden rounded-full">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={{ width: `${pct}%`, backgroundColor: PALETTE[i % PALETTE.length] }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -517,23 +526,21 @@ function TextTopList({ items, total }: { items: AggregateBucket[]; total: number
       <p className="text-muted-foreground text-[11px] tracking-wide uppercase">
         Top {items.length} answer{items.length === 1 ? '' : 's'}
       </p>
-      <Table className="text-xs">
-        <TableBody>
-          {items.map((it) => {
-            const pct = total === 0 ? 0 : Math.round((it.count / total) * 100);
-            return (
-              <TableRow key={it.label}>
-                <TableCell className="max-w-0 py-1.5 pl-0 whitespace-normal">
-                  <span className="line-clamp-1">{it.label}</span>
-                </TableCell>
-                <TableCell className="text-muted-foreground w-20 py-1.5 pr-0 text-right tabular-nums">
-                  {it.count} · {pct}%
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <ul className="flex flex-col gap-1.5 text-xs">
+        {items.map((it) => {
+          const pct = total === 0 ? 0 : Math.round((it.count / total) * 100);
+          return (
+            <li key={it.label} className="flex items-baseline gap-2">
+              <span className="min-w-0 flex-1 break-words" title={it.label}>
+                {it.label}
+              </span>
+              <span className="text-muted-foreground shrink-0 tabular-nums">
+                {it.count} · {pct}%
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -582,21 +589,36 @@ function FilesSummary({
   rows: Record<string, unknown>[];
   summary: { totalFiles: number; totalBytes: number };
 }) {
+  // Summary tab intentionally hides file content (previews, download links).
+  // Show aggregate counts + filename pills only. Full attachments are viewable
+  // from the Individual tab's submission detail dialog.
   const attachments = rows
     .map((row) => row[field.id])
     .filter(isFileAttachmentValue)
-    .slice(0, 6);
+    .slice(0, 8)
+    .map((a) => coerceFileAttachment(a))
+    .filter((a): a is NonNullable<typeof a> => !!a);
   return (
     <div className="flex flex-col gap-2">
       <p className="text-muted-foreground text-[11px] tracking-wide uppercase">
         {summary.totalFiles} file{summary.totalFiles === 1 ? '' : 's'}
         {summary.totalBytes > 0 && ` · ${formatBytes(summary.totalBytes)}`}
       </p>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap gap-1.5">
         {attachments.map((att, i) => (
-          <FileAttachmentView key={`${att.url}-${i}`} value={att} />
+          <span
+            key={`${att.url}-${i}`}
+            className="bg-muted/40 text-muted-foreground inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px]"
+            title={att.name}
+          >
+            <Paperclip className="size-3 shrink-0" />
+            <span className="truncate">{att.name}</span>
+          </span>
         ))}
       </div>
+      <p className="text-muted-foreground/70 text-[10px] italic">
+        Open the Individual tab to preview or download files.
+      </p>
     </div>
   );
 }

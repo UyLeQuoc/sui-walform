@@ -72,19 +72,32 @@ export function useSubmissionDecryption(
         // ciphertexts skip this step.
         const blobId = decodeBodyPointer(row.ciphertext);
         const ciphertext = blobId ? await fetchWalrusBlob(blobId, network) : row.ciphertext;
-        const plaintextBytes = await sealDecryptSubmission({
-          seal,
-          sessionKey,
-          client: suiClient,
-          // Routing target: the function may have been added in a later
-          // upgrade and is only reachable through the current packageId.
-          packageId: activePackageId,
-          formObjectId: formId,
-          submissionObjectId: row.submissionId,
-          ciphertext,
-          nonce: row.nonce,
-          reviewersObjectId: reviewersState.reviewersId ?? undefined,
-        });
+        // Retry once on the very first decrypt — the Seal SDK lazily loads
+        // key-server metadata on the first `seal.decrypt`, and a slow warmup
+        // otherwise looks like "spinner stopped and nothing happened until I
+        // clicked Decrypt again". The session is already created at this
+        // point, so the retry does NOT trigger another wallet signature.
+        const runDecrypt = () =>
+          sealDecryptSubmission({
+            seal,
+            sessionKey,
+            client: suiClient,
+            // Routing target: the function may have been added in a later
+            // upgrade and is only reachable through the current packageId.
+            packageId: activePackageId,
+            formObjectId: formId,
+            submissionObjectId: row.submissionId,
+            ciphertext,
+            nonce: row.nonce,
+            reviewersObjectId: reviewersState.reviewersId ?? undefined,
+          });
+        let plaintextBytes: Uint8Array;
+        try {
+          plaintextBytes = await runDecrypt();
+        } catch (firstErr) {
+          console.warn('[seal] first decrypt failed, retrying once', firstErr);
+          plaintextBytes = await runDecrypt();
+        }
         const text = new TextDecoder().decode(plaintextBytes);
         let parsed: DecryptedRow;
         try {

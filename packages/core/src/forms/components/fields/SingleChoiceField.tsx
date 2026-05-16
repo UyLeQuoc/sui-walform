@@ -1,7 +1,7 @@
 'use client';
 
 import { Controller, type Control, type FieldValues } from 'react-hook-form';
-import { Field, FieldLabel } from '../../../ui/field';
+import { cn } from '../../../lib/utils';
 import { RadioGroup, RadioGroupItem } from '../../../ui/radio-group';
 import {
   Select,
@@ -55,14 +55,30 @@ export function SingleChoiceField({ field, control }: SingleChoiceFieldProps) {
               onValueChange={rhf.onChange}
               className="flex flex-col gap-2"
             >
-              {options.map((opt) => (
-                <Field key={opt.id} orientation="horizontal">
-                  <RadioGroupItem value={opt.value} id={`${field.id}-${opt.id}`} />
-                  <FieldLabel htmlFor={`${field.id}-${opt.id}`} className="font-normal">
-                    {opt.label}
-                  </FieldLabel>
-                </Field>
-              ))}
+              {options.map((opt) => {
+                const checked = rhf.value === opt.value;
+                return (
+                  <label
+                    key={opt.id}
+                    htmlFor={`${field.id}-${opt.id}`}
+                    style={radiusStyle}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 text-sm transition-colors',
+                      'group-disabled/fieldset:cursor-not-allowed group-disabled/fieldset:opacity-60',
+                      checked
+                        ? 'border-primary bg-primary/10 ring-primary/30 ring-1'
+                        : 'border-input hover:bg-accent',
+                    )}
+                  >
+                    <RadioGroupItem value={opt.value} id={`${field.id}-${opt.id}`} />
+                    <span
+                      className={cn('flex-1 font-normal', checked && 'text-foreground font-medium')}
+                    >
+                      {opt.label}
+                    </span>
+                  </label>
+                );
+              })}
             </RadioGroup>
           )}
         </PreviewField>

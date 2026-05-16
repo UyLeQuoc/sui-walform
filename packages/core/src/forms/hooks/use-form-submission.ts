@@ -33,6 +33,15 @@ export interface TokenGateState {
   isPending: boolean;
 }
 
+export interface SubmittedSummary {
+  /** Sui tx digest of the on-chain submission. */
+  digest: string;
+  /** Submitter address that signed the tx. */
+  submitter: string;
+  /** When the success state was set (client clock). */
+  submittedAtMs: number;
+}
+
 export interface UseFormSubmissionResult {
   /**
    * Submit handler matching `FormPreview`'s `onSubmit` prop. Encrypts +
@@ -41,6 +50,11 @@ export interface UseFormSubmissionResult {
    */
   submit: (values: FieldValues) => Promise<void>;
   isSubmitting: boolean;
+  /** Most recently completed submission for this session, or null. The view
+   * layer flips to a thank-you screen when this is set. */
+  submitted: SubmittedSummary | null;
+  /** Clears `submitted` so the form is rendered again (e.g. submit another). */
+  resetSubmitted: () => void;
   /** Whether the wallet-connect modal is open. Used by the view layer. */
   connectOpen: boolean;
   setConnectOpen: (open: boolean) => void;
@@ -94,6 +108,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
   const [connectOpen, setConnectOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingSubmission, setPendingSubmission] = useState<FieldValues | null>(null);
+  const [submitted, setSubmitted] = useState<SubmittedSummary | null>(null);
 
   const submit = useCallback(
     async (values: FieldValues): Promise<void> => {
@@ -210,6 +225,11 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           form.schema?.settings.successMessage ?? 'Thanks — your response was recorded',
         );
         setPendingSubmission(null);
+        setSubmitted({
+          digest,
+          submitter: account.address,
+          submittedAtMs: Date.now(),
+        });
       } catch (err) {
         toast.dismiss('walrus-body');
         if (err instanceof InsufficientSuiError) {
@@ -261,9 +281,13 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
     }
   }, [pendingSubmission, submit]);
 
+  const resetSubmitted = useCallback(() => setSubmitted(null), []);
+
   return {
     submit,
     isSubmitting,
+    submitted,
+    resetSubmitted,
     connectOpen,
     setConnectOpen,
     onConnected,

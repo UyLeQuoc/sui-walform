@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../../../ui/button';
+import { Spinner } from '../../../ui/spinner';
 import { cn } from '../../../lib/utils';
 import { useFormPreview } from '../../hooks/use-form-preview';
 import { FormAppearanceProvider } from '../../lib/form-appearance-context';
@@ -21,9 +22,14 @@ export interface FormPreviewProps {
   /** Initial field values (e.g. from a Walrus-Site `#prefill=…` handoff).
    *  Merged on top of the schema-derived defaults — applied once at mount. */
   prefill?: Record<string, unknown>;
+  /** External submission-in-flight flag (encrypting, wallet signing,
+   *  broadcasting). When true the whole form is disabled — RHF's own
+   *  `formState.isSubmitting` only covers the duration of the `onSubmit`
+   *  callback, but wallet flows can have surrounding async work too. */
+  isSubmitting?: boolean;
 }
 
-export function FormPreview({ schema, onSubmit, prefill }: FormPreviewProps) {
+export function FormPreview({ schema, onSubmit, prefill, isSubmitting }: FormPreviewProps) {
   const {
     form,
     handleSubmit,
@@ -118,65 +124,81 @@ export function FormPreview({ schema, onSubmit, prefill }: FormPreviewProps) {
             }
           }}
         >
-          <div
-            key={currentPage?.id ?? 'page-0'}
-            className={cn(
-              'animate-in fade-in duration-200 ease-out',
-              isMultiPage &&
-                (direction === 1 ? 'slide-in-from-right-8' : 'slide-in-from-left-8'),
-            )}
+          {/* `<fieldset disabled>` natively disables every nested form control
+              (inputs, buttons, RadixUI radios/checkboxes, custom <button>s),
+              which is what we want while the wallet is signing. `contents`
+              keeps the existing flex/padding layout undisturbed. The
+              `group/fieldset` lets option wrappers respond visually. */}
+          <fieldset
+            disabled={form.formState.isSubmitting || isSubmitting}
+            className="group/fieldset contents"
           >
-            {isMultiPage && currentPage && (currentPage.title || currentPage.description) && (
-              <div className="px-6 pb-2">
-                {currentPage.title && (
-                  <h2 className="text-lg font-semibold">{currentPage.title}</h2>
-                )}
-                {currentPage.description && (
-                  <p className="text-muted-foreground mt-1 text-sm">{currentPage.description}</p>
-                )}
+            <div
+              key={currentPage?.id ?? 'page-0'}
+              className={cn(
+                'animate-in fade-in duration-200 ease-out',
+                isMultiPage &&
+                  (direction === 1 ? 'slide-in-from-right-8' : 'slide-in-from-left-8'),
+                'group-disabled/fieldset:opacity-70',
+              )}
+            >
+              {isMultiPage && currentPage && (currentPage.title || currentPage.description) && (
+                <div className="px-6 pb-2">
+                  {currentPage.title && (
+                    <h2 className="text-lg font-semibold">{currentPage.title}</h2>
+                  )}
+                  {currentPage.description && (
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      {currentPage.description}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-col px-3">
+                {currentFields.map((field) => (
+                  <PreviewFieldRenderer key={field.id} field={field} control={form.control} />
+                ))}
+              </div>
+            </div>
+
+            {pageError && (
+              <div className="px-6 pt-2">
+                <p className="text-destructive text-xs">{pageError}</p>
               </div>
             )}
 
-            <div className="flex flex-col px-3">
-              {currentFields.map((field) => (
-                <PreviewFieldRenderer key={field.id} field={field} control={form.control} />
-              ))}
+            <div className={rowAlignClass}>
+              {isMultiPage && navigation.allowBack && !isFirstPage && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={goPrevious}
+                  className={buttonWidthClass}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  {previousLabel}
+                </Button>
+              )}
+              {isMultiPage && !isLastPage ? (
+                <Button type="submit" className={buttonWidthClass}>
+                  {nextLabel}
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  disabled={form.formState.isSubmitting || isSubmitting}
+                  className={cn(buttonWidthClass, !isMultiPage && isCenter && 'w-full')}
+                >
+                  {(form.formState.isSubmitting || isSubmitting) && (
+                    <Spinner className="mr-1.5 size-3.5" />
+                  )}
+                  {submitLabel}
+                </Button>
+              )}
             </div>
-          </div>
-
-          {pageError && (
-            <div className="px-6 pt-2">
-              <p className="text-destructive text-xs">{pageError}</p>
-            </div>
-          )}
-
-          <div className={rowAlignClass}>
-            {isMultiPage && navigation.allowBack && !isFirstPage && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={goPrevious}
-                className={buttonWidthClass}
-              >
-                <ChevronLeft className="mr-1 h-4 w-4" />
-                {previousLabel}
-              </Button>
-            )}
-            {isMultiPage && !isLastPage ? (
-              <Button type="submit" className={buttonWidthClass}>
-                {nextLabel}
-                <ChevronRight className="ml-1 h-4 w-4" />
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                disabled={form.formState.isSubmitting}
-                className={cn(buttonWidthClass, !isMultiPage && isCenter && 'w-full')}
-              >
-                {submitLabel}
-              </Button>
-            )}
-          </div>
+          </fieldset>
         </form>
       </div>
     </FormAppearanceProvider>
