@@ -34,11 +34,38 @@ function envDefaultNetwork(): WalFormNetwork {
   return v === 'mainnet' ? 'mainnet' : 'testnet';
 }
 
-function readStoredNetwork(): WalFormNetwork {
-  if (typeof window === 'undefined') return envDefaultNetwork();
+function readStoredNetwork(): WalFormNetwork | null {
+  if (typeof window === 'undefined') return null;
   const v = window.localStorage.getItem(NETWORK_STORAGE_KEY);
   if (v === 'mainnet' || v === 'testnet') return v;
-  return envDefaultNetwork();
+  return null;
+}
+
+/**
+ * Reads `localStorage[walform:network]` on mount and flips the active Sui
+ * network to match — exactly once, before children render any
+ * network-dependent UI. Rendered as a sibling of `<EnokiRegistrar>` inside
+ * `<SuiClientProvider>` so it can call `selectNetwork`. Returns null because
+ * it's a side-effect-only component.
+ *
+ * Why this pattern: the server-rendered HTML always shows the env default
+ * (no `window` on the server), but a returning user's localStorage may have
+ * a different value. Setting state in `useEffect` keeps the first client
+ * render identical to the server HTML — no hydration mismatch — and only
+ * flips afterwards.
+ */
+function StoredNetworkHydrator() {
+  const { network, selectNetwork } = useSuiClientContext();
+  useEffect(() => {
+    const stored = readStoredNetwork();
+    if (stored && stored !== network) {
+      selectNetwork(stored);
+    }
+    // Run once on mount — `network` changing because of this very call
+    // shouldn't re-fire the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
 }
 
 function EnokiRegistrar() {
@@ -80,7 +107,10 @@ export function SuiProviders({ children }: { children: ReactNode }) {
         defaultOptions: { queries: { staleTime: 30_000 } },
       }),
   );
-  const [defaultNetwork] = useState<WalFormNetwork>(() => readStoredNetwork());
+  // Always seed from env so server + client first render agree. The
+  // localStorage value (if any) is applied via `StoredNetworkHydrator`
+  // after mount, avoiding a hydration mismatch.
+  const [defaultNetwork] = useState<WalFormNetwork>(envDefaultNetwork);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -93,6 +123,7 @@ export function SuiProviders({ children }: { children: ReactNode }) {
           }
         }}
       >
+        <StoredNetworkHydrator />
         <EnokiRegistrar />
         <WalletProvider
           autoConnect

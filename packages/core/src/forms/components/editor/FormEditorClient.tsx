@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import { useFormOnChain } from '../../hooks/use-form-on-chain';
 import { useStoredForm } from '../../hooks/use-stored-form';
+import { formsRoute } from '../../lib/routes';
 import { SCHEMA_VERSION } from '../../lib/schema-version';
 import { FormBuilder } from './FormBuilder';
 
@@ -16,7 +17,7 @@ interface FormEditorClientProps {
  * Editor entry point. Three paths:
  *  - id matches an IDB draft → render the FormBuilder.
  *  - id matches an on-chain Form → redirect: owner goes to /results
- *    (no editing post-publish), anyone else goes to /f/[id] to submit.
+ *    (no editing post-publish), anyone else goes to /f?formId=… to submit.
  *  - neither → notFound.
  */
 export function FormEditorClient({ id }: FormEditorClientProps) {
@@ -32,7 +33,7 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
   useEffect(() => {
     if (!draftMissing || !onChainForm) return;
     const isOwner = !!account && account.address === onChainForm.owner;
-    router.replace(isOwner ? `/forms/${id}/results` : `/f/${id}`);
+    router.replace(isOwner ? formsRoute.results(id) : formsRoute.submit(id));
   }, [draftMissing, onChainForm, account, id, router]);
 
   if (draftMissing) {
@@ -61,6 +62,11 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
   }
 
   return (
-    <FormBuilder formId={id} createdAt={state.form.createdAt} initialRev={state.form.rev ?? 0} />
+    <FormBuilder
+      formId={id}
+      createdAt={state.form.createdAt}
+      initialRev={state.form.rev ?? 0}
+      sourceTemplate={state.form.sourceTemplate}
+    />
   );
 }

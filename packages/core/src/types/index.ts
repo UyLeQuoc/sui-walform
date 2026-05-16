@@ -147,6 +147,22 @@ export interface StoredForm {
    * before this field was introduced — treated as 0.
    */
   rev?: number;
+  /**
+   * Provenance: set when this draft was materialised from a marketplace
+   * template (`useCloneTemplateToDraft`). Drives the editor banner + Drafts
+   * tab pill. Never sent on-chain — purely IDB metadata.
+   *
+   * - `purchaseDigest` is present iff the user paid (paid template);
+   *   absent for free clones.
+   * - Cleared when the user dismisses the banner.
+   */
+  sourceTemplate?: {
+    templateId: string;
+    originalTitle: string;
+    originalCreator: string;
+    purchaseDigest?: string;
+    purchasedAtMs?: number;
+  };
 }
 
 // PublishedMeta was a transitional type when drafts tracked publish state in

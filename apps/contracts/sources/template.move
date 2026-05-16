@@ -34,6 +34,16 @@ const E_BAD_PRICE: u64 = 4;
 
 public struct TEMPLATE has drop {}
 
+#[test_only]
+public fun init_for_testing(ctx: &mut TxContext) {
+    init(TEMPLATE {}, ctx)
+}
+
+#[test_only]
+public fun share_listing_for_testing(l: TemplateListing) {
+    transfer::share_object(l)
+}
+
 fun init(otw: TEMPLATE, ctx: &mut TxContext) {
     // 1. Claim the Publisher for this package — proof we published these types.
     let publisher = package::claim(otw, ctx);
@@ -300,6 +310,71 @@ public fun clone_paid_and_share(
     );
     form::share(form);
     transfer::public_transfer(cap, ctx.sender());
+}
+
+// === Purchase-only (no Form mint) — preview-then-publish flow ===
+//
+// Pays the creator + 10% royalty + bumps clone_count + emits TemplateCloned
+// with `new_form_id = @0x0` (sentinel for "no on-chain Form yet — buyer is
+// drafting"). The buyer's client then materialises an IndexedDB draft from
+// the template's schema/theme and routes them into the editor; they call
+// `form::create_form` themselves when ready to go live.
+public fun purchase_template_only(
+    template: &mut FormTemplate,
+    listing: &TemplateListing,
+    treasury: &mut PlatformTreasury,
+    policy: &TransferPolicy<FormTemplate>,
+    payment: Coin<SUI>,
+    royalty_payment: Coin<SUI>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    assert!(
+        listing.template_id == object::uid_to_address(&template.id),
+        E_WRONG_LISTING,
+    );
+    let price = listing.price_mist;
+    assert!(coin::value(&payment) >= price, E_INSUFFICIENT_PAYMENT);
+
+    let config: &RoyaltyConfig = transfer_policy::get_rule<FormTemplate, RoyaltyRule, RoyaltyConfig>(
+        RoyaltyRule {},
+        policy,
+    );
+    let required_royalty = royalty_due(config, price);
+    assert!(coin::value(&royalty_payment) >= required_royalty, E_INSUFFICIENT_ROYALTY);
+
+    transfer::public_transfer(payment, listing.creator);
+    balance::join(&mut treasury.balance, coin::into_balance(royalty_payment));
+
+    template.clone_count = template.clone_count + 1;
+
+    let _ = clock;
+    events::emit_template_cloned(events::new_template_cloned(
+        object::uid_to_address(&template.id),
+        ctx.sender(),
+        price,
+        required_royalty,
+        @0x0,
+    ));
+}
+
+/// Zero-payment counterpart for free templates. Lets the client bump
+/// `clone_count` after the user actually publishes a form drafted from this
+/// template, so the marketplace metric stays universal across free + paid.
+public fun record_free_clone(
+    template: &mut FormTemplate,
+    clock: &Clock,
+    ctx: &TxContext,
+) {
+    template.clone_count = template.clone_count + 1;
+    let _ = clock;
+    events::emit_template_cloned(events::new_template_cloned(
+        object::uid_to_address(&template.id),
+        ctx.sender(),
+        0,
+        0,
+        @0x0,
+    ));
 }
 
 public fun update_listing_price(

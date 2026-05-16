@@ -8,6 +8,9 @@ import { HeroVisual } from './hero-visual';
 import { AnimatedGridBackground } from './animated-grid-background';
 import { AnimatedHeadline } from './animated-headline';
 import { ArrowRight } from 'lucide-react';
+import { useActiveNetwork, useActivePackageId } from '../../sui/env-network';
+import { suivisionUrl } from '../../sui/explorer';
+import { NetworkBadge } from '../../sui/wallet-ui/NetworkBadge';
 
 export function Hero() {
   const root = useRef<HTMLDivElement>(null);
@@ -18,6 +21,13 @@ export function Hero() {
   });
   const y = useTransform(scrollYProgress, [0, 1], [0, 120]);
   const opacity = useTransform(scrollYProgress, [0, 1], [1, 0]);
+
+  const network = useActiveNetwork() ?? 'mainnet';
+  const packageId = useActivePackageId();
+  const networkLabel = network === 'mainnet' ? 'Mainnet' : 'Testnet';
+  const badgeHref = packageId
+    ? suivisionUrl(network, 'package', packageId)
+    : `https://${network === 'mainnet' ? '' : 'testnet.'}suivision.xyz/`;
 
   return (
     <section
@@ -44,13 +54,24 @@ export function Hero() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, duration: 0.6 }}
-          className="border-border/80 bg-background/70 text-muted-foreground mb-6 inline-flex items-center gap-2 border px-3 py-1 text-xs font-medium shadow-sm backdrop-blur"
+          className="mb-6 flex flex-wrap items-center justify-center gap-2"
         >
-          <span className="relative flex size-2">
-            <span className="bg-primary absolute inline-flex size-full animate-ping opacity-75" />
-            <span className="bg-primary relative inline-flex size-2" />
-          </span>
-          Live on Sui Testnet · Built for Sui Overflow 2026
+          <a
+            href={badgeHref}
+            target="_blank"
+            rel="noreferrer"
+            className="border-border/80 bg-background/70 text-muted-foreground hover:text-foreground inline-flex items-center gap-2 border px-3 py-2.5 max-h-9 text-xs font-medium shadow-sm backdrop-blur transition-colors"
+          >
+            <span className="relative flex size-2">
+              <span className="bg-primary absolute inline-flex size-full animate-ping opacity-75" />
+              <span className="bg-primary relative inline-flex size-2" />
+            </span>
+            Live on Sui {networkLabel} · Built for Walrus Session 2
+            <span aria-hidden className="text-muted-foreground/70">
+              ↗
+            </span>
+          </a>
+          <NetworkBadge className="h-7 px-2 py-0.5 text-xs" />
         </motion.div>
 
         <AnimatedHeadline />
@@ -61,9 +82,9 @@ export function Hero() {
           transition={{ delay: 0.9, duration: 0.7 }}
           className="text-muted-foreground mt-8 max-w-2xl text-base text-balance sm:text-lg"
         >
-          The first truly decentralized form builder on Sui. End-to-end encrypted submissions,
-          gasless UX for respondents, and forms that live forever on Walrus — no platform can take
-          them down.
+          The first truly decentralized form builder on Walrus. End-to-end encrypted submissions,
+          sponsored-or-self-paid gas, and forms that live forever on Walrus blobs — no platform can
+          take them down.
         </motion.p>
 
         <motion.div

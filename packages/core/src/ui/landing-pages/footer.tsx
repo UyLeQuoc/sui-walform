@@ -25,7 +25,7 @@ const GROUPS = [
     links: [
       { label: 'Docs', href: '#' },
       { label: 'GitHub', href: 'https://github.com' },
-      { label: 'Sui Overflow 2026', href: 'https://sui.io/overflow' },
+      { label: 'Walrus Session 2', href: 'https://www.walrus.xyz' },
       { label: 'Roadmap', href: '#' },
     ],
   },
@@ -44,7 +44,7 @@ export function Footer() {
             Build forms that can&apos;t be taken down. Own the data. Encrypt by default.
           </p>
           <p className="text-muted-foreground text-xs">
-            Built on Sui testnet for Sui Overflow 2026.
+            Built on Sui + Walrus mainnet for Walrus Session 2.
           </p>
         </div>
 

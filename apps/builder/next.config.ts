@@ -1,20 +1,14 @@
 import type { NextConfig } from 'next';
 
 /**
- * Static export is gated by `NEXT_EXPORT=1` (set by the `builder:export` npm
- * script). Without it, `bun run dev` uses normal SSG/SSR semantics so dynamic
- * routes like `/forms/<id>` resolve at runtime — Next 16 enforces strict
- * `generateStaticParams` matching only when `output: 'export'` is active, and
- * we don't want that pain in dev.
- *
- * The deployed Walrus Site relies on a routes table (see
- * `WALFORM_BUILDER_ROUTES`) to rewrite every dynamic path to its
- * `[id]='_'` placeholder bundle; that's only built when `NEXT_EXPORT=1`.
+ * Static export is the default — every route is now flat (`/forms/edit`,
+ * `/forms/results`, `/forms/preview`, `/f`) and reads its id from the
+ * `?formId=…` query string client-side, so SSG has no dynamic slug
+ * placeholders to enumerate.
  */
-const EXPORT_MODE = process.env.NEXT_EXPORT === '1';
-
 const nextConfig: NextConfig = {
-  ...(EXPORT_MODE ? { output: 'export' as const, trailingSlash: true } : {}),
+  output: 'export',
+  trailingSlash: true,
   images: { unoptimized: true },
   transpilePackages: ['@walform/core'],
   // Walrus SDK ships a Rust→WASM module loaded via `import.meta.url`-relative

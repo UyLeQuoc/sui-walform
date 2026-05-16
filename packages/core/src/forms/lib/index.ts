@@ -1,4 +1,5 @@
 export * from './code-languages';
+export * from './create-draft-from-template';
 export * from './create-stored-form';
 export * from './drag-ids';
 export * from './field-search';
@@ -9,4 +10,5 @@ export * from './form-fonts';
 export * from './inline-text-style';
 export * from './outline';
 export * from './read-file-data-url';
+export * from './routes';
 export * from './schema-version';

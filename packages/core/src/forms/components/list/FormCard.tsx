@@ -13,9 +13,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../../../ui/alert-dialog';
+import { Badge } from '../../../ui/badge';
 import { Card, CardAction, CardDescription, CardHeader, CardTitle } from '../../../ui/card';
 import { FORM_COLORS } from '../../lib/form-appearance';
 import { getFormFont } from '../../lib/form-fonts';
+import { formsRoute } from '../../lib/routes';
 import { FormStatusBadge } from './FormStatusBadge';
 import type { StoredForm } from '../../../types';
 
@@ -38,7 +40,7 @@ export function FormCard({ form, onDelete }: FormCardProps) {
   const coverImage = form.schema.coverImage;
 
   const handleCardClick = () => {
-    router.push(`/forms/${form.id}`);
+    router.push(formsRoute.edit(form.id));
   };
 
   const handleDeleteConfirm = async () => {
@@ -87,6 +89,15 @@ export function FormCard({ form, onDelete }: FormCardProps) {
           <CardDescription>
             {fieldCount} {fieldCount === 1 ? 'field' : 'fields'} ·{' '}
             {formatDistanceToNow(new Date(form.updatedAt), { addSuffix: true })}
+            {form.sourceTemplate && (
+              <>
+                {' '}
+                ·{' '}
+                <Badge variant="outline" className="text-[10px]">
+                  From marketplace
+                </Badge>
+              </>
+            )}
           </CardDescription>
           <CardAction>
             <div className="flex items-center gap-1.5">

@@ -5,18 +5,23 @@ import { SectionHeader } from './features';
 
 const CASES = [
   {
+    title: 'Branded customer survey on your own URL',
+    body: 'Publish the form, click "Deploy to Walrus Site", link a SuiNS name. Share <your-brand>.wal.app — no formId in the URL, no platform, no hosting bill.',
+    tag: 'Walrus Sites · SuiNS',
+  },
+  {
     title: 'DAO governance survey',
-    body: 'Token-gated by Coin<T> balance. Members sign + pay their own gas, you decrypt everything, each voter keeps a receipt only they can read.',
+    body: 'Token-gated by Coin<T> balance. Members sign + Enoki sponsors gas, you decrypt everything, each voter keeps a receipt only they can read.',
     tag: 'Encrypted · Token-gated',
   },
   {
-    title: 'Hackathon submissions',
-    body: 'Collect files to Walrus with Quilt multi-file bundling. Judges decrypt every entry; participants get a private submission receipt.',
-    tag: 'File uploads · Walrus',
+    title: 'Hackathon submissions with co-judges',
+    body: 'Collect files to Walrus, add co-reviewers by address from the Manage tab. Every judge decrypts the same submissions; participants get a private receipt only they can read.',
+    tag: 'Reviewers · File uploads',
   },
   {
     title: 'Pseudonymous tip line',
-    body: 'Burner Google via zkLogin produces a fresh Sui address per respondent. Signed, rate-limited, but not tied to real identity.',
+    body: 'Burner Google via Enoki zkLogin produces a fresh Sui address per respondent. Signed, rate-limited, but not tied to real identity.',
     tag: 'zkLogin · Private',
   },
   {
@@ -26,13 +31,8 @@ const CASES = [
   },
   {
     title: 'Template marketplace',
-    body: 'Publish a reusable form as a TemplateListing. Buyers clone in one click. 10% royalty routes to you on every clone, even N-th buyer.',
+    body: 'Publish a reusable form as a TemplateListing. Buyers can preview, then "Buy & edit" — the schema lands in their Drafts, they edit before publish. 10% royalty routes to you on every paid clone, free clones are free.',
     tag: 'Multi-buyer · Royalties',
-  },
-  {
-    title: 'AI-generated surveys',
-    body: '"Make me an NPS survey for a fintech product." Your BYOK key calls OpenRouter client-side and hydrates the canvas.',
-    tag: 'AI SDK v6 · BYOK',
   },
 ];
 
@@ -42,8 +42,8 @@ export function UseCases() {
       <div className="mx-auto max-w-6xl px-6">
         <SectionHeader
           eyebrow="Built for"
-          title="Six real use cases. One primitive."
-          description="A form on WalForm is a Sui object. A submission is a Walrus blob. Everything composes."
+          title="Six real shapes. One primitive."
+          description="A form is a Sui object. A submission is a Seal-encrypted blob. A site is a Walrus blob. Everything composes."
         />
 
         <div className="mt-16 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

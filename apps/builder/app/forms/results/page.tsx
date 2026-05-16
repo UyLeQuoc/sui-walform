@@ -1,16 +1,13 @@
+'use client';
+
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { FormResultsView } from '@walform/core/forms/components/results';
 import { FormsHeader } from '@walform/core/forms/components/list';
 
-export function generateStaticParams() {
-  return [{ id: '_' }];
-}
-
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default async function FormResultsPage({ params }: PageProps) {
-  const { id } = await params;
+function Inner() {
+  const params = useSearchParams();
+  const formId = params.get('formId');
   return (
     <div className="bg-background relative min-h-screen [--forms-dot:rgba(0,0,0,0.14)] dark:[--forms-dot:rgba(255,255,255,0.12)]">
       <div
@@ -26,8 +23,25 @@ export default async function FormResultsPage({ params }: PageProps) {
       />
       <FormsHeader />
       <main className="relative z-10 mx-auto w-full max-w-7xl px-4 py-6">
-        <FormResultsView formId={id} />
+        {formId ? (
+          <FormResultsView formId={formId} />
+        ) : (
+          <div className="bg-card mx-auto mt-12 w-full max-w-md rounded-xl border p-6 text-center shadow-lg">
+            <p className="text-base font-semibold">No form selected</p>
+            <p className="text-muted-foreground mt-2 text-sm">
+              Append <code className="font-mono">?formId=…</code> to view results.
+            </p>
+          </div>
+        )}
       </main>
     </div>
+  );
+}
+
+export default function FormResultsPage() {
+  return (
+    <Suspense fallback={<div className="bg-muted/30 min-h-screen animate-pulse" />}>
+      <Inner />
+    </Suspense>
   );
 }

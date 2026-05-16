@@ -7,6 +7,7 @@ import { useCurrentWallet } from '@mysten/dapp-kit';
 import { Button } from '../../../ui/button';
 import { useDraftCoverDataUrl } from '../../hooks/use-draft-cover-data-url';
 import { usePublishForm } from '../../hooks/use-publish-form';
+import { formsRoute } from '../../lib/routes';
 import { WalletConnectModal } from '../../../sui/wallet-ui/WalletConnectModal';
 import { PublishDialog } from '../publish/PublishDialog';
 
@@ -79,7 +80,7 @@ export function PublishFormButton({ formId, formTitle }: PublishFormButtonProps)
           const result = await publish(options);
           setDialogOpen(false);
           if (result?.mode === 'on-chain') {
-            router.push(`/forms/${result.formObjectId}/results`);
+            router.push(formsRoute.results(result.formObjectId));
           }
         }}
       />

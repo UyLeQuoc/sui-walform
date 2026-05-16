@@ -51,11 +51,11 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
   const [manageOpen, setManageOpen] = useState(false);
   const [costInfo, setCostInfo] = useState<{ deployMist: bigint; fileCount: number } | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  // When `rootPath` is on, the bundle gets a `config.json` injected with this
-  // form's id, and the deployed Walrus Site renders that form at the root
-  // path `/` (no `#/f/<id>` slug). Lets a creator link a SuiNS name so the
-  // form is reachable at `https://<their-name>.wal.app/`.
-  const [rootPath, setRootPath] = useState(false);
+  // The bundle always gets a `config.json` injected with this form's id +
+  // active network, so the deployed Walrus Site renders the form at the
+  // root path `/` (no `#/f/<id>` slug). Pair with a SuiNS name and the URL
+  // becomes `https://<their-name>.wal.app/`.
+  const rootPath = true;
   const [deployedSiteId, setDeployedSiteId] = useState<string | null>(null);
   // Partial-state recovery: if a previous deploy attempt finished Walrus
   // upload but failed/got rejected at the Sui PTB stage, the manifest is
@@ -323,10 +323,10 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
       }
       setPendingDeploy(null);
 
-      // Public URL form depends on the root-path toggle: rootPath = no hash,
-      // shell reads form id from baked config.json. Default = hash routed.
+      // Clean URL — shell reads form id + network from the baked config.json
+      // at root path `/`. Pair with a SuiNS name for `your-name.wal.app/`.
       const hashUrl = walrusSitePublicUrl(siteObjectId, form.formId, net);
-      const url = rootPath ? hashUrl.replace(/#\/f\/.+$/, '') : hashUrl;
+      const url = hashUrl.replace(/#\/f\/.+$/, '');
       setSiteUrl(url);
       setDeployedSiteId(siteObjectId);
       setCostInfo({
@@ -410,6 +410,7 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
             .
           </p>
         )}
+        <LinkSuinsPanel siteObjectId={existingSiteId} />
         <WalrusSiteManageDialog
           open={manageOpen}
           onOpenChange={setManageOpen}
@@ -507,19 +508,11 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
         </p>
       )}
       {stage === 'idle' && (
-        <label className="text-muted-foreground flex items-center gap-2 text-[11px]">
-          <input
-            type="checkbox"
-            checked={rootPath}
-            onChange={(e) => setRootPath(e.target.checked)}
-            className="size-3"
-          />
-          <span>
-            Render at root path <code className="font-mono">/</code> (no{' '}
-            <code className="font-mono">#/f/&lt;id&gt;</code>). Best paired with a SuiNS name so
-            the URL is <code className="font-mono">your-name.wal.app</code>.
-          </span>
-        </label>
+        <p className="text-muted-foreground text-[11px]">
+          Form renders at the root path <code className="font-mono">/</code>. Pair the deployed
+          site with a SuiNS name and the URL becomes{' '}
+          <code className="font-mono">your-name.wal.app</code>.
+        </p>
       )}
       {stage === 'done' && deployedSiteId && (
         <LinkSuinsPanel siteObjectId={deployedSiteId} />

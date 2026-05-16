@@ -6,38 +6,87 @@ import { motion } from 'framer-motion';
 const FEATURES = [
   {
     title: 'End-to-end encrypted by default',
-    body: 'Every submission is Seal-encrypted in the browser before it touches Walrus. The key custodian is the form owner — not us, not a platform, not anyone else.',
+    body: 'Every submission is Seal-encrypted in the browser before it touches Walrus. Private forms also encrypt the schema itself. The key custodian is the form owner — not us, not a platform, not anyone else.',
     icon: LockIcon,
     span: 'md:col-span-2',
     badge: 'Seal',
   },
   {
-    title: 'No app server — ever',
-    body: 'Every Sui tx (publish, submit, clone, pay, deploy) is signed and paid by the connected wallet. No app-level sponsorship, no quota to run out, no server with your secrets. Walrus stores blobs, Seal holds keys, your wallet signs.',
+    title: 'Sponsored gas, with a graceful fallback',
+    body: 'A thin Enoki sponsor service covers gas for publish, submit, clone, vote, and Walrus-Site deploy on testnet and mainnet from a single key. If the sponsor is down, the connected wallet pays — same code path, no error screen.',
     icon: BoltIcon,
     span: '',
-    badge: 'User-paid',
+    badge: 'Enoki + wallet',
   },
   {
-    title: 'Forms that can’t be taken down',
-    body: 'Schema lives as a Sui object. Submissions live as encrypted blobs on Walrus. Deploy your own Walrus Site with a SuiNS name for a fully decentralized URL.',
-    icon: ShieldIcon,
+    title: 'Four access modes, picked at publish time',
+    body: 'Public, allowlist-only Private, token-gated by Coin<T> balance, or paid in native SUI per submit. The creator treasury withdraw button is one click on the form card.',
+    icon: KeyIcon,
     span: '',
-    badge: 'Walrus',
+    badge: 'Access control',
+  },
+  {
+    title: 'Collaborate with on-chain reviewers',
+    body: 'Add co-reviewers by address. The Move reviewers module lets them decrypt the same submissions you can — perfect for hackathon judging, hiring panels, or co-managed surveys.',
+    icon: UsersIcon,
+    span: '',
+    badge: 'Reviewers',
+  },
+  {
+    title: 'Brand the form without writing code',
+    body: 'Card or full-page layout, eight curated web fonts across Sans / Serif / Display / Mono, eleven accent palettes, five border-radius scales, cover image uploaded to Walrus. Themes persist with the form on-chain.',
+    icon: PaletteIcon,
+    span: 'md:col-span-2',
+    badge: 'Theme editor',
+  },
+  {
+    title: 'AI-assisted form generation',
+    body: '"Make me an NPS survey for a fintech product" — your BYOK OpenRouter key calls the model client-side and hydrates 18 supported field types onto the canvas.',
+    icon: SparkleIcon,
+    span: '',
+    badge: 'AI SDK v6',
   },
   {
     title: 'Sign in with anything',
-    body: 'Slush, Sui Wallet, any dApp-Kit wallet, or a burner Google account via zkLogin. Your respondents pick what they already have.',
+    body: 'Slush, Sui Wallet, any dApp-Kit wallet, or a burner Google account via Enoki zkLogin. Respondents pick what they already have.',
     icon: UsersIcon,
     span: '',
     badge: 'zkLogin',
   },
   {
-    title: 'AI-assisted form generation',
-    body: 'Type “make me an NPS survey for a fintech product” — and WalForm’s BYOK AI (OpenRouter / OpenAI) hydrates a working schema into the canvas.',
-    icon: SparkleIcon,
+    title: 'Two distribution modes, one schema',
+    body: 'Default: form lives at walform.wal.app/f?formId=… on the builder\'s own Walrus Site. Optional: one-click deploy a static per-form shell to Walrus — link a SuiNS name and the URL becomes your-name.wal.app, no formId in sight.',
+    icon: ShieldIcon,
+    span: '',
+    badge: 'Mode A + Mode B',
+  },
+  {
+    title: 'One-click per-form Walrus Site — no platform fee',
+    body: 'Same outcome as paid services like Walgo, but the platform takes zero. The creator\'s wallet pays Walrus storage + Sui gas directly; nothing routes through us. Each deploy bakes one tiny config.json into the shell — the rest of the bundle is shared, so re-deploys are cheap.',
+    icon: GlobeIcon,
     span: 'md:col-span-2',
-    badge: 'AI SDK v6',
+    badge: 'Walrus Sites',
+  },
+  {
+    title: 'Multi-buyer template marketplace with on-chain voting',
+    body: 'Publish a reusable schema as a TemplateListing. N buyers can clone; a 10% royalty routes to the platform treasury on every paid clone (free clones cost nothing). Voters upvote / downvote each listing on-chain — no off-chain ratings store.',
+    icon: StoreIcon,
+    span: '',
+    badge: 'Marketplace + voting',
+  },
+  {
+    title: 'Built-in results dashboard',
+    body: 'Aggregate charts per choice / rating / scale field, by-question panel, decrypt-on-demand row table, CSV export. Each submitter gets a private receipt only they can decrypt.',
+    icon: ChartIcon,
+    span: '',
+    badge: 'Analytics',
+  },
+  {
+    title: 'Walrus-backed cover image and file uploads',
+    body: 'FILE_UPLOAD fields write the bytes to Walrus, the URL is sealed inside the encrypted submission body. Cover images upload at publish so the schema bytes stay tiny on-chain.',
+    icon: UploadIcon,
+    span: '',
+    badge: 'Walrus storage',
   },
 ];
 
@@ -228,6 +277,77 @@ function SparkleIcon({ className }: { className?: string }) {
         strokeWidth="1.8"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+function KeyIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <circle cx="8" cy="14" r="4" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M11 11l8-8M16 6l2 2M14 8l2 2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+function PaletteIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path
+        d="M12 3a9 9 0 100 18c1.5 0 2.5-1 2.5-2.5 0-1-.5-1.5-.5-2.5s.7-1.5 1.7-1.5H18a3 3 0 003-3 9 9 0 00-9-9z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <circle cx="7.5" cy="11" r="1.2" fill="currentColor" />
+      <circle cx="10.5" cy="7.5" r="1.2" fill="currentColor" />
+      <circle cx="14.5" cy="7.5" r="1.2" fill="currentColor" />
+      <circle cx="17" cy="11" r="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+function StoreIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path
+        d="M4 9l1-4h14l1 4M4 9v10h16V9M4 9h16M10 19v-5h4v5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function ChartIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path d="M4 20h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <rect x="6" y="11" width="3" height="7" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="11" y="7" width="3" height="11" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="16" y="13" width="3" height="5" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+function UploadIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path
+        d="M12 16V4M7 9l5-5 5 5M4 20h16"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function GlobeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }

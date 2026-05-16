@@ -8,6 +8,7 @@ import { Badge } from '../../../ui/badge';
 import { Card, CardContent } from '../../../ui/card';
 import { shortAddr } from '../../lib/format-address';
 import { deriveOnChainStatus } from '../../lib/form-status';
+import { formsRoute } from '../../lib/routes';
 import type { ReviewingForm } from '../../hooks/use-reviewing-forms';
 import { FormStatusBadge } from './FormStatusBadge';
 
@@ -24,7 +25,7 @@ const ACCESS_META: Record<number, { label: string; icon: LucideIcon }> = {
 
 /**
  * Card for forms where the connected wallet is a reviewer (not the owner).
- * Read-only: links to `/forms/[id]/results` where the reviewer can decrypt
+ * Read-only: links to `/forms/results?formId=…` where the reviewer can decrypt
  * submissions via the with-reviewers Seal policy. No manage controls.
  */
 export function ReviewingFormCard({ form }: ReviewingFormCardProps) {
@@ -38,7 +39,7 @@ export function ReviewingFormCard({ form }: ReviewingFormCardProps) {
 
   return (
     <Link
-      href={`/forms/${form.formId}/results`}
+      href={formsRoute.results(form.formId)}
       aria-label={`Review submissions for ${form.title}`}
       className="focus-visible:ring-ring group block rounded-xl focus-visible:ring-2 focus-visible:outline-none"
     >

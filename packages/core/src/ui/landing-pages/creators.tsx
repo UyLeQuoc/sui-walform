@@ -18,7 +18,7 @@ const CREATORS = [
   {
     handle: 'Uydev',
     role: 'Fullstack dev',
-    bio: 'Move contracts, Sui object model, TemplateListing royalties — if it runs on-chain, Uy wrote it.',
+    bio: 'Software Engineer at CommandOSS',
     accent: 'from-primary/30 via-primary/10 to-transparent',
     initials: 'UY',
     image: '/creators/uydev.jpg',
@@ -78,7 +78,7 @@ export function Creators() {
         <SectionHeader
           eyebrow="Creators"
           title="Shipped by two humans."
-          description="WalForm is a weekend-and-nights build for Sui Overflow 2026. No team, no funding, no excuses."
+          description="WalForm is a weekend-and-nights build for Walrus Session 2. No team, no funding, no excuses."
         />
 
         <div className="mt-16 grid grid-cols-1 gap-6 md:grid-cols-2" style={{ perspective: 1400 }}>

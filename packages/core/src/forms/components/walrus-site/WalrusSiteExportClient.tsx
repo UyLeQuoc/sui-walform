@@ -65,7 +65,7 @@ export function WalrusSiteExportClient() {
           <SectionHeader
             icon={<Layers className="h-4 w-4" />}
             title="2. Optional handoff"
-            description="If the form is published on-chain, paste its Form object id so Submit redirects to the real /f/[id] page. Otherwise the bundle ships as preview-only."
+            description="If the form is published on-chain, paste its Form object id so Submit redirects to the real /f?formId=… page. Otherwise the bundle ships as preview-only."
           />
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="form-id" className="text-xs">

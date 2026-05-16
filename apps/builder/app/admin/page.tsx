@@ -1,4 +1,4 @@
-import { DeployBuilderButton, PlatformTreasuryCard } from '@walform/core/forms/components/admin';
+import { PlatformTreasuryCard } from '@walform/core/forms/components/admin';
 import { FormsHeader } from '@walform/core/forms/components/list';
 
 export const metadata = {
@@ -20,18 +20,6 @@ export default function AdminPage() {
             </p>
           </div>
           <PlatformTreasuryCard />
-        </section>
-
-        <section>
-          <div className="mb-4 flex flex-col gap-1">
-            <h2 className="text-lg font-semibold tracking-tight">Decentralized hosting</h2>
-            <p className="text-muted-foreground text-sm">
-              Push the static-exported builder to a Walrus Site, then optionally link a SuiNS
-              name so it&apos;s reachable at <code className="font-mono">your-name.wal.app</code>.
-              No server, no CDN, no DNS — fully on-chain.
-            </p>
-          </div>
-          <DeployBuilderButton />
         </section>
       </main>
     </div>
