@@ -62,6 +62,7 @@ import {
   type ExportFormat,
 } from '../../lib/export-submissions-csv';
 import { deriveOnChainStatus } from '../../lib/form-status';
+import { formsRoute } from '../../lib/routes';
 import { copyFormShareLink } from '../../lib/share-link';
 import { DeployToWalrusSiteButton } from '../list/DeployToWalrusSiteButton';
 import { FormStatusBadge } from '../list/FormStatusBadge';
@@ -194,7 +195,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
             <WalletButton />
             <Button asChild variant="outline" size="sm">
-              <a href={`/f/${formId}`}>
+              <a href={formsRoute.submit(formId)}>
                 <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                 Open public form
               </a>
@@ -306,7 +307,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
             seededCount={seededRows.length}
           />
           <Button size="sm" variant="outline" asChild>
-            <a href={`/f/${formId}`} target="_blank" rel="noopener noreferrer">
+            <a href={formsRoute.submit(formId)} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
               Open form
             </a>
@@ -573,7 +574,7 @@ function ManagePanel({ form }: ManagePanelProps) {
       <Card>
         <CardContent className="flex flex-wrap items-center gap-2 p-4">
           <Button variant="outline" size="sm" asChild>
-            <a href={`/f/${form.formId}`} target="_blank" rel="noopener noreferrer">
+            <a href={formsRoute.submit(form.formId)} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
               Open public link
             </a>

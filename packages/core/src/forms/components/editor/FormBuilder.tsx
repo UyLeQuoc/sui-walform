@@ -13,11 +13,13 @@ import { getFormFont } from '../../lib/form-fonts';
 import { useFormBuilderStore } from '../../store/form-builder-store';
 import { AiGenerateDialog } from './AiGenerateDialog';
 import { CanvasViewport } from './CanvasViewport';
+import { ClonedFromBanner } from './ClonedFromBanner';
 import { FieldPaletteSidebar } from './FieldPaletteSidebar';
 import { FormBuilderDragOverlay } from './FormBuilderDragOverlay';
 import { FormBuilderHeader } from './FormBuilderHeader';
 import { FormCard } from './FormCard';
 import { RightSidebar } from './RightSidebar';
+import type { StoredForm } from '../../../types';
 
 interface FormBuilderProps {
   /** ID of the form currently loaded in the store. */
@@ -26,9 +28,11 @@ interface FormBuilderProps {
   createdAt: number;
   /** Rev observed at hydrate time — drives auto-save's CAS. */
   initialRev: number;
+  /** Marketplace template provenance, when draft was cloned via useCloneTemplateToDraft. */
+  sourceTemplate?: StoredForm['sourceTemplate'];
 }
 
-export function FormBuilder({ formId, createdAt, initialRev }: FormBuilderProps) {
+export function FormBuilder({ formId, createdAt, initialRev, sourceTemplate }: FormBuilderProps) {
   const title = useFormBuilderStore((s) => s.schema.title);
   useDocumentTitle(title || 'Untitled form');
   const fontFamily = useFormBuilderStore((s) => s.schema.settings.fontFamily);
@@ -89,6 +93,10 @@ export function FormBuilder({ formId, createdAt, initialRev }: FormBuilderProps)
         onToggleSettings={handleToggleSettings}
         onOpenAiGenerate={handleOpenAiGenerate}
       />
+
+      {sourceTemplate && (
+        <ClonedFromBanner formId={formId} sourceTemplate={sourceTemplate} />
+      )}
 
       <DndContext
         sensors={dnd.sensors}

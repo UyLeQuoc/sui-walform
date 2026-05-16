@@ -78,25 +78,22 @@ export interface BuildCreateWalrusSiteTxInput {
   recipient: string;
   manifest: WalrusSiteManifest;
   /**
-   * Optional SPA-style routes (path → resource path). Required for shipping
-   * Next.js `output: 'export'` apps with dynamic segments: every `/forms/<id>`
-   * is rewritten to a single `[id]='_'` placeholder bundle, and the client
-   * router reads the real id at runtime via `useParams()`.
+   * Optional SPA-style routes (path → resource path). Only needed for apps
+   * with dynamic slugs that map several URLs onto a single placeholder
+   * bundle. The current WalForm builder is fully flat (`/forms/edit`,
+   * `/forms/preview`, `/forms/results`, `/f`) so every URL maps 1:1 to an
+   * `index.html` — leave undefined and the Walrus Site PTB skips the
+   * `create_routes` / `fill_routes` calls entirely.
    */
   routes?: Record<string, string>;
 }
 
 /**
- * Canonical routes table for the full builder app under static export.
- * Order matters: most-specific patterns first since the portal walks the
- * VecMap and stops at the first glob match.
+ * Empty by design — the builder no longer has dynamic slugs, so no SPA
+ * rewrite table is needed. Kept exported for callers that historically
+ * imported it; passing an empty record is equivalent to omitting `routes`.
  */
-export const WALFORM_BUILDER_ROUTES: Record<string, string> = {
-  '/forms/*/preview': '/forms/_/preview/index.html',
-  '/forms/*/results': '/forms/_/results/index.html',
-  '/forms/*': '/forms/_/index.html',
-  '/f/*': '/f/_/index.html',
-};
+export const WALFORM_BUILDER_ROUTES: Record<string, string> = {};
 
 export interface BuildDeployWalrusSiteTxInput extends BuildCreateWalrusSiteTxInput {
   /** WalForm package id — used to call `form::set_site_object_id_obj` atomically. */

@@ -8,6 +8,7 @@ import { Badge } from '../../../ui/badge';
 import { Card, CardContent } from '../../../ui/card';
 import { cn } from '../../../lib/utils';
 import { deriveOnChainStatus, type FormStatus } from '../../lib/form-status';
+import { formsRoute } from '../../lib/routes';
 import type { OnChainForm } from '../../hooks/use-on-chain-forms';
 import { FormStatusBadge } from './FormStatusBadge';
 
@@ -33,7 +34,7 @@ const STRIPE_BY_STATUS: Record<FormStatus, string> = {
 /**
  * On-chain form card: header banner shows the response metric over a
  * status-tinted gradient; body lists access mode + deadline; footer carries
- * the status pill + chevron. Whole card is a link to /forms/[id]/results.
+ * the status pill + chevron. Whole card is a link to /forms/results?formId=…
  */
 export function OnChainFormCard({ form }: OnChainFormCardProps) {
   const status = deriveOnChainStatus(form);
@@ -51,7 +52,7 @@ export function OnChainFormCard({ form }: OnChainFormCardProps) {
 
   return (
     <Link
-      href={`/forms/${form.formId}/results`}
+      href={formsRoute.results(form.formId)}
       aria-label={`Open analytics for ${form.title}`}
       className="focus-visible:ring-ring group block rounded-4xl focus-visible:ring-2 focus-visible:outline-none"
     >

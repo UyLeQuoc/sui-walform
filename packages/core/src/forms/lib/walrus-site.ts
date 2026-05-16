@@ -1,4 +1,5 @@
 import type { FormSchema } from '../../types';
+import { formsRoute } from './routes';
 
 /** Where the deployed site hands control off to for actual submissions. */
 export const DEFAULT_APP_ORIGIN = 'https://walform.app';
@@ -17,7 +18,7 @@ export interface WalrusSiteBundle {
   siteName: string;
   /** Sum of all file content byte-lengths. Surfaced for the size badge. */
   totalBytes: number;
-  /** Where Submit redirects to. `${appOrigin}/f/${formObjectId}`, or empty if formObjectId omitted. */
+  /** Where Submit redirects to. `${appOrigin}/f?formId=${formObjectId}`, or empty if formObjectId omitted. */
   submitUrl: string;
   files: WalrusSiteFile[];
 }
@@ -35,7 +36,7 @@ interface GenerateInput {
  *
  * The bundle is intentionally minimal: a single `index.html` that previews
  * the form fields read-only, plus a Submit button that hands off to the
- * full WalForm app at `${appOrigin}/f/${formObjectId}`. Submission, Seal
+ * full WalForm app at `${appOrigin}/f?formId=${formObjectId}`. Submission, Seal
  * encryption, allowlist gating, etc. all live in the main app — the Walrus
  * Site is just a SuiNS-friendly entry point.
  *
@@ -46,7 +47,7 @@ export function generateWalrusSiteBundle(input: GenerateInput): WalrusSiteBundle
   const schema = input.schema;
   const formObjectId = (input.formObjectId ?? '').trim();
   const origin = stripTrailingSlash((input.appOrigin ?? '').trim() || DEFAULT_APP_ORIGIN);
-  const submitUrl = formObjectId ? `${origin}/f/${formObjectId}` : '';
+  const submitUrl = formObjectId ? `${origin}${formsRoute.submit(formObjectId)}` : '';
   const siteName = schema.title || 'WalForm';
   const settings = schema.settings ?? {};
 

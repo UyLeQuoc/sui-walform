@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '../../../ui/dropdown-menu';
 import { clearSeededSubmissions, seedSubmissions } from '../../services/dev-seed-submissions';
+import { useActiveNetwork } from '../../../sui/env-network';
 import type { FormField } from '../../../types';
 
 const SEED_COUNTS = [5, 10, 25, 50] as const;
@@ -26,15 +27,15 @@ interface SeedResponsesButtonProps {
 }
 
 /**
- * Dev-only seeder for the Results page. Returns null outside development so
- * the component fully tree-shakes from prod builds (Next inlines NODE_ENV at
- * build time). Generates fake decrypted submissions in module-level memory —
- * no chain, no Seal, no wallet.
+ * Testnet-only seeder for the Results page. Hidden on mainnet so real users
+ * never see fake data next to their real submissions. Generates fake decrypted
+ * submissions in module-level memory — no chain, no Seal, no wallet.
  */
 export function SeedResponsesButton({ formId, fields, seededCount }: SeedResponsesButtonProps) {
   const [pending, setPending] = useState<'seed' | 'clear' | null>(null);
+  const network = useActiveNetwork();
 
-  if (process.env.NODE_ENV !== 'development') return null;
+  if (network !== 'testnet') return null;
 
   const handleSeed = (count: number) => {
     setPending('seed');

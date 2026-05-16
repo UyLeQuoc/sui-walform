@@ -10,7 +10,7 @@ const PHRASES = [
   'Seal whitelist',
   'Any wallet, any zkLogin',
   'No platform lock-in',
-  'Sui Overflow 2026',
+  'Walrus Session 2',
 ];
 
 export function Marquee() {

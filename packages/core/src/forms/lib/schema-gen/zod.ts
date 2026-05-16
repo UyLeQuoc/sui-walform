@@ -150,19 +150,33 @@ function buildFieldSchema(field: FormField): z.ZodTypeAny {
         : base.optional();
     }
     case 'file': {
-      // Post-upload the value is `FileAttachmentValue` (rich object). Legacy
-      // submissions stored just the URL string — accept both. Empty string
-      // (initial state) counts as "no file".
+      // Three accepted shapes for a file field value:
+      //   - `File` instance: just picked, pending Walrus upload at submit.
+      //   - `FileAttachmentValue`: post-upload rich object.
+      //   - `string`: legacy URL value, or empty string (initial state).
+      // The submit flow swaps `File` → `FileAttachmentValue` after uploading
+      // to Walrus, so Zod has to accept the pending shape too — otherwise
+      // RHF reports "Invalid input" before the upload step even runs.
       const attachment = z.object({
         url: z.string().min(1),
         name: z.string(),
         size: z.number().int().nonnegative(),
         type: z.string(),
       });
-      const base = z.union([attachment, z.string()]);
+      const fileInstance =
+        typeof File !== 'undefined'
+          ? z.instanceof(File)
+          : z.custom<File>((v): v is File =>
+              typeof v === 'object' && v !== null && 'name' in v && 'size' in v,
+            );
+      const base = z.union([fileInstance, attachment, z.string()]);
       if (!field.required) return base.optional();
       return base.refine(
-        (v) => (typeof v === 'string' ? v.length > 0 : v.url.length > 0),
+        (v): boolean => {
+          if (typeof v === 'string') return v.length > 0;
+          if (typeof File !== 'undefined' && v instanceof File) return v.size > 0;
+          return typeof v === 'object' && v !== null && 'url' in v && (v as { url: string }).url.length > 0;
+        },
         'Attach a file to submit',
       );
     }

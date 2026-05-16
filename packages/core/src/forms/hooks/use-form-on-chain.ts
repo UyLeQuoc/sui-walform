@@ -28,7 +28,7 @@ export interface FormOnChainDetail {
 }
 
 /**
- * Fetch a `Form` object by id directly from chain. The submit page (`/f/[id]`)
+ * Fetch a `Form` object by id directly from chain. The submit page (`/f?formId=…`)
  * uses this to decide what UI to render: form schema, gating UI for private
  * forms, "form closed" banner, etc.
  */

@@ -1,65 +1,87 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSuiClientContext } from "@mysten/dapp-kit";
 import { FormSubmissionView } from "@walform/core/forms/components/submit";
+
+type Network = "testnet" | "mainnet";
+
+interface ShellConfig {
+  formId: string;
+  network?: Network;
+}
 
 /**
  * Mode B entry point: Walrus-hosted static shell.
  *
- * Two routing modes:
+ * Production deploy flow:
+ *   - User clicks Deploy in the builder.
+ *   - Builder bakes `/config.json` with `{ formId, network }` into the bundle.
+ *   - Bundle ships to Walrus, served at `<base36>.wal.app/` (or
+ *     `<their-name>.wal.app/` once a SuiNS name is linked).
+ *   - The form renders at the root path — no `/f/<id>`, no hash, just a clean
+ *     URL the creator can share.
  *
- *  1. **Hash routed (shared shell)** — `https://<site-id>.wal.app/#/f/{formId}`.
- *     A single bundle serves any form. The deploy button injects no config.
+ * Resolution order:
  *
- *  2. **Root routed (per-form site)** — `https://<creator-name>.wal.app/`.
- *     The deploy button bakes a `config.json` with `{formId}` into the bundle
- *     before pushing to Walrus. The shell loads that config on mount and
- *     renders the form at the root path — no slug, no hash, just the SuiNS
- *     subdomain. Falls back to the hash router if no config exists, so the
- *     same code path works for both modes.
+ *  1. **`/config.json`** — the production path. Set by the Deploy button.
+ *  2. **Hash route** `#/f/<formId>` — debugging only (e.g. dev server). Lets
+ *     us point the same shell at any form without rebuilding.
+ *  3. **Landing** — neither matched, show a help card.
  *
  * For local dev: open `http://localhost:3002/#/f/<formId>`.
  */
 export default function ShellPage() {
+  const { network: activeNetwork, selectNetwork } = useSuiClientContext();
   const [formId, setFormId] = useState<string | null>(null);
-  const [configLoaded, setConfigLoaded] = useState(false);
+  const [resolved, setResolved] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const readHash = () => {
-      const m = /^#\/f\/([0-9a-zA-Zx]+)\/?$/.exec(window.location.hash);
-      if (m?.[1]) setFormId(m[1]);
-    };
-    // Hash always wins if present — lets a per-form site still serve other
-    // forms via `?#/f/<otherId>` for debugging.
-    readHash();
-    window.addEventListener("hashchange", readHash);
 
-    // No hash → try baked-in config.json.
-    if (!window.location.hash) {
-      void fetch("/config.json")
-        .then((r) => (r.ok ? r.json() : null))
+    const readHash = (): string | null => {
+      const m = /^#\/f\/(0x[0-9a-fA-F]+)\/?$/.exec(window.location.hash);
+      return m?.[1] ?? null;
+    };
+
+    const onHashChange = () => {
+      const id = readHash();
+      if (id) setFormId(id);
+    };
+    window.addEventListener("hashchange", onHashChange);
+
+    const hashId = readHash();
+    if (hashId) {
+      setFormId(hashId);
+      setResolved(true);
+    } else {
+      void fetch("/config.json", { cache: "no-store" })
+        .then((r) => (r.ok ? (r.json() as Promise<ShellConfig>) : null))
         .then((cfg) => {
           if (cancelled) return;
           if (cfg && typeof cfg.formId === "string" && cfg.formId.startsWith("0x")) {
+            if (cfg.network && cfg.network !== activeNetwork) {
+              selectNetwork(cfg.network);
+            }
             setFormId(cfg.formId);
           }
         })
         .catch(() => {})
         .finally(() => {
-          if (!cancelled) setConfigLoaded(true);
+          if (!cancelled) setResolved(true);
         });
-    } else {
-      setConfigLoaded(true);
     }
 
     return () => {
       cancelled = true;
-      window.removeEventListener("hashchange", readHash);
+      window.removeEventListener("hashchange", onHashChange);
     };
+    // Only run once on mount — `selectNetwork` is stable, `activeNetwork`
+    // changing should not retrigger fetch/setup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!configLoaded) return null;
+  if (!resolved) return null;
   if (!formId) return <Landing />;
   return <FormSubmissionView formId={formId} />;
 }
@@ -70,12 +92,13 @@ function Landing() {
       <div className="bg-card flex max-w-md flex-col items-center gap-3 rounded-xl border p-8 text-center shadow-xl">
         <h1 className="text-lg font-semibold">WalForm — Mode B shell</h1>
         <p className="text-muted-foreground text-sm">
-          Append a form id to the URL to render it: <br />
-          <code className="font-mono text-xs">#/f/{"<formId>"}</code>
+          This static bundle expects either a baked-in <code className="font-mono text-xs">config.json</code>{" "}
+          (set by the Deploy button) or a hash-route form id:
+          <br />
+          <code className="font-mono text-xs">#/f/&lt;formId&gt;</code>
         </p>
         <p className="text-muted-foreground/70 text-xs">
-          This static bundle is hosted on Walrus and serves any WalForm form via
-          the hash route.
+          Hosted on Walrus. Network (testnet / mainnet) is baked in by Deploy.
         </p>
       </div>
     </div>

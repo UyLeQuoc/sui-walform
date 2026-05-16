@@ -6,6 +6,7 @@ import { sealEncryptSchema, useSealClient } from '../../crypto';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
 import { extractPublishIds } from '../../sui/tx/extract-form-ids';
 import { buildCreateTreasuryTx } from '../../sui/tx/create-treasury';
+import { buildRecordFreeCloneTx } from '../../sui/tx/purchase-template-only';
 import { buildUpdateSchemaTx } from '../../sui/tx/update-schema';
 import { useExecuteTransaction } from '../../sui/use-execute-transaction';
 import { useInvalidateChainQueries } from '../../sui/use-invalidate-chain';
@@ -23,7 +24,7 @@ export interface UsePublishFormInput {
 }
 
 export interface PublishedFormRefs {
-  /** Shared Form object id — feeds /forms/[id]/results. */
+  /** Shared Form object id — feeds /forms/results?formId=…. */
   formObjectId: string;
   /** Owned FormOwnerCap id minted by the publish PTB. */
   formOwnerCapId: string;
@@ -142,6 +143,23 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
             formOwnerCapId: ids.formOwnerCapId,
             execute,
           });
+        }
+
+        // Best-effort: if this draft came from a free marketplace template
+        // (no purchaseDigest), bump the source template's clone_count so the
+        // marketplace metric stays accurate. Failure is non-fatal — the
+        // primary publish already succeeded.
+        const src = stored.sourceTemplate;
+        if (src && !src.purchaseDigest) {
+          try {
+            const recordTx = buildRecordFreeCloneTx({
+              packageId,
+              templateId: src.templateId,
+            });
+            await execute({ transaction: recordTx });
+          } catch (e) {
+            console.warn('Failed to record free-clone count bump (non-fatal)', e);
+          }
         }
 
         // Draft has been promoted to an on-chain Form — chain is the source

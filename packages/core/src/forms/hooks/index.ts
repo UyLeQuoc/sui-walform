@@ -39,6 +39,7 @@ export * from './use-form-submission';
 export * from './use-publish-form';
 export * from './use-sealed-schema-decrypt';
 export * from './use-submission-decryption';
+export * from './use-clone-template-to-draft';
 export * from './use-template-purchase';
 export * from './use-treasury-actions';
 export * from './use-platform-treasury';

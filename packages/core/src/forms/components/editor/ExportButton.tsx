@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Copy, Download } from 'lucide-react';
+import { Copy, Download, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../ui/button';
 import {
@@ -42,9 +42,8 @@ export function ExportButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="gap-1.5">
-          Export
-          <ChevronDown className="h-3.5 w-3.5" />
+        <Button variant="outline" size="icon-sm" aria-label="Export" title="Export">
+          <Share2 className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-fit">

@@ -12,7 +12,7 @@ interface FormSubmissionViewProps {
 }
 
 /**
- * Thin gate that selects what to render for a `/f/[id]` page based on the
+ * Thin gate that selects what to render for the `/f?formId=…` page based on the
  * on-chain Form's state: loading, terminal (closed/expired/full), sealed
  * schema (Seal v2), or the active submit shell.
  *

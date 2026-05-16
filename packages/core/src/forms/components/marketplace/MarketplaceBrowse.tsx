@@ -69,25 +69,31 @@ export function MarketplaceBrowse() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-8">
       <MarketplaceFilters value={filters} onChange={setFilters} resultCount={filtered.length} />
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={<Store className="text-muted-foreground h-8 w-8" />}
-          title="No matches"
-          description="Try widening the filters or clearing the search."
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((t) => (
-            <MarketplaceCard
-              key={t.templateId}
-              template={t}
-              votes={votesByTemplate.get(t.templateId) ?? null}
-            />
-          ))}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-sm font-semibold tracking-wide uppercase">Templates</h2>
+          <span className="text-muted-foreground text-xs tabular-nums">{filtered.length}</span>
         </div>
-      )}
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={<Store className="text-muted-foreground h-8 w-8" />}
+            title="No matches"
+            description="Try widening the filters or clearing the search."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((t) => (
+              <MarketplaceCard
+                key={t.templateId}
+                template={t}
+                votes={votesByTemplate.get(t.templateId) ?? null}
+              />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

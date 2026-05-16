@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { formsRoute } from '../lib/routes';
 
 interface UseCreateFormActionParams {
   /** Provided by `useForms` — creates an empty form and returns its id. */
@@ -25,7 +26,7 @@ export function useCreateFormAction({
     setIsCreating(true);
     try {
       const id = await createForm();
-      router.push(`/forms/${id}`);
+      router.push(formsRoute.edit(id));
     } catch {
       setIsCreating(false);
     }

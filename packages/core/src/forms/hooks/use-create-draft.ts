@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { formsRoute } from '../lib/routes';
 import { useForms } from './use-forms';
 
 export interface UseCreateDraftResult {
@@ -25,7 +26,7 @@ export function useCreateDraft(): UseCreateDraftResult {
     setIsCreating(true);
     try {
       const id = await createForm();
-      router.push(`/forms/${id}`);
+      router.push(formsRoute.edit(id));
     } catch {
       setIsCreating(false);
     }
