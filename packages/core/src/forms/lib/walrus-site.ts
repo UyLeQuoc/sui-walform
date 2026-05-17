@@ -2,7 +2,7 @@ import type { FormSchema } from '../../types';
 import { formsRoute } from './routes';
 
 /** Where the deployed site hands control off to for actual submissions. */
-export const DEFAULT_APP_ORIGIN = 'https://walform.app';
+export const DEFAULT_APP_ORIGIN = 'https://walform.wal.app';
 
 export interface WalrusSiteFile {
   /** Site-relative path, no leading slash. e.g. `index.html`, `assets/app.js`. */
@@ -186,7 +186,7 @@ ${fieldsHtml}
 <button type="submit" class="walform-submit">${submitLabel}</button>
 </form>
 <footer>
-<small>Hosted on Walrus · powered by <a href="https://walform.app" target="_blank" rel="noopener">WalForm</a></small>
+<small>Hosted on Walrus · powered by <a href="https://walform.wal.app" target="_blank" rel="noopener">WalForm</a></small>
 </footer>
 </main>
 <script src="./assets/app.js"></script>

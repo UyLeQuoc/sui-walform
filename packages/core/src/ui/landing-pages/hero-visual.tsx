@@ -60,7 +60,7 @@ export function HeroVisual() {
           </div>
           <div className="bg-background/80 text-muted-foreground mx-auto flex items-center gap-2 rounded-md px-3 py-1 text-xs">
             <LockIcon className="text-primary size-3" />
-            walform.app/forms/edit?formId=hackathon-signup
+            walform.wal.app/forms/edit?formId=hackathon-signup
           </div>
           <div className="w-12" />
         </div>

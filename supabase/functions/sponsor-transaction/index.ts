@@ -11,7 +11,7 @@
 //   ENOKI_PRIVATE_KEY    Enoki app private key (works for testnet + mainnet
 //                        from one key — Enoki dashboard configures both).
 //   ALLOWED_ORIGIN       Comma-separated origins allowed to call this fn,
-//                        e.g. "https://walform.app,http://localhost:3000".
+//                        e.g. "https://walform.wal.app,http://localhost:3000".
 //                        Leave UNSET (or "*") to allow any origin.
 //
 // Optional override envs — only set them if you upgrade the WalForm package

@@ -6,7 +6,7 @@
 **Network scope:** 100% Sui testnet + Walrus testnet for the hackathon build. No mainnet in v1.
 **Transaction model (v2.0):** Every WalForm Sui transaction — creator publish/update/close, marketplace publish/list, marketplace clone/purchase, respondent submit, Mode B deploy — is signed and paid by the **user's connected wallet** via dApp Kit's `useSignAndExecuteTransaction`. There is no app-level sponsorship and no `/api/sponsor` route. Enoki is retained only for `registerEnokiWallets` (Google sign-in). Older sections of this PRD that reference sponsored gas describe the v0.9–v1.1 design — see Appendix A entry dated 2026-05-07 for the supersession.
 **Storage posture:** To minimise the WAL surface, the **mandatory** base flow uses Sui only — both **form schema** and **encrypted submission bodies** are stored inline in their Sui objects. WAL is **only required for opt-in features**: Mode B Walrus-Site deploy, optional cover/theme images, and `FILE_UPLOAD` attachments. A form with none of those features costs zero WAL end-to-end. See §7.4.
-**Distribution modes:** Every form is submittable **by default from `walform.app/f/{form-id}`** (built-in renderer, no extra deploy step). Creators can **optionally** deploy their form as its own **Walrus Site** and attach a **SuiNS** name for a custom URL like `{name}.wal.app`. Both modes share the same Seal whitelist policy.
+**Distribution modes:** Every form is submittable **by default from `walform.wal.app/f/{form-id}`** (built-in renderer, no extra deploy step). Creators can **optionally** deploy their form as its own **Walrus Site** and attach a **SuiNS** name for a custom URL like `{name}.wal.app`. Both modes share the same Seal whitelist policy.
 **Stack:** Next.js 15 for the builder + Mode B shell; plus a vendored Walrus Sites gateway. `apps/builder` = Next.js full SSR on Vercel (hosts landing + creator dashboard + Mode A renderer + `/api/walrus/upload`). `packages/walform-site` = Next.js `output: 'export'` → static shell deployed to Walrus per-form via the user's wallet (Mode B). `apps/portal` = **Mysten's Walrus Sites portal** (vendored from `MystenLabs/walrus-sites/portal`), the gateway that resolves `{subdomain}.wal.app` requests into Walrus blob fetches — this is infrastructure, not a React app.
 **Repo layout:** Turborepo + Bun. `apps/builder`, `apps/renderer`, `apps/portal` (vendored gateway), `apps/contracts` (Move package), and a single shared `packages/core` library.
 
@@ -31,7 +31,7 @@ The sections below answer the open questions in the scoping conversation. Skim t
 | **Platform fee on paid templates** | **10% TransferPolicy royalty on every paid-template purchase, routed to the WalForm platform treasury.** Set once at package publish. | We are the `Publisher<FormTemplate>`, so we own the `TransferPolicy<FormTemplate>` and can set a fixed 10% royalty rule that runs on every Kiosk `purchase`. Seller (template creator) still gets the full listed price; buyer pays listed + 10% on top. Free templates bypass the Kiosk path entirely. See §7.2. |
 | **AI integration** | **BYOK via Vercel AI SDK v6**, client-side. Providers: **OpenRouter** (default, unified LLM access) or **OpenAI**. Key stored encrypted in IndexedDB. AI calls go browser → provider direct; no server-side proxy. See §7.3. |
 | **Where do encrypted submission bodies live — Sui or Walrus?** | **Inline in the Sui `Submission` object** (not Walrus). Same logic applies to the form schema, which is also inline in the `Form` object. | Enoki sponsors SUI gas but *not* Walrus WAL. Inlining both schema and ciphertext means the base flow (publish + submit) costs zero WAL — respondents pay nothing, creators pay only SUI gas. WAL is opt-in: Mode B Walrus Site deploy, cover images, FILE_UPLOAD attachments. See §7.4 and §9. |
-| **Form distribution — built-in or Walrus Site?** | **Two modes, creator's choice at publish.** Default: built-in renderer on `walform.app/f/{form-id}` (zero extra steps). Optional: deploy to a Walrus Site and attach a SuiNS name for `{name}.wal.app`. | Default covers 90% of use cases with the simplest possible UX. Walrus-Site + SuiNS is the "ultimate decentralization + branded URL" path for creators who want it. See §5.2. |
+| **Form distribution — built-in or Walrus Site?** | **Two modes, creator's choice at publish.** Default: built-in renderer on `walform.wal.app/f/{form-id}` (zero extra steps). Optional: deploy to a Walrus Site and attach a SuiNS name for `{name}.wal.app`. | Default covers 90% of use cases with the simplest possible UX. Walrus-Site + SuiNS is the "ultimate decentralization + branded URL" path for creators who want it. See §5.2. |
 | **Fully on-chain decentralized?** | **Data / logic / access-control: yes (even on testnet). Gas sponsorship, OAuth identity, and the builder portal: no** (Enoki + OAuth + Vercel). Progressive decentralization — documented honestly in the pitch. See §7.5. |
 
 ---
@@ -248,7 +248,7 @@ All calls go **browser → provider directly** (no server-side proxy). BYOK stay
 **Decision (v1.0, supersedes v0.x):** one builder app + one shared Mode B shell. Earlier drafts had `apps/renderer` as a separate Next.js `output: 'export'` app rebuilt per form and pushed to Walrus per form. That was dropped on 2026-04-26 — N forms generated N copies of identical JS, wasted WAL, and added a build pipeline for nothing. The replacement is a single `packages/walform-site/` shell, built once, pushed to Walrus once, reused by every Mode B form via hash routing.
 
 - **Builder app** (`apps/builder`) — **standard Next.js build**, full Node server runtime on Vercel. Holds `/api/sponsor` (Enoki secret), the creator dashboard, authoring canvas, Mode A renderer at `/f/[id]`, landing + public template gallery, marketplace, and the deploy-to-Walrus button. The same `<FormSubmissionView>` rendered at `/f/[id]` is the component the static shell wraps for Mode B.
-- **walform-site** (`packages/walform-site`, future) — vite/next static export. Bundles dApp Kit + Seal + sponsor client + `<FormSubmissionView>`. Reads the form id from URL hash (`#/f/{id}`), fetches the `Form` Sui object at runtime, lets respondents submit via a cross-origin POST to `walform.app/api/sponsor`. Pushed to Walrus ONCE; per-form Mode B deploy is just a `site_object::create` PTB pointing at the shared blob, optionally with a SuiNS attach.
+- **walform-site** (`packages/walform-site`, future) — vite/next static export. Bundles dApp Kit + Seal + sponsor client + `<FormSubmissionView>`. Reads the form id from URL hash (`#/f/{id}`), fetches the `Form` Sui object at runtime, lets respondents submit via a cross-origin POST to `walform.wal.app/api/sponsor`. Pushed to Walrus ONCE; per-form Mode B deploy is just a `site_object::create` PTB pointing at the shared blob, optionally with a SuiNS attach.
 - **Portal** (`apps/portal`) — vendored from [`MystenLabs/walrus-sites/portal`](https://github.com/MystenLabs/walrus-sites/tree/main/portal). **Local-dev only** in v1: lets us hit `{base36}.localhost:8080` against testnet without going through Mysten's public portal. Production points SuiNS at the public `wal.app` portal directly.
 
 **Why one shared shell instead of per-form static export.**
@@ -271,7 +271,7 @@ Client code parses `window.location.hash` (or extracts the base36-encoded form i
 Every form is distributable in **two independent modes** — they coexist, creator picks per form at publish time.
 
 **Mode A (default): Built-in on the builder portal**
-- URL: `walform.app/f/{form-id}`
+- URL: `walform.wal.app/f/{form-id}`
 - The builder Next.js app has a route that renders the form directly. `<FormSubmissionView>` (`packages/core/src/forms/components/submit/`) fetches the Form via Sui RPC, renders `<FormPreview>`, encrypts via Seal, sponsors via `/api/sponsor`.
 - **Zero extra deploy step.** As soon as the form's on-chain `create_form` tx confirms, the URL works.
 - Doubles as the in-builder preview before a creator decides to deploy Mode B.
@@ -286,7 +286,7 @@ Both modes use the **same Move contracts, same Seal policy, same `/api/sponsor` 
 
 | Piece | Framework / source | Output | Host | URL |
 | --- | --- | --- | --- | --- |
-| Builder (dashboard + landing + template gallery + Mode A renderer + Marketplace + `/api/sponsor`) | Next.js 15 | Full SSR | Vercel | `walform.app` |
+| Builder (dashboard + landing + template gallery + Mode A renderer + Marketplace + `/api/sponsor`) | Next.js 15 | Full SSR | Vercel | `walform.wal.app` |
 | Mode B static shell (`packages/walform-site`, shared across all forms) | Vite or Next `output: 'export'` | One static bundle pushed to Walrus once | Walrus testnet, served via Mysten's `wal.app` portal | `{form-id-base36}.wal.app` or `{name}.wal.app` |
 | Portal (`apps/portal`) | Vendored from `MystenLabs/walrus-sites/portal` | Cloudflare Worker | localhost:8080 | dev only |
 | Smart contracts | Move 2024 | N/A | Sui testnet | Package ID in `apps/contracts/deployed.json` |
@@ -315,7 +315,7 @@ Both modes use the **same Move contracts, same Seal policy, same `/api/sponsor` 
 | Smart contracts | Move 2024 | `sui move build` + `sui client publish --gas-budget` against testnet |
 | Contract testing | `sui move test` + TS integration tests against `sui-test-validator` | |
 | Frontend testing | Vitest + React Testing Library + Playwright (smoke) | |
-| Hosting (builder) | Vercel | `walform.app` — dashboard, landing, gallery, `/f/{form-id}`, `/api/sponsor` |
+| Hosting (builder) | Vercel | `walform.wal.app` — dashboard, landing, gallery, `/f/{form-id}`, `/api/sponsor` |
 | Hosting (Mode B shell) | Walrus testnet via the public `wal.app` portal | One static blob shared across all Mode B forms; per-form Mode B deploy is a `site_object::create` PTB pointing at the blob |
 | Hosting (portal gateway) | `apps/portal` Cloudflare Worker, local dev only | Production uses public `wal.app` portal directly |
 | CORS | `/api/sponsor` allow-lists `*.wal.app` (Mode B) + Vercel origin (Mode A) + localhost ports | See §6 |
@@ -384,7 +384,7 @@ walform/
 ```
 +---------------------------------------------------------------------+
 |                         CREATOR (Carla)                             |
-|   Browser -> https://walform.app  (Next.js on Vercel, testnet)      |
+|   Browser -> https://walform.wal.app  (Next.js on Vercel, testnet)      |
 |                                                                     |
 |   apps/builder:                                                     |
 |   - Drag-drop form editor (client components)                       |
@@ -455,7 +455,7 @@ walform/
 |       RESPONDENT (Ravi)    |
 |                            |
 |  Two possible entry URLs:  |
-|   Mode A: walform.app/f/ID |
+|   Mode A: walform.wal.app/f/ID |
 |    (served by builder      |
 |     Next.js on Vercel)     |
 |   Mode B: {id}.wal.app     |
@@ -482,7 +482,7 @@ walform/
 |     encrypted_body INLINE  |
 |     + file_blob_ids        |
 |  9. POST tx ->             |
-|     walform.app/api/sponsor|
+|     walform.wal.app/api/sponsor|
 | 10. Receive signed-gas tx  |
 | 11. Sign sender half       |
 |     (one-tap via wallet    |
@@ -571,7 +571,7 @@ The original sponsor design (v0.9 → v1.1) is preserved below for historical co
 
 1. Respondent connects a wallet via `@mysten/dapp-kit`'s `ConnectButton`. dApp Kit auto-detects all installed Sui wallets (Slush, Sui Wallet, etc.) plus lists Enoki zkLogin providers via `registerEnokiWallets`.
 2. Respondent fills the form. Client encrypts via Seal, uploads blob to Walrus, builds the `form::submit(...)` tx.
-3. Client POSTs the tx payload to `walform.app/api/sponsor`.
+3. Client POSTs the tx payload to `walform.wal.app/api/sponsor`.
 4. Server (a) validates the Move call is in our allowlist of sponsorable entry functions (`form::submit`, `template::clone_template`), (b) rate-limits per sender, (c) calls Enoki `createSponsoredTransaction` with `ENOKI_SECRET_KEY`, (d) returns signed-gas bytes.
 5. Client has the connected wallet sign the sender half and submits through Enoki's execute endpoint.
 
@@ -1201,7 +1201,7 @@ See §7.4 for the full matrix. Key operational notes:
 - **Cover image (optional)** — Walrus blob if creator uploads one. `Form.cover_blob_id` is `Option<vector<u8>>`; `None` for forms that skip cover.
 - **File attachments (opt-in)** — uploaded to Walrus (Quilt batch for > 3 files per submission). IDs stored in `Submission.file_blob_ids`. Only path where a respondent's submit flow touches Walrus. Testnet: covered by app faucet-funded WAL pool.
 - **Mode B renderer site (opt-in)** — deployed via `site-builder deploy` CLI (suiup-installed binary). Build with `next build` using `output: 'export'`. Target bundle < 350 KB gz. Creator pays WAL at deploy time.
-- **Form URL** — Mode A default: `walform.app/f/{form-id}` (no deploy needed, zero WAL). Mode B opt-in: `{form-id-base36}.wal.app`, upgradable to `{suins-name}.wal.app`.
+- **Form URL** — Mode A default: `walform.wal.app/f/{form-id}` (no deploy needed, zero WAL). Mode B opt-in: `{form-id-base36}.wal.app`, upgradable to `{suins-name}.wal.app`.
 
 ### 9.2 Walrus cost back-of-envelope
 
@@ -1365,7 +1365,7 @@ type SubmissionV1 = {
 - `@mysten/dapp-kit` ConnectButton — lists Slush, Sui Wallet, Enoki zkLogin, and any other installed wallet
 - Seal encrypt on submit (identity = `sha256(form_id || nonce)`)
 - Build submit tx with **encrypted_body inline**; Walrus upload only if the form has FILE_UPLOAD blocks
-- POST tx to `walform.app/api/sponsor`, sign sender, broadcast. Respondent pays 0 SUI.
+- POST tx to `walform.wal.app/api/sponsor`, sign sender, broadcast. Respondent pays 0 SUI.
 
 **Contracts (Sui testnet)**
 - `form.move`, `form_owner_cap.move`, `allowlist.move`, `submission.move` (inline ciphertext), `seal_policies.move` (whitelist pattern)
@@ -1452,12 +1452,12 @@ Hackathon timeline assumed ~3 weeks from kickoff. Adjust to Haulout dates.
 | Scene | Duration | Content |
 | --- | --- | --- |
 | 1. Hook | 0:30 | Split-screen: typical form builder with "account suspended" banner vs WalForm's always-online form. "Traditional form builders can suspend your forms, read your data, and go down anytime. WalForm is different — built on Sui + Walrus + Seal." |
-| 2. Creator builds | 0:50 | Pick a template from gallery → clone via Kiosk (show testnet-SUI + 10% royalty) → edit in canvas → configure "DAO governance, token-gated, closes in 7 days, max 500 submissions". Click Publish → schema goes to Walrus, `create_form` tx on Sui. URL `walform.app/f/{id}` is immediately live. |
+| 2. Creator builds | 0:50 | Pick a template from gallery → clone via Kiosk (show testnet-SUI + 10% royalty) → edit in canvas → configure "DAO governance, token-gated, closes in 7 days, max 500 submissions". Click Publish → schema goes to Walrus, `create_form` tx on Sui. URL `walform.wal.app/f/{id}` is immediately live. |
 | 3. (Optional) Walrus Site deploy | 0:15 | Toggle "Deploy to Walrus Site" → one-click `site-builder deploy` → attach SuiNS name `governance-q2.wal.app`. Same form, branded URL. |
 | 4. Respondent submits | 0:45 | Open URL. Respondent picks **Slush** from the wallet list. Submit — 0 SUI, 0 WAL paid by respondent. Show the on-chain `Submission` on Sui explorer with the inline ciphertext field. Second respondent uses **zkLogin Google** — same flow, zero crypto for them. |
 | 5. Creator views results | 0:30 | Dashboard → one-click decrypt via Seal whitelist policy → responses rendered + AI-summarized themes via AI SDK v6 (creator's own OpenRouter key). CSV export. |
 | 6. Submitter receipt | 0:15 | Respondent returns to the form URL, reconnects the same wallet, sees their own submitted answers decrypted via the whitelist policy. |
-| 7. Close | 0:15 | "Built on Walrus + Seal + Sui + Enoki. Decentralized data. Mainstream UX. walform.app — Overflow 2026." |
+| 7. Close | 0:15 | "Built on Walrus + Seal + Sui + Enoki. Decentralized data. Mainstream UX. walform.wal.app — Overflow 2026." |
 
 ---
 
@@ -1551,7 +1551,7 @@ Hackathon timeline assumed ~3 weeks from kickoff. Adjust to Haulout dates.
 | 2026-04-21 | Walrus restricted to **opt-in features only**: cover image, `FILE_UPLOAD` attachments, Mode B renderer bundle. A form can be created and submitted with zero WAL. | Locked (v0.4) |
 | 2026-04-21 | **No `allow_anonymous` mode.** Every submission has a signed wallet / zkLogin identity. | Locked (v0.4) |
 | 2026-04-21 | **No Sui Payment Kit.** Paid-template checkout uses a direct Kiosk `purchase` PTB. | Locked (v0.4) |
-| 2026-04-21 | **Two form-delivery modes** — Mode A (built-in on `walform.app/f/{form-id}`) default, Mode B (Walrus Site + optional SuiNS) opt-in per form | Locked (v0.4) |
+| 2026-04-21 | **Two form-delivery modes** — Mode A (built-in on `walform.wal.app/f/{form-id}`) default, Mode B (Walrus Site + optional SuiNS) opt-in per form | Locked (v0.4) |
 | 2026-04-22 | **`apps/portal` = vendored Walrus Sites gateway from [MystenLabs/walrus-sites/portal](https://github.com/MystenLabs/walrus-sites/tree/main/portal).** Cloudflare Worker flavor, configured for Sui + Walrus testnet, deployed to our Cloudflare account. Resolves `{subdomain}.{our-domain}` for all Mode B form deploys. Upstream commit SHA tracked in `apps/portal/UPSTREAM.md`. | Locked (v0.5) |
 | 2026-04-22 | Landing page + public template gallery **stay inside the builder app** (Vercel), not on a separate Walrus Site. Mode B plus our self-hosted portal already carry the "decentralized delivery" story; the marketing page on Vercel is the acceptable tradeoff for iteration speed. | Locked (v0.5) |
 | 2026-04-21 | Creator-funded `GasReservoir` Move module | Deferred to post-hackathon mainnet |
@@ -1560,7 +1560,7 @@ Hackathon timeline assumed ~3 weeks from kickoff. Adjust to Haulout dates.
 | 2026-04-24 | **Publish UX has two branches from one dialog**: (A) Publish on-chain → Public/Private + max_submissions + closes_at (+ allowlist for Private); (B) Publish to Marketplace → Kiosk listing Free or Paid (SUI price) with title/description/category/tags/preview. Both are sponsored. Private-form and Marketplace schema-encryption (Seal v2) lands when `NEXT_PUBLIC_ENABLE_SEALED_SCHEMA=true` + contracts upgraded with `seal_approve_read_form_schema` + `seal_approve_read_template_schema`. | Locked (v0.9) |
 | 2026-04-24 | **`/forms` reorganised into Drafts + My Forms (On-chain Running / On-chain Ended / Marketplace) tabs.** Drafts hydrate from IDB via `useForms`. My Forms hydrates from `usePublishStore` (persisted in `localStorage[walform:publish]`) keyed by local formId. A follow-up PR will cross-reference the chain via `useSuiClientQuery('getOwnedObjects', ...)` for authoritative status (closed flag, submission count). | Locked (v0.9) |
 | 2026-04-24 | **Custom wallet UI (shadcn-native)** replaces dApp Kit's built-in `ConnectModal` / `AccountDropdown`. `<WalletConnectModal>`, `<WalletChip>`, `<WalletDropdown>`, `<ConnectedIndicator>` live under `packages/core/src/sui/wallet-ui/*`. Dropdown keeps it minimal: address row + Copy and Disconnect only (no network switcher — network is controlled via env on the hackathon demo). | Locked (v0.9) |
-| 2026-04-26 | **`apps/renderer` dropped. Mode B replaced with a single shared static shell on Walrus.** The previous plan (build a fresh Next.js `output: 'export'` per form, push each one to Walrus) didn't scale — N forms = N WAL blobs of identical JS. Replacement: build `packages/walform-site/` ONCE (vite/next static export bundling dApp Kit + Seal + sponsor client + `<FormSubmissionView>`), push to Walrus ONCE, get a stable shell blob id. Per-form Mode B deploy = `site_object::create` PTB pointing at the shared blob + optional SuiNS attach. The shell reads form id from URL hash (`#/f/{id}`), fetches the on-chain Form from Sui RPC, decrypts via Seal session key, submits via cross-origin POST to `walform.app/api/sponsor`. Apps/builder's `/f/[id]` Mode A page stays as the always-on default + as the in-builder preview. `apps/portal` kept for local dev (resolves `{base36}.localhost:8080` → testnet Walrus blobs); production uses the public `wal.app` portal. | Locked (v1.0) |
+| 2026-04-26 | **`apps/renderer` dropped. Mode B replaced with a single shared static shell on Walrus.** The previous plan (build a fresh Next.js `output: 'export'` per form, push each one to Walrus) didn't scale — N forms = N WAL blobs of identical JS. Replacement: build `packages/walform-site/` ONCE (vite/next static export bundling dApp Kit + Seal + sponsor client + `<FormSubmissionView>`), push to Walrus ONCE, get a stable shell blob id. Per-form Mode B deploy = `site_object::create` PTB pointing at the shared blob + optional SuiNS attach. The shell reads form id from URL hash (`#/f/{id}`), fetches the on-chain Form from Sui RPC, decrypts via Seal session key, submits via cross-origin POST to `walform.wal.app/api/sponsor`. Apps/builder's `/f/[id]` Mode A page stays as the always-on default + as the in-builder preview. `apps/portal` kept for local dev (resolves `{base36}.localhost:8080` → testnet Walrus blobs); production uses the public `wal.app` portal. | Locked (v1.0) |
 | 2026-04-27 | **Browser-side Walrus push for Mode B.** Replaced "admin uploads once + ships blob-id manifest" with "browser uploads per deploy via user wallet". `WalrusWalletSigner` extends `@mysten/sui` `Signer`, delegating to dApp Kit's `useSignAndExecuteTransaction`. User's wallet pays Walrus registration tx + ≤1M MIST relay tip. | Locked (v1.1) |
 | 2026-05-07 | **Removed app-level transaction sponsorship.** Every WalForm Sui tx is now signed and paid by the user's connected wallet via `useExecuteTransaction` (wraps dApp Kit's `useSignAndExecuteTransaction`). Deleted `/api/sponsor` + `/api/sponsor/execute` server routes, the `SponsorTarget` literal union + sponsor allowlist, the admin-keypair fallback signer, and the wallet-rebuild auto-recovery in the sponsor transport. Marketplace clone/purchase + respondent submit + creator publish/update/close + treasury withdraw + Mode B deploy all flow through user-paid signing now. Enoki is retained only for `registerEnokiWallets` (Google sign-in). The server-side `WALRUS_ADMIN_SECRET_KEY` (renamed from `SPONSOR_ADMIN_SECRET_KEY`) only pays Walrus storage cost for `/api/walrus/upload`; it does not sign any Sui tx on behalf of users. Older §6 / §7.1 prose describing sponsored gas + 3-tier fallback is kept for historical context but no longer reflects shipping behaviour. | Locked (v2.0) |
 

@@ -13,7 +13,7 @@ interface SitePreviewIframeProps {
  * and renders it via iframe `srcDoc`. Sandbox flags allow scripts but block
  * top-level navigation (no `allow-top-navigation`), so the handoff redirect
  * is safely contained: clicking Submit in the preview won't drag the host
- * page to walform.app.
+ * page to walform.wal.app.
  *
  * `allow-popups` is enabled so the user can manually right-click → open
  * footer links in a new tab while inspecting; without it the iframe's
