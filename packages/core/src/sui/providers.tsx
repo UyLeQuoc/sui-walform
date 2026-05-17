@@ -81,7 +81,7 @@ function EnokiRegistrar() {
     // register ONE url in the Google Cloud Console (any page can trigger
     // login — Enoki defaults to window.location.href which would require
     // registering every path). Override with NEXT_PUBLIC_ENOKI_REDIRECT_URL
-    // in production (e.g. https://walform.app/).
+    // in production (e.g. https://walform.wal.app/).
     const redirectUrl = process.env.NEXT_PUBLIC_ENOKI_REDIRECT_URL ?? `${window.location.origin}/`;
 
     const { unregister } = registerEnokiWallets({

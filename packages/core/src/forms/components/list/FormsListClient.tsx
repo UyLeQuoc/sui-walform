@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, Lock, Wallet } from 'lucide-react';
 import { useCurrentWallet } from '@mysten/dapp-kit';
@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../ui/tabs';
 import { useForms } from '../../hooks/use-forms';
 import { useOnChainForms } from '../../hooks/use-on-chain-forms';
 import { useReviewingForms } from '../../hooks/use-reviewing-forms';
-import { useTabQuery } from '../../hooks/use-tab-query';
 import { MarketplaceBrowse } from '../marketplace';
 import { FormCard } from './FormCard';
 import { FormsHeader } from './FormsHeader';
@@ -30,7 +29,7 @@ export function FormsListClient() {
     packageMissing,
   } = useOnChainForms();
   const reviewing = useReviewingForms();
-  const [top, setTop] = useTabQuery<TopTab>('tab', 'forms', ['forms', 'marketplace']);
+  const [top, setTop] = useState<TopTab>('forms');
 
   const formsCount =
     forms.length +

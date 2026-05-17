@@ -4,7 +4,7 @@ import { formsRoute } from './routes';
  * Public submit-page URL for a form. Falls back to the deployed origin when
  * the function runs server-side (no `window`).
  */
-const FALLBACK_ORIGIN = 'https://walform.app';
+const FALLBACK_ORIGIN = 'https://walform.wal.app';
 
 export function buildFormShareLink(formId: string): string {
   const origin = typeof window !== 'undefined' ? window.location.origin : FALLBACK_ORIGIN;

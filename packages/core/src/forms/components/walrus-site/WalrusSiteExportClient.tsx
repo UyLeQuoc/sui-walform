@@ -87,7 +87,7 @@ export function WalrusSiteExportClient() {
               id="origin"
               value={appOrigin}
               onChange={(e) => setAppOrigin(e.target.value)}
-              placeholder="https://walform.app"
+              placeholder="https://walform.wal.app"
               className="font-mono text-xs"
             />
           </div>
@@ -149,7 +149,7 @@ function BundleResult({
         <SitePreviewIframe files={bundle.files} />
         <p className="text-muted-foreground mt-2 text-[11px]">
           Iframe sandbox blocks top-level navigation, so clicking Submit here just validates — the
-          live site will redirect to {bundle.submitUrl || 'walform.app/f/<formId>'}.
+          live site will redirect to {bundle.submitUrl || 'walform.wal.app/f/<formId>'}.
         </p>
       </TabsContent>
       <TabsContent value="files">

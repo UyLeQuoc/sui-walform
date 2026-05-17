@@ -18,7 +18,7 @@ export interface UseWalrusSiteExportResult {
   /** Raw text in the JSON paste box. */
   jsonInput: string;
   setJsonInput: (value: string) => void;
-  /** On-chain Form object id (the `0x…` from `walform.app/f/{id}`). */
+  /** On-chain Form object id (the `0x…` from `walform.wal.app/f/{id}`). */
   formObjectId: string;
   setFormObjectId: (value: string) => void;
   /** WalForm app origin the static site hands off to. */
