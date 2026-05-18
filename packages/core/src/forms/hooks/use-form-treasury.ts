@@ -2,7 +2,7 @@
 
 import { useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
-import { useOriginalPackageId } from '../../sui/package-id';
+import { useActivePackageId } from '../../sui/package-id';
 
 export interface FormTreasury {
   treasuryId: string;
@@ -22,16 +22,19 @@ export function useFormTreasury(formId: string | undefined): {
   isLoading: boolean;
   error: Error | null;
 } {
-  const originalPackageId = useOriginalPackageId();
+  // MoveFunction filter matches the package used at call time — current,
+  // not original. Same correction as `useTemplateListing`. Post-upgrade
+  // `payment::create_and_share` txs target the active packageId.
+  const activePackageId = useActivePackageId();
   const { network } = useSuiClientContext();
 
   const txQuery = useSuiClientQuery(
     'queryTransactionBlocks',
     {
-      filter: originalPackageId
+      filter: activePackageId
         ? {
             MoveFunction: {
-              package: originalPackageId,
+              package: activePackageId,
               module: 'payment',
               function: 'create_and_share',
             },
@@ -41,7 +44,7 @@ export function useFormTreasury(formId: string | undefined): {
       order: 'descending',
       limit: 50,
     },
-    { enabled: !!originalPackageId && !!formId },
+    { enabled: !!activePackageId && !!formId },
   );
 
   const treasuryIds: string[] = [];

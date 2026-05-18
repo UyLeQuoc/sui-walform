@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
-import { useActivePackageId } from '../../sui/package-id';
+import { useOriginalPackageId } from '../../sui/package-id';
 
 export interface ReviewingForm {
   formId: string;
@@ -36,21 +36,22 @@ export interface UseReviewingFormsResult {
  */
 export function useReviewingForms(): UseReviewingFormsResult {
   const account = useCurrentAccount();
-  // Reviewer events live under the upgrade packageId where the `reviewers`
-  // module was first introduced. Active packageId matches that today.
-  const packageId = useActivePackageId();
+  // Move event types are canonicalised to the package's original publish id,
+  // regardless of when the module was added via upgrade. Using active here
+  // would silently return zero events after every `contracts:upgrade`.
+  const originalPackageId = useOriginalPackageId();
   const me = account?.address ? normalizeSuiAddress(account.address) : null;
 
   const eventsQuery = useSuiClientQuery(
     'queryEvents',
     {
-      query: packageId
-        ? { MoveEventType: `${packageId}::reviewers::ReviewerAdded` }
+      query: originalPackageId
+        ? { MoveEventType: `${originalPackageId}::reviewers::ReviewerAdded` }
         : ({} as never),
       order: 'descending',
       limit: 200,
     },
-    { enabled: !!packageId && !!me },
+    { enabled: !!originalPackageId && !!me },
   );
 
   // Build candidate (formId → reviewersId) map from events where member == me.
@@ -131,7 +132,7 @@ export function useReviewingForms(): UseReviewingFormsResult {
   }, [candidates, me, objectsQuery.data]);
 
   const isLoading =
-    (!!packageId && !!me && eventsQuery.isPending) ||
+    (!!originalPackageId && !!me && eventsQuery.isPending) ||
     (objectIds.length > 0 && objectsQuery.isPending);
   const error = (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
 
