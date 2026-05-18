@@ -4,24 +4,43 @@
 
 WalForm is a decentralized form builder on Sui. Creators get drag-and-drop authoring; respondents get mainstream UX (any wallet or Google-via-zkLogin); and every form, every submission, every access rule lives on Sui, Walrus, and Seal. No operator can suspend your form. No server can read your submissions. Not even us.
 
-> **Sui Overflow 2026 — testnet submission.**
-> Tracks targeted: **Programmable Storage (Walrus)** · **Cryptography (Seal)** · **Infra & Tooling** · **AI × Data**
+> **Walrus Session 2 — Form Tooling submission.**
+> Same outcome as paid services like Walgo for per-form Walrus Sites, but **zero platform fee** — the creator's wallet pays Walrus + Sui directly; nothing routes through us.
 
----
-
-## Live testnet
+## Links
 
 | | |
 | --- | --- |
-| Builder portal | run locally with `bun run dev` (Vercel deploy TBD) |
-| Mode B form shell (Walrus) | `packages/walform-site/` — bundle ready to push, deploy script wired |
-| Sui testnet `packageId` | `0x95d08ac2e5ea1639a32c00ed0ba37f4334779bda68d94cd2ca84ea6329a26726` |
-| Sui testnet `originalPackageId` | `0xc8ca8f470d697e85ee67022eef40b04ed9a3a46e0e64cc9628cd5e8699147d67` (stable Seal namespace) |
-| `TransferPolicy<FormTemplate>` | `0xe4c71944eeffc7181a279959444cd93726863b98db97339ca7fceca159d278fd` |
-| `PlatformTreasury` | `0x94c635354f8a5cc65d8ba2ea687b5102bcfdc191e93f5af45c444f9b415c973d` |
-| Demo video | TBD |
+| 🌐 **Production** | <https://walform.wal.app> — builder + landing, fully on Walrus, SuiNS-linked |
+| 🎥 **Demo video** | <https://www.youtube.com/watch?v=rj-9wWFJjBg> |
+| 🪼 **DeepSurge** | <https://www.deepsurge.xyz/projects/c277abc4-f5c6-486b-bf7c-f6f760de0ba1> |
+| 📋 **Submission form (dogfood)** | Created via WalForm itself — see [`docs/SUBMISSION.md`](docs/SUBMISSION.md) |
 
-Live state of every object id is tracked in [`apps/contracts/deployed.json`](apps/contracts/deployed.json). Full progress + status: [`docs/PROGRESS.md`](docs/PROGRESS.md). Authoritative spec: [`docs/PRD.md`](docs/PRD.md).
+---
+
+## Live deploy
+
+### Mainnet (production)
+
+| Field | Value |
+| --- | --- |
+| `packageId` | `0xb0268669794e23d88eb07370735edcf6e70a0618fd31409834b1cd665d9c5303` |
+| `originalPackageId` | `0x0128bec074eff2c7ad03b52f45321c529958f75633d74668373e890d23fb64bb` (Seal identity namespace) |
+| `TransferPolicy<FormTemplate>` | `0xeee9b6d63805e7f01e1dd9c7d329e8a67c19484cf6e22a28836cc0111f6ce928` |
+| `PlatformTreasury` | `0xd3576e1e42ab8dbccfe23c43b9e8b6da78daabd010d2a069809d1277da41530d` |
+| Public submit allowlist | `0x85a5a93abe3db84a80a49fcf31dc198a90ca6050825820b4381cf9257e01cb6a` |
+
+### Testnet
+
+| Field | Value |
+| --- | --- |
+| `packageId` | `0x61074d22c927255c82ba5e54c3a30ffb25a2dd3d2ceb8edf874de820a2ff1fa7` |
+| `originalPackageId` | `0x2d8b918defc43b3b72afe63364f9b974c636b5820082d9a64b031e5e6d977289` |
+| `TransferPolicy<FormTemplate>` | `0x83aa03fd820e5fb8cbbf5e215a0b200694b4f1527e58de35e3398624b2d73554` |
+| `PlatformTreasury` | `0xfea2d0b3f4d87ec5ad0bbf6326295b2002d5a35f011e908e9d426446eca8fac6` |
+| Public submit allowlist | `0x1b03227377844701191890b743010be3e2eab3706927be613b56064eb71d6c4c` |
+
+The UI flips between networks at runtime — change via the dropdown in the wallet button (defaults to mainnet). Active state per network is tracked in [`apps/contracts/deployed.{mainnet,testnet}.json`](apps/contracts). Full progress: [`docs/PROGRESS.md`](docs/PROGRESS.md). Authoritative spec: [`docs/PRD.md`](docs/PRD.md).
 
 ---
 
@@ -115,7 +134,7 @@ walform/
 
 ## Smart contracts
 
-Deployed to **Sui testnet** at `0x95d08ac2…a26726` (current `packageId`; bumps on upgrade) with `originalPackageId = 0xc8ca8f47…47d67` (stable; used as the Seal identity namespace). 2 upgrades shipped: Seal v2 schema policies + multi-buyer `clone_paid` listing flow.
+Deployed to **Sui mainnet** at `0xb0268669…5d9c5303` (current `packageId`; bumps on upgrade) with `originalPackageId = 0x0128bec0…23fb64bb` (stable; used as the Seal identity namespace). Mirrored to testnet at `0x61074d22…20a2ff1fa7` for hackathon judges. Latest upgrade adds the preview-then-publish marketplace flow: `purchase_template_only` + `record_free_clone` so buyers edit in Drafts before going live, instead of getting a live shared Form on click.
 
 Modules in [`apps/contracts/sources/`](apps/contracts/sources/):
 
@@ -191,7 +210,7 @@ The deploy resolves at `https://<base36(siteId)>.wal.app/#/f/{formId}` once Walr
 
 ## How judges can verify
 
-- **Sui testnet:** open the package id `0x95d08ac2…a26726` on [suiscan.xyz (testnet)](https://suiscan.xyz/testnet) or [suivision.xyz](https://suivision.xyz). Browse `Form` shared objects, `Submission` shared objects (encrypted bodies visible — decryption gated by Seal), `FormTemplate` + `TemplateListing` objects, `PlatformTreasury` accrued royalties.
+- **Sui mainnet:** open the package id [`0xb0268669…5d9c5303`](https://suivision.xyz/package/0xb0268669794e23d88eb07370735edcf6e70a0618fd31409834b1cd665d9c5303) on Suivision. Same on [testnet](https://testnet.suivision.xyz/package/0x61074d22c927255c82ba5e54c3a30ffb25a2dd3d2ceb8edf874de820a2ff1fa7). Browse `Form` shared objects, `Submission` shared objects (encrypted bodies visible — decryption gated by Seal), `FormTemplate` + `TemplateListing` objects, `PlatformTreasury` accrued royalties.
 - **All 4 access modes:** publish a form in each (Public/Private/Token/Paid), then submit. Suiscan shows the access mode in the Form object's `settings.access_mode`. Token-gating is honor-system on-chain (contract comment) — UI enforces it pre-submit.
 - **Seal:** submit with account A, then try to decrypt with account B (denied), then with account A or the form owner (allowed). For Private forms with sealed schemas, even *viewing the questions* requires being on the allowlist.
 - **Marketplace:** clone a paid template from the Marketplace tab — Sui explorer shows the buyer paying listed price + 10%, with the 10% flowing into `PlatformTreasury` and the listed price routed to the seller via `clone_paid`.
@@ -234,4 +253,4 @@ Built on:
 
 ## Status
 
-Sui Overflow 2026 testnet submission. See [`docs/PROGRESS.md`](docs/PROGRESS.md) for row-by-row status and known issues.
+Walrus Session 2 — Form Tooling submission. Builder live at <https://walform.wal.app>. See [`docs/PROGRESS.md`](docs/PROGRESS.md) for row-by-row status and known issues; [`docs/SUBMISSION.md`](docs/SUBMISSION.md) for the registration form answer template.
