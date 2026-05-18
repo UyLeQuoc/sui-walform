@@ -1,8 +1,19 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ExternalLink, Eye, FileWarning, Gift, ShoppingCart, Wallet } from 'lucide-react';
 import { useCurrentWallet, useSuiClientContext } from '@mysten/dapp-kit';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../../ui/alert-dialog';
 import { Badge } from '../../../ui/badge';
 import { Button } from '../../../ui/button';
 import {
@@ -16,13 +27,18 @@ import {
 import { Spinner } from '../../../ui/spinner';
 import { suivisionUrl, type ExplorerNetwork } from '../../../sui/explorer';
 import { WalletConnectModal } from '../../../sui/wallet-ui/WalletConnectModal';
-import { useTemplatePurchase, type EffectiveStatus } from '../../hooks/use-template-purchase';
+import { useCloneTemplateToDraft } from '../../hooks/use-clone-template-to-draft';
+import type { EffectiveStatus } from '../../hooks/use-template-purchase';
+import { useTemplateListing } from '../../hooks/use-template-listing';
 import { useTemplateSchema } from '../../hooks/use-template-schema';
+import { computeRoyaltyMist } from '../../../sui/tx/clone-template';
 import type { MarketplaceTemplate } from '../../hooks/use-marketplace-templates';
 import type { TemplateVoteCounts } from '../../hooks/use-marketplace-votes';
+import { formatSui } from '../../lib/sui-amount';
 import { shortAddr } from '../../lib/format-address';
 import { buildFormAreaStyle } from '../../lib/form-appearance';
 import { getFormFont } from '../../lib/form-fonts';
+import { formsRoute } from '../../lib/routes';
 import { CoverImageView } from '../editor/CoverImage';
 import { FormPreview } from '../preview/FormPreview';
 import type { FormSchema } from '../../../types';
@@ -50,24 +66,45 @@ export function MarketplacePreviewDialog({
   open,
   onOpenChange,
 }: MarketplacePreviewDialogProps) {
+  const router = useRouter();
   const { network } = useSuiClientContext();
   const explorer = (
     network === 'mainnet' || network === 'devnet' ? network : 'testnet'
   ) as ExplorerNetwork;
   const { isConnected } = useCurrentWallet();
-  const { effectiveStatus, actionLabel, canAct, isActing, act } = useTemplatePurchase(template);
+  const clone = useCloneTemplateToDraft(template);
+  const listing = useTemplateListing(
+    clone.effectiveStatus === 'paid' ? template.templateId : undefined,
+  );
   const { schema, schemaUnreadable, isLoading, error } = useTemplateSchema(
     template.templateId,
     open,
   );
   const [connectOpen, setConnectOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const handleAction = () => {
+  const priceMist = listing.listing?.priceMist ?? 0n;
+  const royaltyMist = priceMist > 0n ? computeRoyaltyMist(priceMist) : 0n;
+  const totalMist = priceMist + royaltyMist;
+
+  const handleClick = () => {
     if (!isConnected) {
       setConnectOpen(true);
       return;
     }
-    void act();
+    if (clone.effectiveStatus === 'paid') {
+      setConfirmOpen(true);
+      return;
+    }
+    void runStart();
+  };
+
+  const runStart = async () => {
+    const result = await clone.start();
+    if (result) {
+      onOpenChange(false);
+      router.push(formsRoute.edit(result.draftId));
+    }
   };
 
   return (
@@ -86,7 +123,7 @@ export function MarketplacePreviewDialog({
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <VoteButtons votes={votes} size="md" />
-                <StatusBadge status={effectiveStatus} />
+                <StatusBadge status={clone.effectiveStatus} />
               </div>
             </div>
             <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
@@ -126,17 +163,62 @@ export function MarketplacePreviewDialog({
               Close
             </Button>
             <Button
-              variant={effectiveStatus === 'paid' ? 'default' : 'secondary'}
-              onClick={handleAction}
-              disabled={!canAct && isConnected}
+              variant={clone.effectiveStatus === 'paid' ? 'default' : 'secondary'}
+              onClick={handleClick}
+              disabled={!clone.canAct && isConnected}
             >
-              <ActionIcon status={effectiveStatus} isActing={isActing} />
-              {actionLabel}
+              <ActionIcon status={clone.effectiveStatus} isActing={clone.isActing} />
+              {clone.actionLabel}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <WalletConnectModal open={connectOpen} onOpenChange={setConnectOpen} />
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Buy template & edit before publishing</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="text-muted-foreground space-y-3 text-sm">
+                <p>
+                  You&apos;ll pay{' '}
+                  <span className="text-foreground font-medium tabular-nums">
+                    {formatSui(priceMist)} SUI
+                  </span>{' '}
+                  to the creator and{' '}
+                  <span className="text-foreground font-medium tabular-nums">
+                    {formatSui(royaltyMist)} SUI
+                  </span>{' '}
+                  as a 10% platform royalty —{' '}
+                  <span className="text-foreground font-medium tabular-nums">
+                    {formatSui(totalMist)} SUI
+                  </span>{' '}
+                  total + gas.
+                </p>
+                <p>
+                  The template schema lands in your Drafts so you can edit fields, branding,
+                  access mode, and deadlines before publishing. <strong>No refunds</strong> —
+                  preview the template first if you&apos;re unsure.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clone.isActing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={clone.isActing}
+              onClick={(e) => {
+                e.preventDefault();
+                setConfirmOpen(false);
+                void runStart();
+              }}
+            >
+              {clone.isActing ? 'Working…' : `Pay ${formatSui(totalMist)} SUI`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -560,6 +560,10 @@ interface ManagePanelProps {
 function ManagePanel({ form }: ManagePanelProps) {
   const closeForm = useCloseForm({ formId: form.formId, capId: form.capId });
   const [closeOpen, setCloseOpen] = useState(false);
+  const { network: rawNetwork } = useSuiClientContext();
+  const explorerNetwork: ExplorerNetwork =
+    rawNetwork === 'mainnet' || rawNetwork === 'devnet' ? rawNetwork : 'testnet';
+  const explorerUrl = suivisionUrl(explorerNetwork, 'object', form.formId);
 
   const handleCopy = async () => {
     if (await copyFormShareLink(form.formId)) toast.success('Share link copied');
@@ -582,6 +586,17 @@ function ManagePanel({ form }: ManagePanelProps) {
           <Button variant="outline" size="sm" onClick={() => void handleCopy()}>
             <Copy className="mr-1.5 h-3.5 w-3.5" />
             Copy share link
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`View Form object on ${explorerNetwork} Suivision`}
+            >
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              View on {explorerNetwork} explorer
+            </a>
           </Button>
           {!form.closed && (
             <Button

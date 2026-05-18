@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useSuiClientQuery } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { toast } from 'sonner';
-import { useActivePackageId } from '../../sui/package-id';
+import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
 import {
   buildAddReviewerTx,
   buildInitReviewersTx,
@@ -45,26 +45,26 @@ export interface UseFormReviewersResult extends FormReviewersState {
  * this form_id.
  */
 export function useFormReviewers(formId: string | undefined): UseFormReviewersResult {
+  // Active for MoveCall targets (add / remove / init reviewers PTBs).
   const packageId = useActivePackageId();
+  // Original for the Sui type tag — Move event types are canonicalised to
+  // the package's original publish id regardless of when the module was
+  // added via upgrade.
+  const originalPackageId = useOriginalPackageId();
   const { execute } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
   const [isMutating, setIsMutating] = useState(false);
 
-  // Reviewer events are namespaced under the upgrade packageId where the
-  // `reviewers` module was first introduced — NOT `originalPackageId`.
-  // Until we persist module-type-origin metadata, use active packageId
-  // (which after a non-module-adding upgrade keeps pointing at the
-  // introducing version's bytecode).
   const eventsQuery = useSuiClientQuery(
     'queryEvents',
     {
-      query: packageId
-        ? { MoveEventType: `${packageId}::reviewers::ReviewersCreated` }
+      query: originalPackageId
+        ? { MoveEventType: `${originalPackageId}::reviewers::ReviewersCreated` }
         : ({} as never),
       order: 'ascending',
       limit: 200,
     },
-    { enabled: !!packageId && !!formId },
+    { enabled: !!originalPackageId && !!formId },
   );
 
   // Find the earliest event for this form_id.

@@ -61,9 +61,54 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
 });
 
+const SITE_URL = 'https://walform.wal.app';
+const SITE_TITLE = 'WalForm — Decentralized form builder on Walrus';
+const SITE_DESCRIPTION =
+  'End-to-end encrypted forms on Sui + Walrus. Publish your form to its own Walrus Site straight from the browser — same as Walgo, with zero platform fee.';
+
 export const metadata: Metadata = {
-  title: 'Form Builder',
-  description: 'Notion-like form builder',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_TITLE,
+    template: '%s · WalForm',
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: 'WalForm',
+  keywords: [
+    'Walrus',
+    'Sui',
+    'Seal',
+    'forms',
+    'survey',
+    'decentralized',
+    'Walrus Sites',
+    'SuiNS',
+    'zero platform fee',
+  ],
+  openGraph: {
+    type: 'website',
+    url: SITE_URL,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    siteName: 'WalForm',
+    images: [
+      {
+        url: '/images/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'WalForm — decentralized form builder on Walrus',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ['/images/og-image.png'],
+  },
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

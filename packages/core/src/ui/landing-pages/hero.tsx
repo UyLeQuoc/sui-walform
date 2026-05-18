@@ -83,8 +83,12 @@ export function Hero() {
           className="text-muted-foreground mt-8 max-w-2xl text-base text-balance sm:text-lg"
         >
           The first truly decentralized form builder on Walrus. End-to-end encrypted submissions,
-          sponsored-or-self-paid gas, and forms that live forever on Walrus blobs — no platform can
-          take them down.
+          sponsored-or-self-paid gas, and{' '}
+          <strong className="text-foreground font-semibold">
+            publish your form to its own Walrus Site straight from the browser — same as Walgo,
+            with zero platform fee
+          </strong>
+          .
         </motion.p>
 
         <motion.div

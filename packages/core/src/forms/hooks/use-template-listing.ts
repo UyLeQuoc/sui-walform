@@ -2,7 +2,7 @@
 
 import { useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
-import { useOriginalPackageId } from '../../sui/package-id';
+import { useActivePackageId } from '../../sui/package-id';
 
 export interface TemplateListing {
   listingId: string;
@@ -27,23 +27,25 @@ export function useTemplateListing(templateId: string | undefined): {
   isLoading: boolean;
   error: Error | null;
 } {
-  const originalPackageId = useOriginalPackageId();
+  const activePackageId = useActivePackageId();
   const { network } = useSuiClientContext();
 
-  // For each candidate template, find listings whose template_id matches by
-  // querying the creator's owned/shared objects of type TemplateListing.
-  // Simpler path: query ALL TemplateListing shared objects on testnet via
-  // multiGetObjects isn't feasible without enumeration. Use
-  // `queryTransactionBlocks` filtered by function call as a lightweight
-  // index — every `create_listing_and_share` tx emits a created Listing
-  // object whose id we can correlate.
+  // MoveFunction filter matches the package used at call time. After a
+  // `contracts:upgrade`, new `create_listing_and_share` txs target the
+  // CURRENT packageId — not the original. Using `originalPackageId` here
+  // missed every post-upgrade listing → marketplace card fell back to
+  // status='free' even when the creator had set a price.
+  //
+  // Stop-gap: just filter by the current packageId. Listings published
+  // under an earlier package version are stale and won't surface here;
+  // acceptable since marketplace is post-upgrade in practice.
   const txQuery = useSuiClientQuery(
     'queryTransactionBlocks',
     {
-      filter: originalPackageId
+      filter: activePackageId
         ? {
             MoveFunction: {
-              package: originalPackageId,
+              package: activePackageId,
               module: 'template',
               function: 'create_listing_and_share',
             },
@@ -53,7 +55,7 @@ export function useTemplateListing(templateId: string | undefined): {
       order: 'descending',
       limit: 50,
     },
-    { enabled: !!originalPackageId && !!templateId },
+    { enabled: !!activePackageId && !!templateId },
   );
 
   // Collect Listing object ids created in those txs. React Compiler memoizes.
