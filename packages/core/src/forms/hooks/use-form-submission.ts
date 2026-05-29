@@ -109,7 +109,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
 
   const { execute } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
-  const { uploadBlob, isReady: walrusReady } = useWalrusWalletUpload();
+  const { uploadBlob, uploadQuilt, isReady: walrusReady } = useWalrusWalletUpload();
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -192,7 +192,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           label:
             pendingFiles.length === 1
               ? 'Uploading attachment to Walrus'
-              : `Uploading ${pendingFiles.length} attachments to Walrus`,
+              : `Bundling ${pendingFiles.length} attachments into a Walrus Quilt`,
         });
       }
       flow.push(
@@ -204,28 +204,40 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       );
       steps.start(flow);
       try {
-        // 1. Auto-upload any pending File attachments to Walrus and replace
-        //    the File instance in `values` with a serializable attachment
-        //    object before we encrypt. The submitter pays for both the
-        //    attachment WAL and the body WAL.
+        // 1. Bundle ALL pending File attachments into a single Walrus Quilt —
+        //    one registration tx, one wallet prompt, regardless of N. Replaces
+        //    the previous N-writeBlob loop that prompted the wallet once per
+        //    file. Each file's resulting aggregator URL slots back into
+        //    `values` as a `FileAttachmentValue` before encrypt.
         if (pendingFiles.length > 0) {
-          steps.advance('files', 'Wallet may prompt to sign Walrus storage txs.');
-          for (let i = 0; i < pendingFiles.length; i++) {
+          steps.advance(
+            'files',
+            pendingFiles.length === 1
+              ? 'Wallet will prompt to sign one Walrus storage tx.'
+              : `Wallet will prompt to sign ONE Walrus storage tx for all ${pendingFiles.length} files.`,
+          );
+          const fileBytes = await Promise.all(
+            pendingFiles.map((p) => p.file.arrayBuffer().then((b) => new Uint8Array(b))),
+          );
+          const quilt = await uploadQuilt(
+            pendingFiles.map(({ fieldId, file }, i) => ({
+              // Identifier must be unique within the Quilt — prefix with
+              // index so two attachments named `photo.jpg` don't collide.
+              identifier: `/${i}-${fieldId}-${file.name}`,
+              bytes: fileBytes[i]!,
+            })),
+            { epochs: 10 },
+          );
+          quilt.files.forEach((result, i) => {
             const { fieldId, file } = pendingFiles[i]!;
-            steps.advance(
-              'files',
-              `Uploading ${file.name}${pendingFiles.length > 1 ? ` (${i + 1}/${pendingFiles.length})` : ''}…`,
-            );
-            const bytes = new Uint8Array(await file.arrayBuffer());
-            const { url } = await uploadBlob(bytes, { epochs: 10 });
             const next: FileAttachmentValue = {
-              url,
+              url: result.url,
               name: file.name,
               size: file.size,
               type: file.type || '',
             };
             (values as Record<string, unknown>)[fieldId] = next;
-          }
+          });
         }
 
         // 2. Encrypt the serialized form values (now with file URLs).
@@ -318,6 +330,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       execute,
       invalidateChain,
       uploadBlob,
+      uploadQuilt,
       walrusReady,
       steps,
     ],

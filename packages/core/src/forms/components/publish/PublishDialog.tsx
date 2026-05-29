@@ -198,7 +198,7 @@ export function PublishDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="flex max-h-[90vh] flex-col gap-4 overflow-hidden sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Publish form</DialogTitle>
           <DialogDescription>
@@ -206,81 +206,85 @@ export function PublishDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-2">
-          <ModeTile
-            icon={<Send className="h-4 w-4" />}
-            title="Publish on-chain"
-            subtitle="Accept submissions"
-            active={mode === 'on-chain'}
-            onClick={() => setMode('on-chain')}
-          />
-          <ModeTile
-            icon={<Store className="h-4 w-4" />}
-            title="Publish to Marketplace"
-            subtitle="Sell or share as template"
-            active={mode === 'marketplace'}
-            onClick={() => setMode('marketplace')}
-          />
-        </div>
+        <div className="-mx-6 flex-1 overflow-y-auto px-6">
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-2">
+              <ModeTile
+                icon={<Send className="h-4 w-4" />}
+                title="Publish on-chain"
+                subtitle="Accept submissions"
+                active={mode === 'on-chain'}
+                onClick={() => setMode('on-chain')}
+              />
+              <ModeTile
+                icon={<Store className="h-4 w-4" />}
+                title="Publish to Marketplace"
+                subtitle="Sell or share as template"
+                active={mode === 'marketplace'}
+                onClick={() => setMode('marketplace')}
+              />
+            </div>
 
-        <Separator />
+            <Separator />
 
-        {mode === 'on-chain' ? (
-          <OnChainFields
-            access={access}
-            setAccess={setAccess}
-            limitEnabled={limitEnabled}
-            setLimitEnabled={setLimitEnabled}
-            maxSubmissions={maxSubmissions}
-            setMaxSubmissions={setMaxSubmissions}
-            deadlineEnabled={deadlineEnabled}
-            setDeadlineEnabled={setDeadlineEnabled}
-            closesAt={closesAt}
-            setClosesAt={setClosesAt}
-            allowlistRaw={allowlistRaw}
-            setAllowlistRaw={setAllowlistRaw}
-            allowlistCount={allowlist.length}
-            tokenType={tokenType}
-            setTokenType={setTokenType}
-            tokenAmount={tokenAmount}
-            setTokenAmount={setTokenAmount}
-            feeSui={feeSui}
-            setFeeSui={setFeeSui}
-          />
-        ) : (
-          <MarketplaceFields
-            title={title}
-            setTitle={setTitle}
-            description={description}
-            setDescription={setDescription}
-            category={category}
-            setCategory={setCategory}
-            tagsRaw={tagsRaw}
-            setTagsRaw={setTagsRaw}
-            pricing={pricing}
-            setPricing={setPricing}
-            priceSui={priceSui}
-            setPriceSui={setPriceSui}
-          />
-        )}
+            {mode === 'on-chain' ? (
+              <OnChainFields
+                access={access}
+                setAccess={setAccess}
+                limitEnabled={limitEnabled}
+                setLimitEnabled={setLimitEnabled}
+                maxSubmissions={maxSubmissions}
+                setMaxSubmissions={setMaxSubmissions}
+                deadlineEnabled={deadlineEnabled}
+                setDeadlineEnabled={setDeadlineEnabled}
+                closesAt={closesAt}
+                setClosesAt={setClosesAt}
+                allowlistRaw={allowlistRaw}
+                setAllowlistRaw={setAllowlistRaw}
+                allowlistCount={allowlist.length}
+                tokenType={tokenType}
+                setTokenType={setTokenType}
+                tokenAmount={tokenAmount}
+                setTokenAmount={setTokenAmount}
+                feeSui={feeSui}
+                setFeeSui={setFeeSui}
+              />
+            ) : (
+              <MarketplaceFields
+                title={title}
+                setTitle={setTitle}
+                description={description}
+                setDescription={setDescription}
+                category={category}
+                setCategory={setCategory}
+                tagsRaw={tagsRaw}
+                setTagsRaw={setTagsRaw}
+                pricing={pricing}
+                setPricing={setPricing}
+                priceSui={priceSui}
+                setPriceSui={setPriceSui}
+              />
+            )}
 
-        {coverBytes > 0 && (
-          <CostEstimateRow
-            bytes={coverBytes}
-            cost={storageCost.cost}
-            isLoading={storageCost.isLoading}
-            error={storageCost.error}
-          />
-        )}
+            {coverBytes > 0 && (
+              <CostEstimateRow
+                bytes={coverBytes}
+                cost={storageCost.cost}
+                isLoading={storageCost.isLoading}
+                error={storageCost.error}
+              />
+            )}
 
-        {isSubmitting && txSteps && txSteps.length > 0 && (
-          <div className="bg-muted/30 rounded-md border p-3">
-            <p className="text-foreground mb-2 text-[11px] font-medium tracking-wide uppercase">
-              Publishing your form
-            </p>
-            <TxSteps steps={txSteps} />
+            {isSubmitting && txSteps && txSteps.length > 0 && (
+              <div className="bg-muted/30 rounded-md border p-3">
+                <p className="text-foreground mb-2 text-[11px] font-medium tracking-wide uppercase">
+                  Publishing your form
+                </p>
+                <TxSteps steps={txSteps} />
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
