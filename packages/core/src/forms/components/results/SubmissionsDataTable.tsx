@@ -391,12 +391,12 @@ function SubmissionDetail({
   const inputFields = fields;
 
   return (
-    <div className="flex max-h-[90vh] flex-col">
+    <div className="flex max-h-[90vh] min-w-0 flex-col">
       <DialogHeader className="bg-muted/30 flex-shrink-0 gap-3 border-b px-6 py-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <DialogTitle className="text-base">Response {index + 1}</DialogTitle>
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground text-xs tabular-nums">
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="text-muted-foreground hidden text-xs tabular-nums sm:inline">
               {index + 1} of {total}
             </span>
             <Button
@@ -472,7 +472,7 @@ function SubmissionDetail({
         </div>
       </DialogHeader>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
         {!decrypted && (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
@@ -498,7 +498,7 @@ function SubmissionDetail({
         )}
 
         {decrypted && (
-          <div className="flex flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-3">
             {inputFields.map((f, i) => (
               <QuestionCard
                 key={f.id}

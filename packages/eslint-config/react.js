@@ -22,7 +22,9 @@ export default [
       },
     },
     settings: {
-      react: { version: 'detect' },
+      // Pinned (not 'detect') — eslint-plugin-react 7.37's auto-detect calls
+      // the removed `context.getFilename()` and crashes on ESLint 10.
+      react: { version: '19.2' },
     },
     rules: {
       ...react.configs.recommended.rules,

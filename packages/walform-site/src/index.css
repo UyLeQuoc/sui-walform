@@ -1,0 +1,6 @@
+@import '../../core/src/ui/globals.css';
+
+/* core/globals.css only scans core + apps/builder; add this shell's own sources
+   so Tailwind keeps the Landing / error classnames. */
+@source '../src/**/*.{ts,tsx}';
+@source '../index.html';

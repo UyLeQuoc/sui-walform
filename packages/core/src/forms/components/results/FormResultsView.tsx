@@ -70,6 +70,7 @@ import { WithdrawTreasuryButton } from '../list/WithdrawTreasuryButton';
 import { AggregateCharts } from './AggregateCharts';
 import { ByQuestionPanel } from './ByQuestionPanel';
 import { ResponseTimeline } from './ResponseTimeline';
+import { AllowlistPanel } from './AllowlistPanel';
 import { ReviewersPanel } from './ReviewersPanel';
 import { SeedResponsesButton } from './SeedResponsesButton';
 import { ShareFormDialog } from './ShareFormDialog';
@@ -380,7 +381,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as ResultsTab)} className="flex flex-col">
-        <TabsList className="rounded-none">
+        <TabsList className="max-w-full justify-start overflow-x-auto rounded-none">
           <TabsTrigger
             value="summary"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
@@ -497,8 +498,11 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
         </TabsContent>
 
         {ownerForm && (
-          <TabsContent value="manage" className="mt-4">
+          <TabsContent value="manage" className="mt-4 flex flex-col gap-4">
             <ManagePanel form={ownerForm} />
+            {ownerForm.accessMode === 1 && (
+              <AllowlistPanel formId={ownerForm.formId} capId={ownerForm.capId} />
+            )}
           </TabsContent>
         )}
       </Tabs>

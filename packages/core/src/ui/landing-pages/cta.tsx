@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '../button';
 
@@ -56,7 +56,7 @@ export function Cta() {
 
             <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
               <Button asChild size="lg" className="rounded-full px-7">
-                <Link href="/forms">Start building</Link>
+                <Link to="/forms">Start building</Link>
               </Button>
               <Button
                 asChild

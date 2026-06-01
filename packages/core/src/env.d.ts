@@ -1,7 +1,9 @@
 /**
  * Env shim — declares the NEXT_PUBLIC_* env vars we read in `@walform/core`
- * so TypeScript doesn't require `@types/node` on a client library. At runtime
- * Next.js inlines `process.env.NEXT_PUBLIC_X` at build time. WalForm has no
+ * so TypeScript doesn't require `@types/node` on a client library. At build
+ * time the Vite config (`packages/build-config/next-public-define.ts`) text-
+ * replaces every `process.env.NEXT_PUBLIC_X` token with its JSON literal via
+ * `define`, so no `process` global is referenced at runtime. WalForm has no
  * server-side signing or sponsorship — every Sui tx is signed and paid by
  * the user's connected wallet.
  *
@@ -11,6 +13,7 @@
  * on `useSuiClientContext().network`.
  */
 declare module '*.css';
+declare module '@fontsource-variable/*';
 
 declare const process: {
   env: {

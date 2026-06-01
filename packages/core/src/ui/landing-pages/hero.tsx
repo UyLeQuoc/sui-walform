@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { useRef } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { Button } from '../button';
@@ -98,13 +98,13 @@ export function Hero() {
           className="mt-9 flex flex-col items-center gap-3 sm:flex-row"
         >
           <Button asChild>
-            <Link href="/forms">
+            <Link to="/forms">
               Start building — it&apos;s free
               <ArrowRight className="size-4" />
             </Link>
           </Button>
           <Button asChild variant="ghost">
-            <Link href="#how">See how it works</Link>
+            <a href="#how">See how it works</a>
           </Button>
         </motion.div>
 

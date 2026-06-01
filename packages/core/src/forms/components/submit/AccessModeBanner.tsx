@@ -31,7 +31,7 @@ export function AccessModeBanner({
 
   return (
     <div className="border-b px-6 py-3 text-xs">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         {form.accessMode === 1 && (
           <PrivateBanner
             form={form}
@@ -88,16 +88,16 @@ function TokenGatedBanner({
     <>
       <Coins className="text-muted-foreground h-3.5 w-3.5" />
       {!isConnected ? (
-        <span>
+        <span className="min-w-0 break-words">
           Token-gated form — connect a wallet holding {form.requiredTokenAmount.toString()} of{' '}
-          <code className="font-mono">{form.requiredTokenType}</code> to submit.
+          <code className="font-mono break-all">{form.requiredTokenType}</code> to submit.
         </span>
       ) : tokenGate.isPending ? (
         <span>Checking your balance…</span>
       ) : !tokenGate.meets ? (
-        <span className="text-destructive">
+        <span className="text-destructive min-w-0 break-words">
           Your wallet holds {tokenGate.held.toString()} but {form.requiredTokenAmount.toString()} of{' '}
-          <code className="font-mono">{form.requiredTokenType}</code> is required.
+          <code className="font-mono break-all">{form.requiredTokenType}</code> is required.
         </span>
       ) : (
         <span>You hold the required tokens — fill the form below.</span>

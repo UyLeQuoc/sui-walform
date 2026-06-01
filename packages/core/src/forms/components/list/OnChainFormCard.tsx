@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { BarChart3, CalendarClock, ChevronRight, Coins, Globe, Lock, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -52,7 +52,7 @@ export function OnChainFormCard({ form }: OnChainFormCardProps) {
 
   return (
     <Link
-      href={formsRoute.results(form.formId)}
+      to={formsRoute.results(form.formId)}
       aria-label={`Open analytics for ${form.title}`}
       className="focus-visible:ring-ring group block rounded-4xl focus-visible:ring-2 focus-visible:outline-none"
     >

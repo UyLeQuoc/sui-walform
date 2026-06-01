@@ -24,7 +24,7 @@ import {
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const OUT_DIR = process.env.WALFORM_SITE_OUT_DIR ?? "out";
+const OUT_DIR = process.env.WALFORM_SITE_OUT_DIR ?? "dist";
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const BUNDLE_TARGET = resolve(
   SCRIPT_DIR,

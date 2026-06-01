@@ -1,7 +1,7 @@
 'use client';
 
 import { Download, FileJson, Globe, Layers } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { Button } from '../../../ui/button';
 import { Input } from '../../../ui/input';
 import { Label } from '../../../ui/label';
@@ -41,7 +41,7 @@ export function WalrusSiteExportClient() {
             <h1 className="text-lg font-semibold">Walrus Site export</h1>
           </div>
           <Button asChild variant="ghost">
-            <Link href="/forms">Back to forms</Link>
+            <Link to="/forms">Back to forms</Link>
           </Button>
         </div>
       </header>

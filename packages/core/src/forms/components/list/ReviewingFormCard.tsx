@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { CalendarClock, ChevronRight, Eye, Globe, Lock, Coins, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -39,7 +39,7 @@ export function ReviewingFormCard({ form }: ReviewingFormCardProps) {
 
   return (
     <Link
-      href={formsRoute.results(form.formId)}
+      to={formsRoute.results(form.formId)}
       aria-label={`Review submissions for ${form.title}`}
       className="focus-visible:ring-ring group block rounded-xl focus-visible:ring-2 focus-visible:outline-none"
     >

@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { Check, Copy, ExternalLink, LogOut, Network, ShieldCheck } from 'lucide-react';
 import { useDisconnectWallet, useSuiClientContext } from '@mysten/dapp-kit';
 import { toast } from 'sonner';
@@ -97,7 +97,7 @@ export function WalletDropdown({ align = 'end', children }: WalletDropdownProps)
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/admin" className="flex items-center gap-2">
+              <Link to="/admin" className="flex items-center gap-2">
                 <ShieldCheck className="h-3.5 w-3.5" />
                 <span>Platform admin</span>
               </Link>

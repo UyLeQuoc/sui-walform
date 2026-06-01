@@ -1,7 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 
-import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import {
   AnimatePresence,
@@ -76,13 +75,10 @@ export function HeroVisual() {
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
               className="absolute inset-0"
             >
-              <Image
+              <img
                 src={imageSrc}
                 alt="WalForm editor — field palette on the left, live form canvas in the middle, form settings on the right"
-                fill
-                sizes="(min-width: 1280px) 1152px, 100vw"
-                className="object-cover object-top"
-                priority
+                className="absolute inset-0 h-full w-full object-cover object-top"
               />
             </motion.div>
           </AnimatePresence>

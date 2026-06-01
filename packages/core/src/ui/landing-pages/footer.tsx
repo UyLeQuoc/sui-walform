@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { Logo } from '../logo';
 
 const GROUPS = [
@@ -36,7 +36,7 @@ export function Footer() {
     <footer className="border-border/70 bg-muted/20 border-t">
       <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 sm:grid-cols-2 md:grid-cols-[1.5fr_repeat(3,1fr)]">
         <div className="space-y-4">
-          <Link href="/" className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <Logo variant="primary" className="size-7" />
             <span className="text-base font-semibold tracking-tight">WalForm</span>
           </Link>

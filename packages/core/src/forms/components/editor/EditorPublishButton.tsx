@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { useCurrentWallet } from '@mysten/dapp-kit';
 import { Button } from '../../../ui/button';
@@ -22,7 +22,7 @@ interface EditorPublishButtonProps {
 const EMPTY_TAGS: string[] = [];
 
 export function EditorPublishButton({ formId }: EditorPublishButtonProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const formTitle = useFormBuilderStore((s) => s.schema.title);
   const formDescription = useFormBuilderStore((s) => s.schema.description ?? '');
   const formTags = useFormBuilderStore((s) => s.schema.tags ?? EMPTY_TAGS);
@@ -50,7 +50,7 @@ export function EditorPublishButton({ formId }: EditorPublishButtonProps) {
     const result = await publish(options);
     setDialogOpen(false);
     if (result?.mode === 'on-chain') {
-      router.push(formsRoute.results(result.formObjectId));
+      navigate(formsRoute.results(result.formObjectId));
     }
   };
 

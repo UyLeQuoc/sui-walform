@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   CalendarCheck,
@@ -90,7 +90,7 @@ interface MarketplaceCardProps {
 }
 
 export function MarketplaceCard({ template, votes }: MarketplaceCardProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { network } = useSuiClientContext();
   const explorer = (
     network === 'mainnet' || network === 'devnet' ? network : 'testnet'
@@ -118,7 +118,7 @@ export function MarketplaceCard({ template, votes }: MarketplaceCardProps) {
 
   const runStart = async () => {
     const result = await clone.start();
-    if (result) router.push(formsRoute.edit(result.draftId));
+    if (result) navigate(formsRoute.edit(result.draftId));
   };
 
   const stripe = CATEGORY_STRIPE[template.category] ?? CATEGORY_STRIPE[4]!;

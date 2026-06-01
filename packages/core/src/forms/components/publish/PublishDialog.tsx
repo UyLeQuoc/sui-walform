@@ -130,7 +130,7 @@ export function PublishDialog({
         new Set(
           allowlistRaw
             .split(/[\s,;]+/)
-            .map((s) => s.trim().replace(/^[\[\]"'<>(){}]+|[\[\]"'<>(){}]+$/g, ''))
+            .map((s) => s.trim().replace(/^[[\]"'<>(){}]+|[[\]"'<>(){}]+$/g, ''))
             .filter((s) => s.startsWith('0x') && s.length >= 3),
         ),
       ),
