@@ -159,7 +159,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground text-sm">Form not found.</p>
+          <p className="text-muted-foreground text-sm">Form not found. Please check if you're on the right network and the form exists.</p>
         </CardContent>
       </Card>
     );
@@ -225,9 +225,9 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       const decrypted = decryptedById[row.submissionId];
       const bodyMatch = decrypted
         ? Object.values(decrypted).some((v) => {
-            if (v === null || v === undefined) return false;
-            return String(v).toLowerCase().includes(needle);
-          })
+          if (v === null || v === undefined) return false;
+          return String(v).toLowerCase().includes(needle);
+        })
         : false;
       if (!submitterMatch && !idMatch && !bodyMatch) return false;
     }
@@ -244,18 +244,18 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     inputFields.length === 0 || decryptedRows.length === 0
       ? Number.NaN
       : decryptedRows.reduce((sum, row) => {
-          let answered = 0;
-          for (const f of inputFields) {
-            const v = row[f.id];
-            const empty =
-              v === null ||
-              v === undefined ||
-              (typeof v === 'string' && v.trim() === '') ||
-              (Array.isArray(v) && v.length === 0);
-            if (!empty) answered++;
-          }
-          return sum + (answered / inputFields.length) * 100;
-        }, 0) / decryptedRows.length;
+        let answered = 0;
+        for (const f of inputFields) {
+          const v = row[f.id];
+          const empty =
+            v === null ||
+            v === undefined ||
+            (typeof v === 'string' && v.trim() === '') ||
+            (Array.isArray(v) && v.length === 0);
+          if (!empty) answered++;
+        }
+        return sum + (answered / inputFields.length) * 100;
+      }, 0) / decryptedRows.length;
   const canDecrypt = !!activePackageId && !!originalPackageId;
   const isDecryptingAny =
     decryption.isSessionInitializing || decryption.pendingIds.size > 0;

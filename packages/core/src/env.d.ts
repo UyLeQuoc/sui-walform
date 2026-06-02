@@ -19,11 +19,21 @@ declare const process: {
   env: {
     NEXT_PUBLIC_DEFAULT_NETWORK?: 'testnet' | 'mainnet';
 
+    // Optional Sui RPC override — falls back to the public fullnode when unset.
+    // Set to a dedicated / paid endpoint to avoid the public node's 429s.
+    NEXT_PUBLIC_SUI_RPC_TESTNET?: string;
+    NEXT_PUBLIC_SUI_RPC_MAINNET?: string;
+
     // Sui core ids — per-network
     NEXT_PUBLIC_PACKAGE_ID_TESTNET?: string;
     NEXT_PUBLIC_PACKAGE_ID_MAINNET?: string;
     NEXT_PUBLIC_ORIGINAL_PACKAGE_ID_TESTNET?: string;
     NEXT_PUBLIC_ORIGINAL_PACKAGE_ID_MAINNET?: string;
+    // Type-origin package id of the `reviewers` module (where its events are
+    // tagged). Set only when reviewers was added via UPGRADE (testnet); falls
+    // back to the original package id otherwise (mainnet).
+    NEXT_PUBLIC_REVIEWERS_PACKAGE_ID_TESTNET?: string;
+    NEXT_PUBLIC_REVIEWERS_PACKAGE_ID_MAINNET?: string;
     NEXT_PUBLIC_TRANSFER_POLICY_ID_TESTNET?: string;
     NEXT_PUBLIC_TRANSFER_POLICY_ID_MAINNET?: string;
     NEXT_PUBLIC_PLATFORM_TREASURY_ID_TESTNET?: string;

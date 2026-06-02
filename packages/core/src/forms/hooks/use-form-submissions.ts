@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { useOriginalPackageId } from '../../sui/package-id';
 
@@ -20,9 +20,14 @@ export interface SubmissionRow {
 
 /**
  * List every Submission for a given form, sourced from chain. We use the
- * SubmissionCreated event stream as the index (events are cheap to query
- * and include submission_id), then `multiGetObjects` to pull the inline
- * ciphertext + nonce off each Submission shared object.
+ * SubmissionCreated event stream as the index, then `multiGetObjects` to pull
+ * the inline ciphertext + nonce off each Submission shared object.
+ *
+ * Both RPCs cap at 50 items per call, so we PAGINATE the event query (cursor
+ * loop) and BATCH multiGetObjects in chunks of 50 — otherwise a form with >50
+ * responses would only ever surface the first page. Discovery is still a
+ * full SubmissionCreated scan filtered client-side by form_id (no per-field
+ * RPC filter); fine at hackathon scale, an indexer is the production answer.
  *
  * Decryption is lazy — call `sealDecryptSubmission` per row when the user
  * expands it (the Seal session-key + key-server fetch is the expensive part).
@@ -34,93 +39,93 @@ export function useFormSubmissions(formObjectId: string | undefined): {
 } {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
+  const client = useSuiClient();
 
-  const eventsQuery = useSuiClientQuery(
-    'queryEvents',
-    {
-      query: originalPackageId
-        ? {
-            MoveEventType: `${originalPackageId}::events::SubmissionCreated`,
-          }
-        : ({} as never),
-      order: 'descending',
-      limit: 200,
+  const query = useQuery<SubmissionRow[]>({
+    // Network-prefixed key so `invalidateChain` (invalidates the [network]
+    // prefix) refreshes this after on-chain mutations.
+    queryKey: [network, 'walform:all-submissions', originalPackageId, formObjectId],
+    enabled: !!originalPackageId && !!formObjectId,
+    staleTime: 10_000,
+    queryFn: async (): Promise<SubmissionRow[]> => {
+      if (!originalPackageId || !formObjectId) return [];
+      const target = normalizeSuiAddress(formObjectId);
+
+      // 1) paginate the SubmissionCreated stream → ids for THIS form.
+      const ids: string[] = [];
+      const seen = new Set<string>();
+      let cursor: { txDigest: string; eventSeq: string } | null = null;
+      for (let page = 0; page < 100; page++) {
+        const res = await client.queryEvents({
+          query: { MoveEventType: `${originalPackageId}::events::SubmissionCreated` },
+          order: 'descending',
+          limit: 50,
+          cursor,
+        });
+        for (const ev of res.data) {
+          const parsed = ev.parsedJson as { form_id?: string; submission_id?: string } | undefined;
+          if (!parsed?.form_id || !parsed.submission_id) continue;
+          if (normalizeSuiAddress(parsed.form_id) !== target) continue;
+          if (seen.has(parsed.submission_id)) continue;
+          seen.add(parsed.submission_id);
+          ids.push(parsed.submission_id);
+        }
+        if (!res.hasNextPage || !res.nextCursor) break;
+        cursor = res.nextCursor;
+      }
+
+      // 2) fetch the Submission objects in batches of 50 (RPC cap).
+      const objects: Awaited<ReturnType<typeof client.multiGetObjects>> = [];
+      for (let i = 0; i < ids.length; i += 50) {
+        const part = await client.multiGetObjects({
+          ids: ids.slice(i, i + 50),
+          options: { showContent: true, showType: true },
+        });
+        objects.push(...part);
+      }
+
+      // 3) decode inline ciphertext + nonce off each object.
+      const out: SubmissionRow[] = [];
+      for (const entry of objects) {
+        const obj = entry.data;
+        if (!obj?.objectId) continue;
+        const content = obj.content as unknown as
+          | {
+              dataType: 'moveObject';
+              fields: {
+                form_id?: string;
+                submitter?: string;
+                encrypted_body?: number[];
+                file_blob_ids?: number[][];
+                nonce?: number[];
+                submitted_at_ms?: string | number;
+              };
+            }
+          | undefined;
+        const fields = content?.fields;
+        if (!fields) continue;
+        // Skip malformed rows where ciphertext or nonce is missing — Seal
+        // decrypt would throw, and a non-decryptable "Encrypted" row is just
+        // confusing.
+        if (!fields.encrypted_body?.length || !fields.nonce?.length) continue;
+        out.push({
+          submissionId: obj.objectId,
+          formId: fields.form_id ? normalizeSuiAddress(fields.form_id) : '',
+          submitter: fields.submitter ? normalizeSuiAddress(fields.submitter) : '',
+          ciphertext: new Uint8Array(fields.encrypted_body),
+          nonce: new Uint8Array(fields.nonce),
+          fileBlobIds: (fields.file_blob_ids ?? []).map((b) => new Uint8Array(b)),
+          submittedAtMs: Number(fields.submitted_at_ms ?? 0),
+        });
+      }
+      out.sort((a, b) => b.submittedAtMs - a.submittedAtMs);
+      return out;
     },
-    { enabled: !!originalPackageId && !!formObjectId },
-  );
+  });
 
-  const submissionIds = useMemo(() => {
-    if (!formObjectId) return [];
-    const targetForm = normalizeSuiAddress(formObjectId);
-    const events = eventsQuery.data?.data ?? [];
-    const ids: string[] = [];
-    const seen = new Set<string>();
-    for (const ev of events) {
-      const parsed = ev.parsedJson as { form_id?: string; submission_id?: string } | undefined;
-      if (!parsed?.form_id || !parsed.submission_id) continue;
-      if (normalizeSuiAddress(parsed.form_id) !== targetForm) continue;
-      const sid = parsed.submission_id;
-      if (seen.has(sid)) continue;
-      seen.add(sid);
-      ids.push(sid);
-    }
-    return ids;
-  }, [eventsQuery.data, formObjectId]);
-
-  const objectsQuery = useSuiClientQuery(
-    'multiGetObjects',
-    {
-      ids: submissionIds,
-      options: { showContent: true, showType: true },
-    },
-    { enabled: submissionIds.length > 0 },
-  );
-
-  const rows = useMemo<SubmissionRow[]>(() => {
-    const objects = objectsQuery.data ?? [];
-    const out: SubmissionRow[] = [];
-    for (const entry of objects) {
-      const obj = entry.data;
-      if (!obj?.objectId) continue;
-      const content = obj.content as unknown as
-        | {
-            dataType: 'moveObject';
-            fields: {
-              form_id?: string;
-              submitter?: string;
-              encrypted_body?: number[];
-              file_blob_ids?: number[][];
-              nonce?: number[];
-              submitted_at_ms?: string | number;
-            };
-          }
-        | undefined;
-      const fields = content?.fields;
-      if (!fields) continue;
-      // Skip malformed rows where ciphertext or nonce is missing — Seal
-      // decrypt will throw on empty inputs anyway, and presenting them as
-      // "Encrypted" rows the user can't decrypt is confusing.
-      if (!fields.encrypted_body?.length || !fields.nonce?.length) continue;
-      out.push({
-        submissionId: obj.objectId,
-        formId: fields.form_id ? normalizeSuiAddress(fields.form_id) : '',
-        submitter: fields.submitter ? normalizeSuiAddress(fields.submitter) : '',
-        ciphertext: new Uint8Array(fields.encrypted_body),
-        nonce: new Uint8Array(fields.nonce),
-        fileBlobIds: (fields.file_blob_ids ?? []).map((b) => new Uint8Array(b)),
-        submittedAtMs: Number(fields.submitted_at_ms ?? 0),
-      });
-    }
-    out.sort((a, b) => b.submittedAtMs - a.submittedAtMs);
-    return out;
-  }, [objectsQuery.data]);
-
-  void network;
   return {
-    rows,
-    isLoading:
-      (!!originalPackageId && !!formObjectId && eventsQuery.isPending) ||
-      (submissionIds.length > 0 && objectsQuery.isPending),
-    error: (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null,
+    rows: query.data ?? [],
+    isLoading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
   };
 }
