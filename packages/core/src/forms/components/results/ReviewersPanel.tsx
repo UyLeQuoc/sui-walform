@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Trash2, UserPlus, Users } from 'lucide-react';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
@@ -24,17 +24,14 @@ interface ReviewersPanelProps {
  *
  * Auto-enable on first add: forms published before the reviewers upgrade
  * have no `FormReviewers` tracker. When the owner clicks Add on such a
- * form, we transparently fire `create_and_share` first, then chain the
- * actual add via a small useEffect (2 wallet signs, 1 UX action).
+ * form, we fire `create_and_share` first, read the new tracker id straight
+ * off that tx, then chain the actual add against it (2 wallet signs, 1 UX
+ * action) — deterministic, no event-index race.
  */
 export function ReviewersPanel({ formId, capId }: ReviewersPanelProps) {
   const account = useCurrentAccount();
   const reviewers = useFormReviewers(formId);
   const [draft, setDraft] = useState('');
-  // Stash address while the tracker is being created. Ref (not state) so
-  // the React 19 setState-in-effect lint doesn't trip — the indicator
-  // derives from `reviewers.isMutating` instead.
-  const pendingRef = useRef<string | null>(null);
 
   const myAddr = account?.address ? normalizeSuiAddress(account.address) : null;
   // Owner identity proven by both (a) the cap id passed in by the parent
@@ -43,16 +40,6 @@ export function ReviewersPanel({ formId, capId }: ReviewersPanelProps) {
   const isOwner = !!myAddr && !!capId && (!reviewers.owner || reviewers.owner === myAddr);
   const isMember = !!myAddr && reviewers.members.includes(myAddr);
   const canAdd = isOwner || isMember;
-
-  // Once the tracker pops in, flush any stashed add.
-  useEffect(() => {
-    const pending = pendingRef.current;
-    if (!pending) return;
-    if (!reviewers.reviewersId) return;
-    if (reviewers.isMutating) return;
-    pendingRef.current = null;
-    void reviewers.addReviewer(pending);
-  }, [reviewers.reviewersId, reviewers.isMutating, reviewers]);
 
   if (reviewers.isLoading) {
     return (
@@ -67,18 +54,17 @@ export function ReviewersPanel({ formId, capId }: ReviewersPanelProps) {
   const handleAdd = async () => {
     const addr = draft.trim();
     if (!addr || !canAdd) return;
+    setDraft('');
     if (!reviewers.reviewersId) {
-      // Old form: auto-create the tracker first. Owner-only (enable needs
-      // the cap). The chained useEffect fires addReviewer once reviewersId
-      // resolves.
+      // Old form: auto-create the tracker first (owner-only — enable needs the
+      // cap), then chain the add against the id the enable tx returns. No
+      // event-index wait, no useEffect race.
       if (!capId) return;
-      pendingRef.current = addr;
-      setDraft('');
-      await reviewers.enableReviewers(formId, capId);
+      const newId = await reviewers.enableReviewers(formId, capId);
+      if (newId) await reviewers.addReviewer(addr, newId);
       return;
     }
     await reviewers.addReviewer(addr);
-    setDraft('');
   };
 
   const busy = reviewers.isMutating;

@@ -14,14 +14,19 @@ import '@mysten/dapp-kit/dist/index.css';
 
 export type WalFormNetwork = 'testnet' | 'mainnet';
 
+// The public fullnodes (`getJsonRpcFullnodeUrl`) are heavily rate-limited —
+// busy pages (e.g. "Decrypt all" over 100 submissions) can trip HTTP 429.
+// Point these at a dedicated / paid RPC to raise the ceiling. `||` (not `??`)
+// because the build inlines an unset var as `undefined`, but an env file with
+// an empty value inlines `""`, which we also want to fall back from.
 const { networkConfig } = createNetworkConfig({
   testnet: {
-    url: getJsonRpcFullnodeUrl('testnet'),
+    url: process.env.NEXT_PUBLIC_SUI_RPC_TESTNET || getJsonRpcFullnodeUrl('testnet'),
     network: 'testnet',
     variables: { network: 'testnet' as const },
   },
   mainnet: {
-    url: getJsonRpcFullnodeUrl('mainnet'),
+    url: process.env.NEXT_PUBLIC_SUI_RPC_MAINNET || getJsonRpcFullnodeUrl('mainnet'),
     network: 'mainnet',
     variables: { network: 'mainnet' as const },
   },

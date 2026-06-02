@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { Link } from 'react-router-dom';
 import { useMemo } from 'react';
+import { NotFound } from '../../../ui/not-found';
 import { Logo } from '../../../ui/logo';
 import { cn } from '../../../lib/utils';
 import { useStoredForm } from '../../hooks/use-stored-form';
@@ -31,7 +31,7 @@ export function FormPreviewClient({ id }: Props) {
 
   const isPageMode = (schema.settings.displayMode ?? 'card') === 'page';
 
-  if (state.status === 'not-found') notFound();
+  if (state.status === 'not-found') return <NotFound />;
 
   if (state.status === 'loading') {
     return <div className="bg-secondary/40 min-h-screen animate-pulse" />;
@@ -77,7 +77,7 @@ export function FormPreviewClient({ id }: Props) {
         {/* Attribution footer, right under the card */}
         <footer className="text-muted-foreground mt-4 flex w-full max-w-2xl flex-col items-center gap-1 px-2 text-center text-xs sm:flex-row sm:justify-between sm:text-left">
           <Link
-            href="/"
+            to="/"
             className="hover:text-foreground inline-flex items-center gap-2 transition-colors"
           >
             <Logo className="size-4" />

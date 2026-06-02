@@ -2,7 +2,12 @@
 
 import { useCallback, useState } from 'react';
 import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
-import { sealDecryptSubmission, useSealClient } from '../../crypto';
+import {
+  buildSealApproveBatch,
+  getSealThreshold,
+  sealDecryptSubmission,
+  useSealClient,
+} from '../../crypto';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
 import { decodeBodyPointer, fetchWalrusBlob } from '../../walrus';
 import { useFormReviewers } from './use-form-reviewers';
@@ -10,6 +15,49 @@ import { useSealSession } from './use-seal-session';
 import type { SubmissionRow } from './use-form-submissions';
 
 export type DecryptedRow = Record<string, unknown>;
+
+/**
+ * Max decrypts in flight at once. Each decrypt's `tx.build()` resolves the
+ * submission object (and, on the first call, the `seal_approve` Move function)
+ * over RPC, plus a Seal key-server fetch. Firing all of a 100-row "Decrypt
+ * all" at once stampedes the public Sui fullnode, which rate-limits with HTTP
+ * 429 — and a 429 response carries no CORS headers, so the browser reports it
+ * as a misleading "blocked by CORS policy" error. Capping the fan-out keeps us
+ * under the limit. (Point `NEXT_PUBLIC_SUI_RPC_{TESTNET,MAINNET}` at a
+ * higher-limit RPC to raise the ceiling.)
+ */
+const DECRYPT_CONCURRENCY = 4;
+
+/**
+ * Submissions per batched `seal.fetchKeys` request. One PTB carries this many
+ * `seal_approve` calls; the key servers reject PTBs with too many, so keep it
+ * conservative. Each batch = ONE key-server round trip + ONE `tx.build` (which
+ * resolves all the batch's submission objects in a single `multiGetObjects`).
+ */
+const BATCH_SIZE = 10;
+
+/**
+ * Run `worker` over `items` with at most `limit` promises in flight. `worker`
+ * is expected to swallow its own errors (decryptOne records per-row errors in
+ * state), so a rejected lane never aborts the rest.
+ */
+async function runWithConcurrency<T>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  // Pull-with-guard so the index access narrows cleanly under
+  // noUncheckedIndexedAccess (items[i] is `T | undefined`); the
+  // `!== undefined` loop condition narrows back to `T` in the body.
+  const next = (): T | undefined => (cursor < items.length ? items[cursor++] : undefined);
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (let item = next(); item !== undefined; item = next()) {
+      await worker(item);
+    }
+  });
+  await Promise.all(lanes);
+}
 
 export interface UseSubmissionDecryptionResult {
   decryptedById: Record<string, DecryptedRow>;
@@ -32,8 +80,9 @@ export interface UseSubmissionDecryptionInput {
  * first call (one signPersonalMessage prompt, cached 30 min), then every
  * subsequent decrypt is silent.
  *
- * `decryptAll` runs sequentially so a single failed row doesn't poison the
- * Seal session retries — and so the UI can show progress one row at a time.
+ * `decryptAll` warms the session + caches on one row, then fans the rest out
+ * with bounded concurrency (see `DECRYPT_CONCURRENCY`) so a large batch stays
+ * under the public fullnode's rate limit instead of stampeding it.
  */
 export function useSubmissionDecryption(
   input: UseSubmissionDecryptionInput,
@@ -72,8 +121,11 @@ export function useSubmissionDecryption(
     });
   }, []);
 
-  const decryptOne = useCallback(
-    async (row: SubmissionRow) => {
+  // Core decrypt for a single row. When `prebuiltTxBytes` is supplied (from a
+  // batched `buildSealApproveBatch` + `seal.fetchKeys`), the per-row build is
+  // skipped and the key is already cached, so this runs with no extra RPC.
+  const decryptRow = useCallback(
+    async (row: SubmissionRow, prebuiltTxBytes?: Uint8Array) => {
       if (!originalPackageId || !activePackageId || !seal) return;
       if (network !== 'testnet' && network !== 'mainnet') return;
       addPending(row.submissionId);
@@ -108,6 +160,7 @@ export function useSubmissionDecryption(
             ciphertext,
             nonce: row.nonce,
             reviewersObjectId: reviewersState.reviewersId ?? undefined,
+            prebuiltTxBytes,
           });
         let plaintextBytes: Uint8Array;
         try {
@@ -145,25 +198,78 @@ export function useSubmissionDecryption(
     ],
   );
 
+  // Public single-row decrypt (Individual-tab dialog button). Builds its own
+  // seal_approve PTB + fetches its own key.
+  const decryptOne = useCallback((row: SubmissionRow) => decryptRow(row), [decryptRow]);
+
   const decryptAll = useCallback(
     async (rows: SubmissionRow[]) => {
+      if (!originalPackageId || !activePackageId || !seal) return;
+      if (network !== 'testnet' && network !== 'mainnet') return;
       // Pre-warm the Seal session FIRST so the wallet only pops one signature
-      // prompt — concurrent decryptOne calls would otherwise each see
-      // `sessionRef.current === null` through their own captured closures
-      // (the `inFlightRef` inside useSealSession dedupes this, but doing the
-      // ensureSession up-front makes the intent explicit and the failure
-      // case fail fast). Then fan out via `Promise.allSettled` so a single
-      // bad row doesn't poison the rest.
-      try {
-        await sealSession.ensureSession();
-      } catch {
-        // ensureSession already set its own error state; let decryptOne
-        // surface the per-row error.
-      }
+      // prompt for the whole batch. ensureSession sets its own error state on
+      // failure (e.g. the user rejects the signature), so just bail.
+      const sessionKey = await sealSession.ensureSession().catch(() => null);
+      if (!sessionKey) return;
       const todo = rows.filter((r) => !decryptedById[r.submissionId]);
-      await Promise.allSettled(todo.map((row) => decryptOne(row)));
+      if (todo.length === 0) return;
+
+      const threshold = getSealThreshold();
+      const reviewersObjectId = reviewersState.reviewersId ?? undefined;
+
+      // Each submission is sealed under its OWN identity (form.id || unique
+      // nonce), so there's no single key that opens all of them. But one
+      // `seal.fetchKeys` request fetches EVERY per-identity key in a batch at
+      // once (the key servers evaluate all the seal_approve calls in one PTB),
+      // and the one `tx.build` resolves all the batch's submission objects in a
+      // single multiGetObjects. So N submissions cost ~N/BATCH_SIZE round trips
+      // instead of N — which is what keeps the public fullnode from 429-ing.
+      for (let i = 0; i < todo.length; i += BATCH_SIZE) {
+        const batch = todo.slice(i, i + BATCH_SIZE);
+        let batchTxBytes: Uint8Array | undefined;
+        try {
+          const approve = await buildSealApproveBatch({
+            client: suiClient,
+            packageId: activePackageId,
+            formObjectId: formId,
+            reviewersObjectId,
+            items: batch.map((r) => ({ submissionObjectId: r.submissionId, nonce: r.nonce })),
+          });
+          await seal.fetchKeys({
+            ids: approve.ids,
+            txBytes: approve.txBytes,
+            sessionKey,
+            threshold,
+          });
+          batchTxBytes = approve.txBytes;
+        } catch (err) {
+          // Batched fetch failed — e.g. a row that fails the access gate poisons
+          // the shared PTB, or the server rejects the batch size. Fall back to
+          // per-row decrypt (each builds its own PTB + fetches its own key),
+          // which isolates the offending row.
+          console.warn('[seal] batched fetchKeys failed, falling back to per-row', err);
+          batchTxBytes = undefined;
+        }
+        // With keys cached (batchTxBytes set), each decrypt is local; the
+        // remaining per-row cost is only a Walrus fetch for pointer bodies.
+        // Bound it anyway so the fallback (per-row build) can't stampede.
+        await runWithConcurrency(batch, DECRYPT_CONCURRENCY, (row) =>
+          decryptRow(row, batchTxBytes),
+        );
+      }
     },
-    [decryptedById, decryptOne, sealSession],
+    [
+      originalPackageId,
+      activePackageId,
+      seal,
+      network,
+      sealSession,
+      suiClient,
+      formId,
+      reviewersState.reviewersId,
+      decryptedById,
+      decryptRow,
+    ],
   );
 
   return {

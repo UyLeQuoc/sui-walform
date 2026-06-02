@@ -1,7 +1,9 @@
 /**
  * Env shim — declares the NEXT_PUBLIC_* env vars we read in `@walform/core`
- * so TypeScript doesn't require `@types/node` on a client library. At runtime
- * Next.js inlines `process.env.NEXT_PUBLIC_X` at build time. WalForm has no
+ * so TypeScript doesn't require `@types/node` on a client library. At build
+ * time the Vite config (`packages/build-config/next-public-define.ts`) text-
+ * replaces every `process.env.NEXT_PUBLIC_X` token with its JSON literal via
+ * `define`, so no `process` global is referenced at runtime. WalForm has no
  * server-side signing or sponsorship — every Sui tx is signed and paid by
  * the user's connected wallet.
  *
@@ -11,16 +13,27 @@
  * on `useSuiClientContext().network`.
  */
 declare module '*.css';
+declare module '@fontsource-variable/*';
 
 declare const process: {
   env: {
     NEXT_PUBLIC_DEFAULT_NETWORK?: 'testnet' | 'mainnet';
+
+    // Optional Sui RPC override — falls back to the public fullnode when unset.
+    // Set to a dedicated / paid endpoint to avoid the public node's 429s.
+    NEXT_PUBLIC_SUI_RPC_TESTNET?: string;
+    NEXT_PUBLIC_SUI_RPC_MAINNET?: string;
 
     // Sui core ids — per-network
     NEXT_PUBLIC_PACKAGE_ID_TESTNET?: string;
     NEXT_PUBLIC_PACKAGE_ID_MAINNET?: string;
     NEXT_PUBLIC_ORIGINAL_PACKAGE_ID_TESTNET?: string;
     NEXT_PUBLIC_ORIGINAL_PACKAGE_ID_MAINNET?: string;
+    // Type-origin package id of the `reviewers` module (where its events are
+    // tagged). Set only when reviewers was added via UPGRADE (testnet); falls
+    // back to the original package id otherwise (mainnet).
+    NEXT_PUBLIC_REVIEWERS_PACKAGE_ID_TESTNET?: string;
+    NEXT_PUBLIC_REVIEWERS_PACKAGE_ID_MAINNET?: string;
     NEXT_PUBLIC_TRANSFER_POLICY_ID_TESTNET?: string;
     NEXT_PUBLIC_TRANSFER_POLICY_ID_MAINNET?: string;
     NEXT_PUBLIC_PLATFORM_TREASURY_ID_TESTNET?: string;

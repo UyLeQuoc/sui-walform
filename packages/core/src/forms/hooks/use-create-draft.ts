@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { formsRoute } from '../lib/routes';
 import { useForms } from './use-forms';
 
@@ -18,7 +18,7 @@ export interface UseCreateDraftResult {
  * draft creation flow testable without mounting the entire list view.
  */
 export function useCreateDraft(): UseCreateDraftResult {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { createForm } = useForms();
   const [isCreating, setIsCreating] = useState(false);
 
@@ -26,7 +26,7 @@ export function useCreateDraft(): UseCreateDraftResult {
     setIsCreating(true);
     try {
       const id = await createForm();
-      router.push(formsRoute.edit(id));
+      navigate(formsRoute.edit(id));
     } catch {
       setIsCreating(false);
     }

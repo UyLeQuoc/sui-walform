@@ -97,7 +97,7 @@ export function FileAttachmentView({ value }: FileAttachmentViewProps) {
             {attachment.type || `kind: ${kind}`}
           </span>
         </div>
-        <Button asChild size="sm" variant="outline" className="h-7 px-2 text-[11px]">
+        <Button asChild size="sm" variant="outline" className="h-7 shrink-0 px-2 text-[11px]">
           <a href={attachment.url} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="mr-1 h-3 w-3" />
             Open
@@ -106,7 +106,7 @@ export function FileAttachmentView({ value }: FileAttachmentViewProps) {
         <Button
           size="sm"
           variant="outline"
-          className="h-7 px-2 text-[11px]"
+          className="h-7 shrink-0 px-2 text-[11px]"
           disabled={downloading}
           onClick={() => void handleDownload()}
         >

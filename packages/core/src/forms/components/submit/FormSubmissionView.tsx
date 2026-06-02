@@ -36,7 +36,7 @@ export function FormSubmissionView({ formId }: FormSubmissionViewProps) {
     return (
       <CenteredMessage
         title="Form not found"
-        description="The form id is invalid or hasn't been published yet."
+        description="The form id is invalid or hasn't been published yet. Please check your network(testnet or mainnet)"
       />
     );
   }

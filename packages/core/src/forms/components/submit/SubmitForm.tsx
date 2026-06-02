@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { Logo } from '../../../ui/logo';
@@ -98,7 +98,7 @@ export function SubmitForm({ form }: SubmitFormProps) {
       )}
     >
       <div className="mb-3 flex w-full max-w-2xl items-center justify-between">
-        <Link href="/" aria-label="WalForm home" className="flex items-center gap-2">
+        <Link to="/" aria-label="WalForm home" className="flex items-center gap-2">
           <Logo className="size-5" />
           <span className="text-muted-foreground text-xs">
             {ACCESS_MODE_LABEL[form.accessMode](form)}
@@ -174,7 +174,7 @@ export function SubmitForm({ form }: SubmitFormProps) {
           creator and you can decrypt them.
         </p>
         <Link
-          href="/"
+          to="/"
           className="text-muted-foreground hover:text-foreground mt-3 inline-flex items-center gap-1.5 text-[11px] transition-colors"
         >
           <Logo className="size-3.5" />

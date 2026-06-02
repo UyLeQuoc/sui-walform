@@ -52,6 +52,15 @@
 }
 
 :root {
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --font-geist-sans: 'Geist Variable', system-ui, sans-serif;
+  --font-geist-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-form-roboto: 'Roboto Variable', system-ui, sans-serif;
+  --font-form-space-grotesk: 'Space Grotesk Variable', system-ui, sans-serif;
+  --font-form-lora: 'Lora Variable', Georgia, serif;
+  --font-form-merriweather: 'Merriweather Variable', Georgia, serif;
+  --font-form-playfair: 'Playfair Display Variable', Georgia, serif;
+  --font-form-jetbrains-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
   --background: oklch(1 0 0);
   --foreground: oklch(0.148 0.004 228.8);
   --card: oklch(1 0 0);
@@ -127,6 +136,11 @@
 
   body {
     @apply bg-background text-foreground;
+    /* Defense-in-depth: never let a stray wide descendant produce a
+       page-level horizontal scrollbar. `clip` (not `hidden`) avoids creating a
+       scroll container, so sticky/fixed positioning is unaffected and only the
+       horizontal axis is clipped (vertical scroll stays normal). */
+    overflow-x: clip;
   }
 
   button:not(:disabled),
@@ -137,6 +151,7 @@
   html {
     @apply font-sans;
     scrollbar-gutter: stable;
+    overflow-x: clip;
   }
 }
 

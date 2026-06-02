@@ -1,0 +1,12 @@
+{
+  "name": "@walform/build-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./next-public-define": "./next-public-define.ts"
+  },
+  "devDependencies": {
+    "vite": "^7"
+  }
+}

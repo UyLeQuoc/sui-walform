@@ -10,6 +10,7 @@ WalForm — decentralized form builder on Sui. Stack lives end-to-end on testnet
 - **Seal** encrypts submission bodies + (post-upgrade) form schemas client-side; key servers via the Mysten testnet committee + aggregator.
 - **Wallet model** — every WalForm tx (creator publish/update/close, respondent submit, marketplace clone/buy, Mode B deploy) is signed and paid by the user's connected wallet via dApp Kit's `useSignAndExecuteTransaction`. No app-level transaction sponsorship; Enoki is used only for `registerEnokiWallets` (Google sign-in).
 - **Walrus** is opt-in only (cover images, FILE_UPLOAD, Mode B site shell) — base flow is zero WAL by storing schema + ciphertext inline in Sui objects.
+- **Frontend** — both apps are **Vite 7 + React 19 + react-router-dom v7 static SPAs** (no SSR, no API routes; everything ships static to Walrus Sites). Tailwind v4 via `@tailwindcss/vite`; fonts via `@fontsource-variable/*` loaded in `packages/core/src/ui/fonts.ts` (CSS vars in `ui/globals.css`); theme via `@teispace/next-themes/client`. `process.env.NEXT_PUBLIC_*` is kept in source and text-replaced at build by `packages/build-config :: nextPublicDefine` (so `core` stays bundler-agnostic). Migrated off Next.js 2026-06-02.
 
 Read [`docs/PRD.md`](docs/PRD.md) for binding architectural decisions (Appendix A is the authoritative log) and [`docs/PROGRESS.md`](docs/PROGRESS.md) for current implementation state + ordered next-up queue.
 
@@ -19,12 +20,13 @@ Read [`docs/PRD.md`](docs/PRD.md) for binding architectural decisions (Appendix 
 
 | Workspace | What it is |
 | --- | --- |
-| `apps/builder` | Next.js 15 SSR on Vercel. Creator dashboard, authoring canvas, `/forms` list (Drafts / My Forms / Marketplace tabs), Mode A renderer at `/f/[id]`, Results dashboard at `/forms/[id]/results`, submitter receipt at `/f/[id]/receipt`. Holds `/api/walrus/upload` (server-side WAL payer for cover images + file attachments). |
+| `apps/builder` | **Vite 7 + react-router-dom v7 SPA** → static `out/` (deploys to Walrus Sites). Entry `index.html` + `src/main.tsx` → `src/router.tsx` (flat routes) → `src/routes/*`. Creator dashboard, authoring canvas, `/forms` list (Drafts / My Forms / Marketplace tabs), Mode A renderer at `/f?formId=…`, Results at `/forms/results?formId=…`. Query-string ids (no dynamic path segments). No server routes — fully static; Walrus writes run browser-side from the user's wallet. |
 | `apps/contracts` | Move 2024 package + publish/upgrade/codegen scripts. `deployed.json` tracks `packageId` (bumps on upgrade) and `originalPackageId` (stays stable — Seal identity namespace). |
 | `apps/portal` | Vendored from `MystenLabs/walrus-sites/portal`. **Local dev only** — production uses public `wal.app`. Resolves `{base36}.localhost:8080` to testnet Walrus blobs. |
 | `packages/core` | Single shared library. Imports from any app. Holds shadcn primitives (`src/ui/*`), all forms code (`src/forms/*` — components, hooks, IDB drafts, store), Sui wiring (`src/sui/*` — providers, `useExecuteTransaction` helper, wallet UI, codegen bindings, tx builders), Seal helpers (`src/crypto/*`). |
-| `packages/{eslint-config,prettier-config,tsconfig}` | Shared dev configs. |
-| `packages/walform-site` | Mode B static shell. The builder's Deploy button bundles + pushes per form via the user's connected wallet (`WalrusWalletSigner`); Sui `site::Site` PTB also signed by user. |
+| `packages/{eslint-config,prettier-config,tsconfig}` | Shared dev configs. `eslint-config/react` (used by both apps) pins `react.version` (not `'detect'`) — ESLint 10 + eslint-plugin-react 7.37 crash on auto-detect. |
+| `packages/build-config` | Shared Vite helper. `nextPublicDefine(mode, dir)` builds the `define` map that text-replaces `process.env.NEXT_PUBLIC_*` tokens at build time; both apps' `vite.config.ts` import it (relatively) and pass `apps/builder/.env.local` as the env dir. |
+| `packages/walform-site` | Mode B static shell — **Vite 7 SPA** → `dist/`, hash/config-routed (`#/f/{formId}` or baked `config.json`), router-free. The builder's Deploy button bundles + pushes per form via the user's connected wallet (`WalrusWalletSigner`); Sui `site::Site` PTB also signed by user. `dist/` is mirrored into `apps/builder/public/walform-site-bundle/` by `scripts/mirror-bundle.ts`. |
 
 ## Commands
 
@@ -71,7 +73,7 @@ Submission body encryption is wired and shipping. Identity layout = `form.id_add
 
 ### Mode A vs Mode B (PRD v1.0)
 
-`apps/builder/app/f/[id]/page.tsx` is the always-on Mode A renderer + in-builder preview. Mode B (Walrus Site per form) will be a single shared `packages/walform-site/` static shell pushed to Walrus once — per-form deploy is just a `site_object::create` PTB pointing at the shared blob, no per-form WAL spend. This supersedes the dropped `apps/renderer` per-form-export design (PRD v1.0 Appendix A 2026-04-26).
+`apps/builder/src/routes/PublicSubmitRoute.tsx` (`/f?formId=…`) is the always-on Mode A renderer + in-builder preview. Mode B (Walrus Site per form) is a single shared `packages/walform-site/` static shell pushed to Walrus once — per-form deploy is just a `site_object::create` PTB pointing at the shared blob, no per-form WAL spend. This supersedes the dropped `apps/renderer` per-form-export design (PRD v1.0 Appendix A 2026-04-26).
 
 ## Conventions baked into the codebase
 

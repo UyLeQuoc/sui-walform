@@ -21,6 +21,10 @@ interface UseFormPreviewParams {
    * the form (RHF requires `reset` for that).
    */
   prefill?: Record<string, unknown>;
+  /** Read-only browse mode (e.g. Marketplace template preview): page
+   *  navigation skips validation so a viewer can flip through every page
+   *  without filling required fields, and Back is always allowed. */
+  preview?: boolean;
 }
 
 export interface UseFormPreviewResult {
@@ -57,6 +61,7 @@ export function useFormPreview({
   schema,
   onSubmit,
   prefill,
+  preview = false,
 }: UseFormPreviewParams): UseFormPreviewResult {
   const { pages, fieldsByPage, navigation } = useMemo(() => normalizeSchema(schema), [schema]);
 
@@ -104,7 +109,8 @@ export function useFormPreview({
 
   const goNext = useCallback(async () => {
     if (pages.length === 0) return;
-    if (navigation.mode === 'sequential') {
+    // Browse-only preview flips through pages without gating on validation.
+    if (!preview && navigation.mode === 'sequential') {
       const ok = await validateCurrentPage();
       if (!ok) {
         setPageError('Please fix the highlighted fields before continuing.');
@@ -115,10 +121,10 @@ export function useFormPreview({
     if (safeIndex + 1 >= pages.length) return;
     setPageHistory((prev) => [...prev, safeIndex]);
     setCurrentPageIndex(safeIndex + 1);
-  }, [pages.length, safeIndex, navigation.mode, validateCurrentPage]);
+  }, [pages.length, safeIndex, navigation.mode, validateCurrentPage, preview]);
 
   const goPrevious = useCallback(() => {
-    if (!navigation.allowBack) return;
+    if (!preview && !navigation.allowBack) return;
     if (pageHistory.length > 0) {
       const prev = pageHistory[pageHistory.length - 1]!;
       setPageHistory((p) => p.slice(0, -1));
@@ -127,7 +133,7 @@ export function useFormPreview({
       setCurrentPageIndex(safeIndex - 1);
     }
     setPageError(null);
-  }, [navigation.allowBack, pageHistory, safeIndex]);
+  }, [preview, navigation.allowBack, pageHistory, safeIndex]);
 
   const handleSubmit = useCallback(
     async (e?: BaseSyntheticEvent): Promise<void> => {

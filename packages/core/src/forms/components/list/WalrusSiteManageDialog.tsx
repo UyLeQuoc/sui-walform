@@ -119,7 +119,7 @@ export function WalrusSiteManageDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Globe className="h-4 w-4" />
@@ -138,7 +138,7 @@ export function WalrusSiteManageDialog({
               href={publicUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-foreground truncate font-mono underline-offset-2 hover:underline"
+              className="hover:text-foreground min-w-0 flex-1 truncate font-mono underline-offset-2 hover:underline"
               title={publicUrl}
             >
               {publicUrl}
@@ -147,13 +147,13 @@ export function WalrusSiteManageDialog({
               type="button"
               variant="ghost"
               size="icon"
-              className="ml-auto size-6"
+              className="size-6 shrink-0"
               onClick={() => void copy(publicUrl, 'URL copied')}
               aria-label="Copy URL"
             >
               <Copy className="h-3 w-3" />
             </Button>
-            <Button asChild type="button" variant="ghost" size="icon" className="size-6">
+            <Button asChild type="button" variant="ghost" size="icon" className="size-6 shrink-0">
               <a href={publicUrl} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="h-3 w-3" />
               </a>
@@ -161,14 +161,14 @@ export function WalrusSiteManageDialog({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground shrink-0">Site object</span>
-            <code className="truncate font-mono" title={siteObjectId}>
+            <code className="min-w-0 flex-1 truncate font-mono" title={siteObjectId}>
               {siteObjectId}
             </code>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="ml-auto size-6"
+              className="size-6 shrink-0"
               onClick={() => void copy(siteObjectId, 'Site id copied')}
               aria-label="Copy site id"
             >

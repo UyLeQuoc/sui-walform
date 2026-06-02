@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { FileText, Lock, Wallet } from 'lucide-react';
 import { useCurrentWallet } from '@mysten/dapp-kit';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../ui/tabs';
@@ -18,7 +18,7 @@ import { EmptyState, ErrorState, GridSkeleton } from './list-shared';
 type TopTab = 'forms' | 'marketplace';
 
 export function FormsListClient() {
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const { isConnected } = useCurrentWallet();
   const { forms, isLoading: draftsLoading, error: draftsError, deleteForm } = useForms();
   const {
@@ -74,7 +74,7 @@ export function FormsListClient() {
             {isLoading ? (
               <GridSkeleton />
             ) : error ? (
-              <ErrorState message={error.message} onRetry={() => router.refresh()} />
+              <ErrorState message={error.message} onRetry={() => void queryClient.invalidateQueries()} />
             ) : !isConnected && forms.length === 0 ? (
               <EmptyState
                 icon={<Wallet className="text-muted-foreground h-8 w-8" />}

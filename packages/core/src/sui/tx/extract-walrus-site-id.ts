@@ -166,17 +166,20 @@ export function walrusSitePublicUrl(
   formId: string,
   network: 'testnet' | 'mainnet' | 'devnet',
 ): string {
+  // Clean root URL: the deploy bakes this form's id + network into the bundle's
+  // `config.json`, so the shell renders the form at `/` — no `#/f/<id>` needed.
+  // (`formId` stays in the signature for callers; the hash route remains a
+  // dev-only fallback the shell still honours.)
   const subdomain = hexObjectIdToBase36(siteObjectId);
   if (network === 'mainnet') {
-    return `https://${subdomain}.wal.app/#/f/${formId}`;
+    return `https://${subdomain}.wal.app/`;
   }
-  const overrideHost =
-    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_WALRUS_PORTAL_HOST_TESTNET;
+  const overrideHost = process.env.NEXT_PUBLIC_WALRUS_PORTAL_HOST_TESTNET;
   // Override is host-only (e.g. `portal.example.com:4000`); we always speak
   // http for non-mainnet to make the localhost case work without TLS setup.
   // Strip any leading scheme the user may have included.
   const host = (overrideHost || 'localhost:4000').replace(/^https?:\/\//, '');
-  return `http://${subdomain}.${host}/#/f/${formId}`;
+  return `http://${subdomain}.${host}/`;
 }
 
 export function isWalrusPortalLocal(network: 'testnet' | 'mainnet' | 'devnet'): boolean {

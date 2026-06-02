@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { formsRoute } from '../lib/routes';
 
 interface UseCreateFormActionParams {
@@ -19,14 +19,14 @@ export interface UseCreateFormActionResult {
 export function useCreateFormAction({
   createForm,
 }: UseCreateFormActionParams): UseCreateFormActionResult {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [isCreating, setIsCreating] = useState(false);
 
   const handleCreate = async () => {
     setIsCreating(true);
     try {
       const id = await createForm();
-      router.push(formsRoute.edit(id));
+      navigate(formsRoute.edit(id));
     } catch {
       setIsCreating(false);
     }

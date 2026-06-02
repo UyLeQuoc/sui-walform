@@ -56,6 +56,40 @@ export function useOriginalPackageId(): string | null {
   return null;
 }
 
+/**
+ * Package id under which the `reviewers` module's events + object types are
+ * tagged. Sui tags every event/struct with the package id where its DEFINING
+ * module was FIRST published (its type-origin), NOT the lineage-root original
+ * id. On testnet `reviewers` was added in an UPGRADE (package 0x83993865…), so
+ * `ReviewersCreated` events live under THAT id — querying under
+ * originalPackageId (0x2d8b…) silently matches nothing and the reviewers panel
+ * never resolves a tracker. On mainnet `reviewers` shipped in the original
+ * publish, so it equals originalPackageId (the fallback below covers that).
+ *
+ * Set `NEXT_PUBLIC_REVIEWERS_PACKAGE_ID_{TESTNET,MAINNET}` to the type-origin
+ * id only when the module was upgrade-added.
+ */
+export function useReviewersEventPackageId(): string | null {
+  const net = useActiveNetwork();
+  if (net === 'testnet') {
+    return (
+      process.env.NEXT_PUBLIC_REVIEWERS_PACKAGE_ID_TESTNET ??
+      process.env.NEXT_PUBLIC_ORIGINAL_PACKAGE_ID_TESTNET ??
+      process.env.NEXT_PUBLIC_PACKAGE_ID_TESTNET ??
+      null
+    );
+  }
+  if (net === 'mainnet') {
+    return (
+      process.env.NEXT_PUBLIC_REVIEWERS_PACKAGE_ID_MAINNET ??
+      process.env.NEXT_PUBLIC_ORIGINAL_PACKAGE_ID_MAINNET ??
+      process.env.NEXT_PUBLIC_PACKAGE_ID_MAINNET ??
+      null
+    );
+  }
+  return null;
+}
+
 export function useActiveTransferPolicyId(): string | null {
   const net = useActiveNetwork();
   if (net === 'testnet') return process.env.NEXT_PUBLIC_TRANSFER_POLICY_ID_TESTNET ?? null;

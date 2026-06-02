@@ -1,8 +1,8 @@
-import next from "@walform/eslint-config/next";
+import react from '@walform/eslint-config/react';
 
 export default [
-  ...next,
+  ...react,
   {
-    ignores: [".next/**", "out/**", "next-env.d.ts"],
+    ignores: ['dist/**', 'src/vite-env.d.ts'],
   },
 ];

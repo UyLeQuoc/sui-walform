@@ -22,13 +22,13 @@ export function QuestionCard({ index, field, value }: QuestionCardProps) {
   const empty = isEmpty(value);
   return (
     <Card className="overflow-hidden">
-      <CardContent className="flex flex-col gap-2 p-4">
+      <CardContent className="flex min-w-0 flex-col gap-2 p-4">
         <div className="flex items-start gap-3">
           <span className="bg-primary/10 text-primary inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums">
             {index}
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <h4 className="text-sm font-semibold break-words">
+            <h4 className="text-sm font-semibold [overflow-wrap:anywhere]">
               {field.label || field.id}
               {field.required && <span className="text-destructive ml-1">*</span>}
             </h4>
@@ -46,8 +46,13 @@ export function QuestionCard({ index, field, value }: QuestionCardProps) {
         >
           {empty ? (
             <span className="text-muted-foreground/70 text-xs italic">— not answered —</span>
+          ) : field.type === 'file' ? (
+            // File attachments own their layout (truncated filename + max-w-full
+            // preview) — must NOT sit inside an overflow-x-auto box, which would
+            // remove the width constraint the filename truncate relies on.
+            <FileAttachmentView value={value} />
           ) : (
-            <div className="text-sm break-words whitespace-pre-wrap">
+            <div className="overflow-x-auto text-sm whitespace-pre-wrap">
               {renderAnswer(field, value)}
             </div>
           )}

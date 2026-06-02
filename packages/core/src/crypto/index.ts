@@ -19,11 +19,14 @@ export {
 export { createSealSessionKey } from './seal-session';
 export type { CreateSealSessionKeyInput } from './seal-session';
 
-export { sealEncryptSubmission, sealDecryptSubmission } from './seal-submission';
+export { sealEncryptSubmission, sealDecryptSubmission, buildSealApproveBatch } from './seal-submission';
 export type {
   SealEncryptSubmissionInput,
   SealEncryptSubmissionOutput,
   SealDecryptSubmissionInput,
+  SealApproveBatchItem,
+  BuildSealApproveBatchInput,
+  SealApproveBatch,
 } from './seal-submission';
 
 export { sealEncryptSchema, sealDecryptFormSchema, sealDecryptTemplateSchema } from './seal-schema';

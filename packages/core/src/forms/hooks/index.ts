@@ -26,6 +26,7 @@ export * from './use-form-reviewers';
 export * from './use-reviewing-forms';
 export * from './use-form-on-chain';
 export * from './use-form-allowlist';
+export * from './use-allowlist-actions';
 export * from './use-form-treasury';
 export * from './use-form-site';
 export * from './use-form-submissions';

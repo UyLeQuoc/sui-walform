@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3002",
-    "build": "rm -rf out && next build && bun run scripts/mirror-bundle.ts",
-    "start": "next start --port 3002",
+    "dev": "vite --port 3002",
+    "build": "vite build && bun run scripts/mirror-bundle.ts",
+    "start": "vite preview --port 3002",
+    "preview": "vite preview --port 3002",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -22,17 +23,17 @@
     "@mysten/walrus": "latest",
     "@tanstack/react-query": "^5.100.10",
     "@walform/core": "workspace:*",
-    "next": "16.2.6",
-    "next-themes": "^0.4.6",
     "react": "19.2.6",
+    "react-router-dom": "^7",
     "react-dom": "19.2.6",
     "sonner": "^2.0.7"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.0",
+    "@tailwindcss/vite": "^4.3.0",
     "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5",
     "@walform/eslint-config": "workspace:*",
     "@walform/prettier-config": "workspace:*",
     "@walform/tsconfig": "workspace:*",
@@ -40,6 +41,7 @@
     "prettier": "latest",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.3.0",
-    "typescript": "^6"
+    "typescript": "^6",
+    "vite": "^7"
   }
 }

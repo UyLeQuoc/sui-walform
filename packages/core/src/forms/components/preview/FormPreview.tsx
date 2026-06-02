@@ -29,9 +29,19 @@ export interface FormPreviewProps {
    *  `formState.isSubmitting` only covers the duration of the `onSubmit`
    *  callback, but wallet flows can have surrounding async work too. */
   isSubmitting?: boolean;
+  /** Read-only browse mode (Marketplace template preview): fields are
+   *  non-interactive, page navigation works without validation, and the final
+   *  submit is hidden. */
+  preview?: boolean;
 }
 
-export function FormPreview({ schema, onSubmit, prefill, isSubmitting }: FormPreviewProps) {
+export function FormPreview({
+  schema,
+  onSubmit,
+  prefill,
+  isSubmitting,
+  preview,
+}: FormPreviewProps) {
   const {
     form,
     handleSubmit,
@@ -44,7 +54,7 @@ export function FormPreview({ schema, onSubmit, prefill, isSubmitting }: FormPre
     goNext,
     goPrevious,
     pageError,
-  } = useFormPreview({ schema, onSubmit, prefill });
+  } = useFormPreview({ schema, onSubmit, prefill, preview });
 
   // Slide direction: 1 = went forward (Next), -1 = went back (Previous).
   // Used to flip the page-content animation between slide-in-from-right
@@ -142,6 +152,7 @@ export function FormPreview({ schema, onSubmit, prefill, isSubmitting }: FormPre
                 isMultiPage &&
                   (direction === 1 ? 'slide-in-from-right-8' : 'slide-in-from-left-8'),
                 'group-disabled/fieldset:opacity-70',
+                preview && 'pointer-events-none select-none',
               )}
             >
               {isMultiPage && currentPage && (currentPage.title || currentPage.description) && (
@@ -184,7 +195,7 @@ export function FormPreview({ schema, onSubmit, prefill, isSubmitting }: FormPre
             )}
 
             <div className={rowAlignClass}>
-              {isMultiPage && navigation.allowBack && !isFirstPage && (
+              {isMultiPage && (preview || navigation.allowBack) && !isFirstPage && (
                 <Button
                   type="button"
                   variant="outline"
@@ -196,11 +207,15 @@ export function FormPreview({ schema, onSubmit, prefill, isSubmitting }: FormPre
                 </Button>
               )}
               {isMultiPage && !isLastPage ? (
-                <Button type="submit" className={buttonWidthClass}>
+                <Button
+                  type={preview ? 'button' : 'submit'}
+                  onClick={preview ? () => void goNext() : undefined}
+                  className={buttonWidthClass}
+                >
                   {nextLabel}
                   <ChevronRight className="ml-1 h-4 w-4" />
                 </Button>
-              ) : (
+              ) : preview ? null : (
                 <Button
                   type="submit"
                   disabled={form.formState.isSubmitting || isSubmitting}

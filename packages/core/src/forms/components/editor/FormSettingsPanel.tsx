@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useCallback, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { CreditCard, FileText, ListOrdered, Move, Trash2, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -67,7 +67,7 @@ const FONT_GROUPS_PRECOMPUTED = groupFontsByCategory(FORM_FONTS);
  * `RightSidebar`.
  */
 export function FormSettingsPanel() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const schema = useFormBuilderStore((s) => s.schema);
   const updateSettings = useFormBuilderStore((s) => s.updateSettings);
   const { settings } = schema;
@@ -81,12 +81,12 @@ export function FormSettingsPanel() {
     try {
       await formDb.delete(schema.id);
       toast.success('Form deleted');
-      router.push('/forms');
+      navigate('/forms');
     } catch (err) {
       setIsDeleting(false);
       toast.error(err instanceof Error ? err.message : 'Failed to delete form');
     }
-  }, [router, schema.id]);
+  }, [navigate, schema.id]);
 
   const activeFont = useMemo(() => getFormFont(settings.fontFamily), [settings.fontFamily]);
 

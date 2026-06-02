@@ -28,9 +28,9 @@ export function WalletButton() {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setConnectOpen(true)}>
-        <Wallet className="mr-1.5 h-3.5 w-3.5" />
-        Connect wallet
+      <Button variant="outline" onClick={() => setConnectOpen(true)} className="px-2.5 sm:px-4">
+        <Wallet className="h-3.5 w-3.5 sm:mr-1.5" />
+        <span className="hidden sm:inline">Connect wallet</span>
       </Button>
       <WalletConnectModal open={connectOpen} onOpenChange={setConnectOpen} />
     </>

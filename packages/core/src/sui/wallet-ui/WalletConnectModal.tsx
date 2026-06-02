@@ -34,7 +34,7 @@ export function WalletConnectModal({ open, onOpenChange, onConnected }: WalletCo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Connect wallet</DialogTitle>
           <DialogDescription>

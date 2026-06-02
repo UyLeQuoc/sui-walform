@@ -3,16 +3,13 @@
   "metadata": {
     "link": "https://walform.wal.app",
     "image_url": "https://walform.wal.app/images/og-image.png",
-    "description": "Decentralized form builder on Walrus. End-to-end encrypted submissions, sponsored gas, one-click per-form Walrus Sites — zero platform fee.",
+    "description": "Decentralized form builder on Walrus. End-to-end encrypted submissions, user-paid transactions, one-click per-form Walrus Sites — zero platform fee.",
     "project_url": "https://github.com/UyLeQuoc/sui-walform",
     "creator": "WalForm"
   },
   "headers": {
-    "/_next/static/**": {
+    "/assets/**": {
       "Cache-Control": "public, max-age=31536000, immutable"
-    },
-    "/_next/**": {
-      "Cache-Control": "public, max-age=86400"
     },
     "/images/**": {
       "Cache-Control": "public, max-age=604800"
@@ -23,17 +20,17 @@
   },
   "routes": {
     "/": "/index.html",
-    "/forms": "/forms/index.html",
-    "/forms/": "/forms/index.html",
-    "/forms/edit": "/forms/edit/index.html",
-    "/forms/edit/": "/forms/edit/index.html",
-    "/forms/preview": "/forms/preview/index.html",
-    "/forms/preview/": "/forms/preview/index.html",
-    "/forms/results": "/forms/results/index.html",
-    "/forms/results/": "/forms/results/index.html",
-    "/f": "/f/index.html",
-    "/f/": "/f/index.html",
-    "/admin": "/admin/index.html",
-    "/admin/": "/admin/index.html"
+    "/forms": "/index.html",
+    "/forms/": "/index.html",
+    "/forms/edit": "/index.html",
+    "/forms/edit/": "/index.html",
+    "/forms/preview": "/index.html",
+    "/forms/preview/": "/index.html",
+    "/forms/results": "/index.html",
+    "/forms/results/": "/index.html",
+    "/f": "/index.html",
+    "/f/": "/index.html",
+    "/admin": "/index.html",
+    "/admin/": "/index.html"
   }
 }

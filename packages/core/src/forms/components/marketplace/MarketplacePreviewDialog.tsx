@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { ExternalLink, Eye, FileWarning, Gift, ShoppingCart, Wallet } from 'lucide-react';
 import { useCurrentWallet, useSuiClientContext } from '@mysten/dapp-kit';
 import {
@@ -66,7 +66,7 @@ export function MarketplacePreviewDialog({
   open,
   onOpenChange,
 }: MarketplacePreviewDialogProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { network } = useSuiClientContext();
   const explorer = (
     network === 'mainnet' || network === 'devnet' ? network : 'testnet'
@@ -103,7 +103,7 @@ export function MarketplacePreviewDialog({
     const result = await clone.start();
     if (result) {
       onOpenChange(false);
-      router.push(formsRoute.edit(result.draftId));
+      navigate(formsRoute.edit(result.draftId));
     }
   };
 
@@ -277,10 +277,10 @@ function PreviewBody({ isLoading, error, schemaUnreadable, schema }: PreviewBody
       <div className="mx-auto flex w-full max-w-2xl flex-col items-center" style={formAreaStyle}>
         {schema.coverImage && <CoverImageView src={schema.coverImage} className="mb-4" />}
         <div
-          className="bg-card pointer-events-none w-full rounded-xl border shadow-xl select-none [&_button[type=submit]]:hidden"
+          className="bg-card w-full rounded-xl border shadow-xl"
           aria-label="Template preview (read-only)"
         >
-          <FormPreview schema={schema} />
+          <FormPreview schema={schema} preview />
         </div>
         <p className="text-muted-foreground/80 mt-3 text-[11px]">
           This is a preview — submit is disabled until you clone the template.

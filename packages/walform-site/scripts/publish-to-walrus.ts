@@ -67,7 +67,7 @@ function loadEnvCandidates(scriptDir: string): void {
   }
 }
 
-const OUT_DIR = process.env.WALFORM_SITE_OUT_DIR ?? "out";
+const OUT_DIR = process.env.WALFORM_SITE_OUT_DIR ?? "dist";
 const NETWORK = (process.env.WALRUS_NETWORK ?? "testnet") as
   | "testnet"
   | "mainnet";

@@ -70,6 +70,7 @@ import { WithdrawTreasuryButton } from '../list/WithdrawTreasuryButton';
 import { AggregateCharts } from './AggregateCharts';
 import { ByQuestionPanel } from './ByQuestionPanel';
 import { ResponseTimeline } from './ResponseTimeline';
+import { AllowlistPanel } from './AllowlistPanel';
 import { ReviewersPanel } from './ReviewersPanel';
 import { SeedResponsesButton } from './SeedResponsesButton';
 import { ShareFormDialog } from './ShareFormDialog';
@@ -158,7 +159,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground text-sm">Form not found.</p>
+          <p className="text-muted-foreground text-sm">Form not found. Please check if you're on the right network and the form exists.</p>
         </CardContent>
       </Card>
     );
@@ -224,9 +225,9 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       const decrypted = decryptedById[row.submissionId];
       const bodyMatch = decrypted
         ? Object.values(decrypted).some((v) => {
-            if (v === null || v === undefined) return false;
-            return String(v).toLowerCase().includes(needle);
-          })
+          if (v === null || v === undefined) return false;
+          return String(v).toLowerCase().includes(needle);
+        })
         : false;
       if (!submitterMatch && !idMatch && !bodyMatch) return false;
     }
@@ -243,18 +244,18 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     inputFields.length === 0 || decryptedRows.length === 0
       ? Number.NaN
       : decryptedRows.reduce((sum, row) => {
-          let answered = 0;
-          for (const f of inputFields) {
-            const v = row[f.id];
-            const empty =
-              v === null ||
-              v === undefined ||
-              (typeof v === 'string' && v.trim() === '') ||
-              (Array.isArray(v) && v.length === 0);
-            if (!empty) answered++;
-          }
-          return sum + (answered / inputFields.length) * 100;
-        }, 0) / decryptedRows.length;
+        let answered = 0;
+        for (const f of inputFields) {
+          const v = row[f.id];
+          const empty =
+            v === null ||
+            v === undefined ||
+            (typeof v === 'string' && v.trim() === '') ||
+            (Array.isArray(v) && v.length === 0);
+          if (!empty) answered++;
+        }
+        return sum + (answered / inputFields.length) * 100;
+      }, 0) / decryptedRows.length;
   const canDecrypt = !!activePackageId && !!originalPackageId;
   const isDecryptingAny =
     decryption.isSessionInitializing || decryption.pendingIds.size > 0;
@@ -380,7 +381,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as ResultsTab)} className="flex flex-col">
-        <TabsList className="rounded-none">
+        <TabsList className="max-w-full justify-start overflow-x-auto rounded-none">
           <TabsTrigger
             value="summary"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
@@ -497,8 +498,11 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
         </TabsContent>
 
         {ownerForm && (
-          <TabsContent value="manage" className="mt-4">
+          <TabsContent value="manage" className="mt-4 flex flex-col gap-4">
             <ManagePanel form={ownerForm} />
+            {ownerForm.accessMode === 1 && (
+              <AllowlistPanel formId={ownerForm.formId} capId={ownerForm.capId} />
+            )}
           </TabsContent>
         )}
       </Tabs>

@@ -1,18 +1,13 @@
 {
-  "extends": "@walform/tsconfig/nextjs.json",
+  "extends": "@walform/tsconfig/react-library.json",
   "compilerOptions": {
+    "noEmit": true,
     "paths": {
-      "@/*": ["./*"],
+      "@/*": ["./src/*"],
       "@walform/core": ["../core/src"],
       "@walform/core/*": ["../core/src/*"]
     }
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    "**/*.mts"
-  ],
-  "exclude": ["node_modules", ".next", "out"]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
 }

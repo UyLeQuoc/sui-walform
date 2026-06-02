@@ -1,7 +1,7 @@
 'use client';
 
 import { Eye, History, Redo2, Settings, Sparkles, Undo2 } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
 import { Button } from '../../../ui/button';
 import { ButtonGroup } from '../../../ui/button-group';
@@ -53,7 +53,7 @@ export function FormBuilderHeader({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
-                  href="/forms"
+                  to="/forms"
                   aria-label="Back to forms"
                   className="hover:bg-muted flex size-9 items-center justify-center rounded-full transition-colors"
                 >
@@ -175,7 +175,7 @@ export function FormBuilderHeader({
             <ExportButton />
 
             <Button variant="outline" asChild className="gap-1.5">
-              <Link href={formsRoute.preview(formId)}>
+              <Link to={formsRoute.preview(formId)}>
                 <Eye className="h-4 w-4" />
                 Preview
               </Link>

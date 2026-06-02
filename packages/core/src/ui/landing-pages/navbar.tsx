@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { motion, useMotionValueEvent, useScroll } from 'framer-motion';
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
@@ -40,27 +40,27 @@ export function Navbar() {
             : 'border-transparent bg-transparent',
         )}
       >
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-2">
-          <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-4 py-2 sm:gap-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <Link to="/" className="flex shrink-0 items-center gap-2">
               <Logo variant="primary" className="size-7" />
-              <span className="font-mono text-lg font-bold">WalForm</span>
+              <span className="font-mono text-base font-bold sm:text-lg">WalForm</span>
             </Link>
             <nav className="hidden items-center gap-1 md:flex">
               {links.map((l) => (
-                <Link key={l.href} href={l.href}>
+                <a key={l.href} href={l.href}>
                   <Button variant="ghost">{l.label}</Button>
-                </Link>
+                </a>
               ))}
             </nav>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <ThemeToggle />
             <WalletButton />
-            <Button asChild>
-              <Link href="/forms">
-                Start building
+            <Button asChild className="px-3 sm:px-4">
+              <Link to="/forms">
+                <span className="hidden sm:inline">Start building</span>
                 <ArrowRight className="size-4" />
               </Link>
             </Button>

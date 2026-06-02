@@ -1,12 +1,13 @@
 'use client';
 
-import { notFound, useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import { useFormOnChain } from '../../hooks/use-form-on-chain';
 import { useStoredForm } from '../../hooks/use-stored-form';
 import { formsRoute } from '../../lib/routes';
 import { SCHEMA_VERSION } from '../../lib/schema-version';
+import { NotFound } from '../../../ui/not-found';
 import { FormBuilder } from './FormBuilder';
 
 interface FormEditorClientProps {
@@ -21,7 +22,7 @@ interface FormEditorClientProps {
  *  - neither → notFound.
  */
 export function FormEditorClient({ id }: FormEditorClientProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const account = useCurrentAccount();
   const state = useStoredForm(id);
   const draftMissing = state.status === 'not-found';
@@ -33,14 +34,14 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
   useEffect(() => {
     if (!draftMissing || !onChainForm) return;
     const isOwner = !!account && account.address === onChainForm.owner;
-    router.replace(isOwner ? formsRoute.results(id) : formsRoute.submit(id));
-  }, [draftMissing, onChainForm, account, id, router]);
+    navigate(isOwner ? formsRoute.results(id) : formsRoute.submit(id), { replace: true });
+  }, [draftMissing, onChainForm, account, id, navigate]);
 
   if (draftMissing) {
     if (chainLoading || onChainForm) {
       return <div className="bg-muted/30 min-h-screen animate-pulse" />;
     }
-    notFound();
+    return <NotFound />;
   }
 
   if (state.status === 'loading') {

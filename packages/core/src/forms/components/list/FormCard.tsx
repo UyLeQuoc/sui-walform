@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import {
   AlertDialog,
@@ -27,7 +27,7 @@ interface FormCardProps {
 }
 
 export function FormCard({ form, onDelete }: FormCardProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -40,7 +40,7 @@ export function FormCard({ form, onDelete }: FormCardProps) {
   const coverImage = form.schema.coverImage;
 
   const handleCardClick = () => {
-    router.push(formsRoute.edit(form.id));
+    navigate(formsRoute.edit(form.id));
   };
 
   const handleDeleteConfirm = async () => {

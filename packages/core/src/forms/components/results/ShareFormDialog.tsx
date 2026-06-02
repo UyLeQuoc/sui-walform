@@ -86,7 +86,7 @@ export function ShareFormDialog({ open, onOpenChange, formId, formTitle }: Share
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" showCloseButton={false}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Share this form</DialogTitle>
           <DialogDescription>

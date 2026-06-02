@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
-import { useOriginalPackageId } from '../../sui/package-id';
+import { useReviewersEventPackageId } from '../../sui/env-network';
 
 export interface ReviewingForm {
   formId: string;
@@ -36,22 +36,24 @@ export interface UseReviewingFormsResult {
  */
 export function useReviewingForms(): UseReviewingFormsResult {
   const account = useCurrentAccount();
-  // Move event types are canonicalised to the package's original publish id,
-  // regardless of when the module was added via upgrade. Using active here
-  // would silently return zero events after every `contracts:upgrade`.
-  const originalPackageId = useOriginalPackageId();
+  // The `reviewers` module's TYPE-ORIGIN package id — where its events are
+  // tagged. NOT originalPackageId: on testnet `reviewers` was added in an
+  // upgrade, so its `ReviewerAdded` events live under that upgrade's id, and
+  // querying the original id silently returns zero (empty "Reviewing" list).
+  // See `useReviewersEventPackageId`.
+  const reviewersPkg = useReviewersEventPackageId();
   const me = account?.address ? normalizeSuiAddress(account.address) : null;
 
   const eventsQuery = useSuiClientQuery(
     'queryEvents',
     {
-      query: originalPackageId
-        ? { MoveEventType: `${originalPackageId}::reviewers::ReviewerAdded` }
+      query: reviewersPkg
+        ? { MoveEventType: `${reviewersPkg}::reviewers::ReviewerAdded` }
         : ({} as never),
       order: 'descending',
       limit: 200,
     },
-    { enabled: !!originalPackageId && !!me },
+    { enabled: !!reviewersPkg && !!me },
   );
 
   // Build candidate (formId → reviewersId) map from events where member == me.
@@ -132,7 +134,7 @@ export function useReviewingForms(): UseReviewingFormsResult {
   }, [candidates, me, objectsQuery.data]);
 
   const isLoading =
-    (!!originalPackageId && !!me && eventsQuery.isPending) ||
+    (!!reviewersPkg && !!me && eventsQuery.isPending) ||
     (objectIds.length > 0 && objectsQuery.isPending);
   const error = (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
 
