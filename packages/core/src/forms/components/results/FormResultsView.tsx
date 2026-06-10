@@ -159,7 +159,9 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground text-sm">Form not found. Please check if you're on the right network and the form exists.</p>
+          <p className="text-muted-foreground text-sm">
+            Form not found. Please check if you&apos;re on the right network and the form exists.
+          </p>
         </CardContent>
       </Card>
     );
@@ -515,8 +517,8 @@ function EmptyResponses({ formId }: { formId: string }) {
     <Card>
       <CardContent className="py-12 text-center">
         <p className="text-muted-foreground text-sm">
-          No responses yet. Share <code className="font-mono">/f/{shortAddr(formId)}</code> to start
-          collecting.
+          No responses yet. Share <code className="font-mono">/f?formId={shortAddr(formId)}</code> to
+          start collecting.
         </p>
       </CardContent>
     </Card>

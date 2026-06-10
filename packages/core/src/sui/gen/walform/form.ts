@@ -9,7 +9,7 @@
  * hold access_mode + publish-time limits.
  */
 
-import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index';
+import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index.js';
 import { bcs, type BcsType } from '@mysten/sui/bcs';
 import { type Transaction, type TransactionArgument } from '@mysten/sui/transactions';
 const $moduleName = 'walform::form';

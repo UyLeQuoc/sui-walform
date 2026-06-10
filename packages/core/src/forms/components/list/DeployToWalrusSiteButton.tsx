@@ -9,6 +9,7 @@ import {
   useSuiClient,
   useSuiClientContext,
 } from '@mysten/dapp-kit';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { WalrusClient, WalrusFile, blobIdToInt } from '@mysten/walrus';
 import { Button } from '../../../ui/button';
 import { useActivePackageId } from '../../../sui/package-id';
@@ -85,11 +86,16 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
   // a stale cache entry from a previous attempt is harmless but irrelevant.
   useEffect(() => {
     if (existingSiteId) return;
+    if (!account?.address) return;
     let cancelled = false;
     formSiteCache
       .get(form.formId)
       .then((entry) => {
         if (cancelled || !entry) return;
+        const manifestNetwork = entry.manifest.network;
+        const sameNetwork = manifestNetwork === net;
+        const sameSigner = normalizeSuiAddress(entry.manifest.signer) === normalizeSuiAddress(account.address);
+        if (!sameNetwork || !sameSigner) return;
         setPendingDeploy({
           manifest: entry.manifest,
           walrusUploadDigest: entry.walrusUploadDigest,
@@ -102,7 +108,7 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
     return () => {
       cancelled = true;
     };
-  }, [form.formId, existingSiteId]);
+  }, [account?.address, form.formId, existingSiteId, net]);
 
   const disabled = !packageId || !sitePackageId || !account;
 
@@ -140,7 +146,7 @@ export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
         const idxRes = await fetch('/walform-site-bundle/index.json', { cache: 'no-store' });
         if (!idxRes.ok) {
           throw new Error(
-            `Bundle index not found at /walform-site-bundle/index.json (HTTP ${idxRes.status}). Run \`bun run --cwd packages/walform-site bundle:mirror\` after \`next build\`.`,
+            `Bundle index not found at /walform-site-bundle/index.json (HTTP ${idxRes.status}). Run \`bun run --cwd packages/walform-site build\` and then \`bun run --cwd packages/walform-site bundle:mirror\`.`,
           );
         }
         const index = (await idxRes.json()) as {

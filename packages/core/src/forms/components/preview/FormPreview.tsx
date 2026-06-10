@@ -20,7 +20,7 @@ export interface FormPreviewProps {
   schema: FormSchema;
   /** Optional submit handler. If omitted, we only toast the success message
    *  and log payload (builder-preview behaviour). */
-  onSubmit?: (values: FieldValues) => void | Promise<void>;
+  onSubmit?: (values: FieldValues) => boolean | void | Promise<boolean | void>;
   /** Initial field values (e.g. from a Walrus-Site `#prefill=…` handoff).
    *  Merged on top of the schema-derived defaults — applied once at mount. */
   prefill?: Record<string, unknown>;

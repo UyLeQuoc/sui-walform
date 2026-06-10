@@ -9,7 +9,7 @@
  * settings, publish templates, withdraw payments, close the form, etc.
  */
 
-import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index';
+import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index.js';
 import { bcs } from '@mysten/sui/bcs';
 import { type Transaction } from '@mysten/sui/transactions';
 const $moduleName = 'walform::form_owner_cap';

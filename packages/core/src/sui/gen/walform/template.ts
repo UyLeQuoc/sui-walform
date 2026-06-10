@@ -9,10 +9,10 @@
  * See PRD §7.2 / §8.2.
  */
 
-import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index';
+import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index.js';
 import { bcs } from '@mysten/sui/bcs';
 import { type Transaction, type TransactionArgument } from '@mysten/sui/transactions';
-import * as balance from './deps/sui/balance';
+import * as balance from './deps/sui/balance.js';
 const $moduleName = 'walform::template';
 export const TEMPLATE = new MoveStruct({ name: `${$moduleName}::TEMPLATE`, fields: {
         dummy_field: bcs.bool()

@@ -81,8 +81,9 @@ export function useFormOnChain(formId: string | undefined): {
             };
           };
         }
-      | undefined;
+        | undefined;
     if (!content?.fields) return null;
+    if (!isWalformFormType(content.type, originalPackageId)) return null;
     const fields = content.fields;
     const settings = fields.settings?.fields ?? {};
     const stats = fields.stats?.fields ?? {};
@@ -143,13 +144,23 @@ export function useFormOnChain(formId: string | undefined): {
       submissionCount: Number(stats.submission_count ?? 0),
       type: content.type,
     };
-  }, [formId, objectQuery.data]);
+  }, [formId, objectQuery.data, originalPackageId]);
 
-  void originalPackageId;
   void network;
   return {
     form,
     isLoading: !!formId && objectQuery.isPending,
     error: (objectQuery.error as Error | null) ?? null,
   };
+}
+
+function isWalformFormType(type: string | undefined, originalPackageId: string | null): boolean {
+  if (!type || !originalPackageId) return false;
+  const [pkg, moduleName, structName] = type.split('::');
+  if (!pkg) return false;
+  return (
+    moduleName === 'form' &&
+    structName === 'Form' &&
+    normalizeSuiAddress(pkg ?? '') === normalizeSuiAddress(originalPackageId)
+  );
 }

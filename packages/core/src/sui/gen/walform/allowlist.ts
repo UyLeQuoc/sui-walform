@@ -9,10 +9,10 @@
  * submission.move does the actual balance check).
  */
 
-import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index';
+import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index.js';
 import { bcs } from '@mysten/sui/bcs';
 import { type Transaction } from '@mysten/sui/transactions';
-import * as vec_set from './deps/sui/vec_set';
+import * as vec_set from './deps/sui/vec_set.js';
 const $moduleName = 'walform::allowlist';
 export const Allowlist = new MoveStruct({ name: `${$moduleName}::Allowlist`, fields: {
         id: bcs.Address,

@@ -12,7 +12,7 @@ interface UseFormPreviewParams {
   schema: FormSchema;
   /** Optional consumer-supplied submit handler. When omitted, the hook
    *  falls back to the builder-preview behaviour: console.log + toast. */
-  onSubmit?: (values: FieldValues) => void | Promise<void>;
+  onSubmit?: (values: FieldValues) => boolean | void | Promise<boolean | void>;
   /**
    * Pre-populate the form's `defaultValues` — typically from a handoff
    * (e.g. Walrus Site `#prefill=…`). Merged on top of the schema's natural
@@ -159,7 +159,8 @@ export function useFormPreview({
         return;
       }
       if (onSubmit) {
-        await onSubmit(finalValues);
+        const submitted = await onSubmit(finalValues);
+        if (submitted === false) return;
       } else {
         console.info('Form submitted with data:', finalValues);
         toast.success(schema.settings.successMessage);

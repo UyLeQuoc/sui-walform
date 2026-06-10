@@ -8,7 +8,7 @@
  * indexers only need to subscribe to a single module's event stream. See PRD §8.
  */
 
-import { MoveStruct } from '../utils/index';
+import { MoveStruct } from '../utils/index.js';
 import { bcs } from '@mysten/sui/bcs';
 const $moduleName = 'walform::events';
 export const FormCreated = new MoveStruct({ name: `${$moduleName}::FormCreated`, fields: {

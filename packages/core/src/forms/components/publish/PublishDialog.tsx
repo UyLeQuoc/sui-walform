@@ -147,7 +147,7 @@ export function PublishDialog({
       return 0;
     }
   }, [coverImageDataUrl]);
-  const storageCost = useStorageCost(coverBytes, 5);
+  const storageCost = useStorageCost(coverBytes, 15);
   const tags = useMemo(
     () =>
       Array.from(
@@ -533,8 +533,8 @@ function OnChainFields({
 
       {access === 'private' && (
         <p className="text-muted-foreground text-xs">
-          Schema encryption (via Seal) lands when the contracts ship the v2 policy; for now, private
-          forms gate submissions but keep the schema readable on-chain.
+          Schema encryption uses Seal when enabled for this build; otherwise private forms still gate
+          submissions while keeping the schema readable on-chain.
         </p>
       )}
     </div>
@@ -572,7 +572,7 @@ function CostEstimateRow({
         </div>
         <span className="text-muted-foreground">
           Uploaded to Walrus before the on-chain publish — the schema only stores the aggregator
-          URL. WAL is paid by the platform admin keypair.
+          URL. Your connected wallet signs and pays the Walrus storage transaction.
         </span>
         {cost && (
           <span className="text-muted-foreground/80 font-mono">

@@ -8,10 +8,10 @@
  * ACCESS_PAID forms. Owner-gated withdraw.
  */
 
-import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index';
+import { MoveStruct, normalizeMoveArguments, type RawTransactionArgument } from '../utils/index.js';
 import { bcs } from '@mysten/sui/bcs';
 import { type Transaction } from '@mysten/sui/transactions';
-import * as balance from './deps/sui/balance';
+import * as balance from './deps/sui/balance.js';
 const $moduleName = 'walform::payment';
 export const FormTreasury = new MoveStruct({ name: `${$moduleName}::FormTreasury`, fields: {
         id: bcs.Address,

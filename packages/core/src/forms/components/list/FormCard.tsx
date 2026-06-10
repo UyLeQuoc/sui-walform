@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+import { Trash2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +15,7 @@ import {
   AlertDialogTitle,
 } from '../../../ui/alert-dialog';
 import { Badge } from '../../../ui/badge';
+import { Button } from '../../../ui/button';
 import { Card, CardAction, CardDescription, CardHeader, CardTitle } from '../../../ui/card';
 import { FORM_COLORS } from '../../lib/form-appearance';
 import { getFormFont } from '../../lib/form-fonts';
@@ -102,6 +104,19 @@ export function FormCard({ form, onDelete }: FormCardProps) {
           <CardAction>
             <div className="flex items-center gap-1.5">
               <FormStatusBadge status="draft" />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                aria-label={`Delete draft: ${title}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmOpen(true);
+                }}
+              >
+                <Trash2 className="size-4" aria-hidden />
+              </Button>
               {showColorDot && (
                 <span
                   className="inline-block size-3 rounded-full ring-1 ring-black/10 ring-inset"

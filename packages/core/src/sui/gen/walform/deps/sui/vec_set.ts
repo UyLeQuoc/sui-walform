@@ -2,7 +2,7 @@
  * THIS FILE IS GENERATED AND SHOULD NOT BE MANUALLY MODIFIED *
  **************************************************************/
 import { type BcsType, bcs } from '@mysten/sui/bcs';
-import { MoveStruct } from '../../../utils/index';
+import { MoveStruct } from '../../../utils/index.js';
 const $moduleName = '0x2::vec_set';
 /**
  * A set data structure backed by a vector. The set is guaranteed not to contain
@@ -12,16 +12,10 @@ const $moduleName = '0x2::vec_set';
  *   programming against a set API. Sets that need sorted iteration rather than
  *   insertion order iteration should be handwritten.
  */
-// Manual return-type annotation (re-apply if codegen overwrites): without it
-// TS2742 fires because the inferred MoveStruct generic references a
-// non-portable path under .bun's package layout.
-export function VecSet<K extends BcsType<any>>(
-  ...typeParameters: [K]
-): MoveStruct<{ contents: ReturnType<typeof bcs.vector<K>> }> {
-  return new MoveStruct({
-    name: `${$moduleName}::VecSet<${typeParameters[0].name as K['name']}>`,
-    fields: {
-      contents: bcs.vector(typeParameters[0]),
-    },
-  });
+export function VecSet<K extends BcsType<any>>(...typeParameters: [
+    K
+]) {
+    return new MoveStruct({ name: `${$moduleName}::VecSet<${typeParameters[0].name as K['name']}>`, fields: {
+            contents: bcs.vector(typeParameters[0])
+        } });
 }

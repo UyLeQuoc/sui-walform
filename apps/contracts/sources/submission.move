@@ -15,6 +15,8 @@ use walform::payment::{Self, FormTreasury};
 // === Constants ===
 
 const MAX_ENCRYPTED_BODY_BYTES: u64 = 200_000; // 200 KB
+const MAX_FILE_BLOB_IDS: u64 = 100;
+const MAX_FILE_BLOB_ID_BYTES: u64 = 256;
 const NONCE_BYTES: u64 = 16;
 
 // === Errors ===
@@ -149,6 +151,7 @@ fun build_submission(
 ): Submission {
     // Size cap — anti-gas-bomb.
     assert!(encrypted_body.length() <= MAX_ENCRYPTED_BODY_BYTES, E_BODY_TOO_LARGE);
+    assert_file_blob_ids_capped(&file_blob_ids);
     // Nonce length — required so seal identity math is deterministic.
     assert!(nonce.length() == NONCE_BYTES, E_BAD_NONCE);
     // Form must be open.
@@ -187,6 +190,15 @@ fun build_submission(
         nonce,
         submitted_at_ms: now,
     }
+}
+
+fun assert_file_blob_ids_capped(file_blob_ids: &vector<vector<u8>>) {
+    assert!(file_blob_ids.length() <= MAX_FILE_BLOB_IDS, E_BODY_TOO_LARGE);
+    let mut i = 0;
+    while (i < file_blob_ids.length()) {
+        assert!(file_blob_ids.borrow(i).length() <= MAX_FILE_BLOB_ID_BYTES, E_BODY_TOO_LARGE);
+        i = i + 1;
+    };
 }
 
 // === View helpers (consumed by seal_policies) ===

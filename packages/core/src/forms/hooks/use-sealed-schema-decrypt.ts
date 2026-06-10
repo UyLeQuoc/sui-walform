@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useSuiClient } from '@mysten/dapp-kit';
 import { toast } from 'sonner';
 import { sealDecryptFormSchema, useSealClient } from '../../crypto';
-import { useOriginalPackageId } from '../../sui/package-id';
+import { useActivePackageId } from '../../sui/package-id';
 import type { FormSchema } from '../../types';
 import { useFormAllowlist } from './use-form-allowlist';
 import { useSealSession } from './use-seal-session';
@@ -36,7 +36,7 @@ export function useSealedSchemaDecrypt(
   const { formObjectId, ciphertext } = input;
   const suiClient = useSuiClient();
   const seal = useSealClient();
-  const originalPackageId = useOriginalPackageId();
+  const packageId = useActivePackageId();
   const allowlistQuery = useFormAllowlist(formObjectId);
   const sealSession = useSealSession();
 
@@ -45,7 +45,7 @@ export function useSealedSchemaDecrypt(
   const [error, setError] = useState<string | null>(null);
 
   const decrypt = async () => {
-    if (!originalPackageId || !seal) {
+    if (!packageId || !seal) {
       toast.error('walform package or Seal not configured for this network.');
       return;
     }
@@ -61,7 +61,7 @@ export function useSealedSchemaDecrypt(
         seal,
         sessionKey,
         client: suiClient,
-        packageId: originalPackageId,
+        packageId,
         formObjectId,
         allowlistObjectId: allowlistQuery.allowlist.allowlistId,
         ciphertext,

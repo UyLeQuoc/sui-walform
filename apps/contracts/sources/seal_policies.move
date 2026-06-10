@@ -98,6 +98,9 @@ entry fun seal_approve_submit(
     // Identity must start with this form's id (the caller hasn't created a
     // Submission yet, so we can't check the nonce half).
     let form_bytes = sui::bcs::to_bytes(&form::id_address(form));
+    // must be >= because the client may append additional bytes (e.g. a nonce)
+    // beyond the form id prefix. The encrypt-time identity is form_id || nonce
+    // and the full 48 bytes arrive here before a Submission object exists.
     assert!(id.length() >= form_bytes.length(), E_BAD_IDENTITY);
     let mut i = 0;
     while (i < form_bytes.length()) {
@@ -150,7 +153,7 @@ entry fun seal_approve_read_template_schema(
     ctx: &TxContext,
 ) {
     let template_bytes = sui::bcs::to_bytes(&template::id_address(template_obj));
-    assert!(id.length() >= template_bytes.length(), E_BAD_IDENTITY);
+    assert!(id.length() == template_bytes.length(), E_BAD_IDENTITY);
     let mut i = 0;
     while (i < template_bytes.length()) {
         assert!(*id.borrow(i) == *template_bytes.borrow(i), E_BAD_IDENTITY);

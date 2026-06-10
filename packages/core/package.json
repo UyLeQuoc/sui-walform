@@ -13,7 +13,6 @@
     "./sui": "./src/sui/index.ts",
     "./sui/providers": "./src/sui/providers.tsx",
     "./sui/package-id": "./src/sui/package-id.ts",
-    "./sui/sponsor": "./src/sui/sponsor.ts",
     "./sui/use-invalidate-chain": "./src/sui/use-invalidate-chain.ts",
     "./sui/tx/*": "./src/sui/tx/*.ts",
     "./sui/wallet-ui": "./src/sui/wallet-ui/index.ts",

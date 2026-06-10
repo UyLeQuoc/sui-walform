@@ -18,7 +18,7 @@
  */
 
 import { type Transaction } from '@mysten/sui/transactions';
-import { normalizeMoveArguments, type RawTransactionArgument } from '../utils/index';
+import { normalizeMoveArguments, type RawTransactionArgument } from '../utils/index.js';
 export interface SealApproveReadSubmissionArguments {
     id: RawTransactionArgument<Array<number>>;
     form: RawTransactionArgument<string>;

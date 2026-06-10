@@ -8,6 +8,7 @@ import {
   useSuiClient,
   useSuiClientQuery,
 } from '@mysten/dapp-kit';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
 import type { FieldValues } from 'react-hook-form';
 import { sealEncryptSubmission, useSealClient } from '../../crypto';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
@@ -50,7 +51,7 @@ export interface UseFormSubmissionResult {
    * builds the right tx (paid vs free) + signs/broadcasts via the connected
    * wallet (respondent pays gas).
    */
-  submit: (values: FieldValues) => Promise<void>;
+  submit: (values: FieldValues) => Promise<boolean>;
   isSubmitting: boolean;
   /** Step-by-step progress for the submit flow. View layer renders this
    * via `<TxSteps>` to show the user where the wallet sign / Walrus upload /
@@ -118,23 +119,23 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
   const steps = useTxSteps();
 
   const submit = useCallback(
-    async (values: FieldValues): Promise<void> => {
+    async (values: FieldValues): Promise<boolean> => {
       if (!isConnected || !account) {
         // Defer submit until connect resolves; FormPreview reset fires
         // post-onSubmit so re-submit isn't trivial. Stash + show modal.
         setPendingSubmission(values);
         setConnectOpen(true);
-        return;
+        return false;
       }
       if (!packageId || !originalPackageId) {
         toast.error('walform package not configured for this network.');
-        return;
+        return false;
       }
       if (form.accessMode === 2 && !meetsTokenGate) {
         toast.error(
           `Need at least ${form.requiredTokenAmount.toString()} of ${form.requiredTokenType} to submit.`,
         );
-        return;
+        return false;
       }
 
       // Pre-flight gas check. WalForm doesn't sponsor any transactions — the
@@ -149,7 +150,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         toast.error(
           'Your wallet has no SUI to pay gas. Fund it from the testnet faucet and try again.',
         );
-        return;
+        return false;
       }
 
       const allowlistId = await resolveAllowlistId({
@@ -158,7 +159,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         allowlistQuery,
         publicAllowlistId,
       });
-      if (allowlistId === null) return;
+      if (allowlistId === null) return false;
 
       if (form.accessMode === 3 && !treasuryQuery.treasury) {
         toast.error(
@@ -166,19 +167,19 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
             ? 'Resolving treasury…'
             : 'No treasury found for this paid form. The creator may need to re-publish.',
         );
-        return;
+        return false;
       }
 
       if (!walrusReady) {
         toast.error(
           'Walrus storage requires a wallet on testnet or mainnet. Switch networks and try again.',
         );
-        return;
+        return false;
       }
 
       if (!seal) {
         toast.error('Seal not configured for this network.');
-        return;
+        return false;
       }
 
       setIsSubmitting(true);
@@ -291,6 +292,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           submitter: account.address,
           submittedAtMs: Date.now(),
         });
+        return true;
       } catch (err) {
         steps.finishError();
         if (err instanceof InsufficientSuiError) {
@@ -311,6 +313,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           }
         }
         console.error(err);
+        return false;
       } finally {
         setIsSubmitting(false);
       }
@@ -412,8 +415,9 @@ async function resolveAllowlistId(input: ResolveAllowlistInput): Promise<string 
       );
       return null;
     }
-    const isMember = al.members.some((m) => m === accountAddress);
-    if (!isMember && accountAddress !== form.owner) {
+    const normalizedAccount = normalizeSuiAddress(accountAddress);
+    const isMember = al.members.some((m) => m === normalizedAccount);
+    if (!isMember && normalizedAccount !== normalizeSuiAddress(form.owner)) {
       toast.error("Your wallet isn't on this form's allowlist.");
       return null;
     }

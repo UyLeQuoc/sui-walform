@@ -122,10 +122,11 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
         if (!ids.formObjectId || !ids.formOwnerCapId) {
           throw new Error('Publish succeeded but Form/FormOwnerCap ids missing from effects');
         }
+        const followUpDigests: string[] = [];
 
         if (needsSealedSchemaFollowUp && originalPackageId && seal) {
           steps.advance('seal', 'Encrypting schema with Seal — one extra wallet sign.');
-          await runSealedSchemaFollowUp({
+          const sealDigest = await runSealedSchemaFollowUp({
             formId,
             packageId,
             originalPackageId,
@@ -134,15 +135,17 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
             seal,
             execute,
           });
+          followUpDigests.push(sealDigest);
         }
 
         if (options.mode === 'on-chain' && options.access === 'paid') {
           steps.advance('treasury', 'Creating an on-chain treasury to collect submission fees.');
-          await runTreasuryFollowUp({
+          const treasuryDigest = await runTreasuryFollowUp({
             packageId,
             formOwnerCapId: ids.formOwnerCapId,
             execute,
           });
+          followUpDigests.push(treasuryDigest);
         }
 
         // Best-effort: if this draft came from a free marketplace template
@@ -156,7 +159,8 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
               packageId,
               templateId: src.templateId,
             });
-            await execute({ transaction: recordTx });
+            const { digest: recordDigest } = await execute({ transaction: recordTx });
+            followUpDigests.push(recordDigest);
           } catch (e) {
             console.warn('Failed to record free-clone count bump (non-fatal)', e);
           }
@@ -172,6 +176,9 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
         }
         usePublishStore.getState().clearPublished(formId);
         await invalidateChain(digest);
+        for (const followUpDigest of followUpDigests) {
+          await invalidateChain(followUpDigest);
+        }
 
         steps.finishOk();
         toast.success(buildSuccessMessage(options));
@@ -230,35 +237,28 @@ interface SealedSchemaFollowUpInput {
  * rewrite the schema field via update_schema. Failure leaves the form
  * publishable-but-unreadable; recoverable by re-running.
  */
-async function runSealedSchemaFollowUp(input: SealedSchemaFollowUpInput): Promise<void> {
+async function runSealedSchemaFollowUp(input: SealedSchemaFollowUpInput): Promise<string> {
   const { formId, packageId, originalPackageId, formObjectId, formOwnerCapId, seal, execute } =
     input;
-  try {
-    const stored = await formDb.getById(formId);
-    if (!stored) throw new Error('Draft missing — cannot encrypt schema');
-    const plaintext = new TextEncoder().encode(JSON.stringify(stored.schema));
-    const { ciphertext } = await sealEncryptSchema({
-      seal,
-      // Seal identity namespace is stable — must match the original package
-      // address even after upgrades.
-      packageId: originalPackageId,
-      objectId: formObjectId,
-      plaintext,
-    });
-    const tx = buildUpdateSchemaTx({
-      packageId,
-      formObjectId,
-      formOwnerCapId,
-      schemaBytes: ciphertext,
-    });
-    await execute({ transaction: tx });
-  } catch (e) {
-    const m = e instanceof Error ? e.message : String(e);
-    toast.error(
-      `Form published with placeholder schema — encryption step failed: ${m}. The form will not render until you retry.`,
-    );
-    console.error('sealed-schema follow-up failed', e);
-  }
+  const stored = await formDb.getById(formId);
+  if (!stored) throw new Error('Draft missing — cannot encrypt schema');
+  const plaintext = new TextEncoder().encode(JSON.stringify(stored.schema));
+  const { ciphertext } = await sealEncryptSchema({
+    seal,
+    // Seal identity namespace is stable — must match the original package
+    // address even after upgrades.
+    packageId: originalPackageId,
+    objectId: formObjectId,
+    plaintext,
+  });
+  const tx = buildUpdateSchemaTx({
+    packageId,
+    formObjectId,
+    formOwnerCapId,
+    schemaBytes: ciphertext,
+  });
+  const { digest } = await execute({ transaction: tx });
+  return digest;
 }
 
 interface TreasuryFollowUpInput {
@@ -274,18 +274,11 @@ interface TreasuryFollowUpInput {
  * can't borrow it again as an arg. Two-step is acceptable; failure here
  * leaves the form publishable-but-not-submittable, recoverable by re-running.
  */
-async function runTreasuryFollowUp(input: TreasuryFollowUpInput): Promise<void> {
+async function runTreasuryFollowUp(input: TreasuryFollowUpInput): Promise<string> {
   const { packageId, formOwnerCapId, execute } = input;
-  try {
-    const tx = buildCreateTreasuryTx({ packageId, formOwnerCapId });
-    await execute({ transaction: tx });
-  } catch (e) {
-    const m = e instanceof Error ? e.message : String(e);
-    toast.error(
-      `Form published but treasury creation failed: ${m}. Submissions will reject until you retry.`,
-    );
-    console.error('treasury creation failed', e);
-  }
+  const tx = buildCreateTreasuryTx({ packageId, formOwnerCapId });
+  const { digest } = await execute({ transaction: tx });
+  return digest;
 }
 
 function buildSuccessMessage(options: PublishOptions): string {

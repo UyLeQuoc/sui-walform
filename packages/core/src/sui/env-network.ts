@@ -6,9 +6,10 @@
  * _MAINNET pairs in `.env.local`, and these hooks pick the active one based
  * on `useSuiClientContext().network`.
  *
- * Why explicit branches instead of dynamic key lookup: Next.js inlines
- * `process.env.NEXT_PUBLIC_X` at build time only when the key is a literal,
- * not a computed expression. Branching by network keeps everything inlined.
+ * Why explicit branches instead of dynamic key lookup: the Vite define
+ * helper text-replaces `process.env.NEXT_PUBLIC_X` at build time only when
+ * the key is a literal, not a computed expression. Branching by network
+ * keeps everything statically inlinable.
  *
  * For non-React call sites that need a Walrus aggregator / portal host, use
  * the matching `getWalrusAggregatorUrl(network)` / `getWalrusPortalHost(network)`

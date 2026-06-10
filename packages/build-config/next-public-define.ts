@@ -2,8 +2,7 @@ import { loadEnv } from 'vite';
 
 /**
  * Every NEXT_PUBLIC_* var the client code reads — mirrors
- * `packages/core/src/env.d.ts` plus NEXT_PUBLIC_SPONSOR_URL (read in
- * `sui/use-execute-transaction.ts`). EVERY key must get a `define` entry: an
+ * `packages/core/src/env.d.ts`. EVERY key must get a `define` entry: an
  * unset var left out would leave a bare `process.env.X` token in the bundle
  * and throw `process is not defined` in the browser. Keep in sync with env.d.ts.
  */
@@ -46,7 +45,6 @@ const NEXT_PUBLIC_KEYS = [
   'NEXT_PUBLIC_ENOKI_PUBLIC_KEY',
   'NEXT_PUBLIC_ENOKI_REDIRECT_URL',
   'NEXT_PUBLIC_GOOGLE_CLIENT_ID',
-  'NEXT_PUBLIC_SPONSOR_URL',
 ];
 
 /**

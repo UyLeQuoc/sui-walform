@@ -50,8 +50,8 @@ export interface UseCloneTemplateToDraftResult {
  *   - Free templates: fetch schema → write IDB draft → done. Zero on-chain
  *     activity until the user publishes.
  *   - Paid templates: build `purchase_template_only` PTB (pays creator + 10%
- *     royalty, bumps clone_count, mints NO Form) → execute via sponsor +
- *     fallback → fetch schema → write IDB draft → done.
+ *     royalty, bumps clone_count, mints NO Form) → wallet signs and pays →
+ *     fetch schema → write IDB draft → done.
  *
  * Both paths set `StoredForm.sourceTemplate` for editor banner + Drafts pill.
  */

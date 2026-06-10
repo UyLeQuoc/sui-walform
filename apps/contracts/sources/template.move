@@ -29,6 +29,7 @@ const E_WRONG_CAP: u64 = 1;
 const E_INSUFFICIENT_ROYALTY: u64 = 2;
 const E_ROYALTY_RULE_MISSING: u64 = 3;
 const E_BAD_PRICE: u64 = 4;
+const E_METADATA_TOO_LARGE: u64 = 8;
 
 // === One-time witness + module init ===
 
@@ -126,6 +127,12 @@ public struct PlatformAdminCap has key, store { id: UID }
 
 // === Publishing a template ===
 
+const MAX_TEMPLATE_TITLE_BYTES: u64 = 512;
+const MAX_TEMPLATE_DESCRIPTION_BYTES: u64 = 4_096;
+const MAX_TEMPLATE_TAGS: u64 = 16;
+const MAX_TEMPLATE_TAG_BYTES: u64 = 64;
+const MAX_TEMPLATE_PREVIEW_BLOB_ID_BYTES: u64 = 256;
+
 public fun publish_template(
     cap: &FormOwnerCap,
     form: &Form,
@@ -139,6 +146,7 @@ public fun publish_template(
 ): FormTemplate {
     // Only the form's owner can publish it as a template.
     form_owner_cap::assert_for(cap, form::id_address(form));
+    assert_template_metadata_capped(&title, &description, &preview_blob_id, &tags);
 
     let schema_copy = *form::schema(form);
     let theme_copy = *form::theme(form);
@@ -390,6 +398,25 @@ public fun update_listing_price(
 public fun listing_template_id(l: &TemplateListing): address { l.template_id }
 public fun listing_creator(l: &TemplateListing): address { l.creator }
 public fun listing_price_mist(l: &TemplateListing): u64 { l.price_mist }
+
+fun assert_template_metadata_capped(
+    title: &String,
+    description: &String,
+    preview_blob_id: &Option<vector<u8>>,
+    tags: &vector<String>,
+) {
+    assert!(title.as_bytes().length() <= MAX_TEMPLATE_TITLE_BYTES, E_METADATA_TOO_LARGE);
+    assert!(description.as_bytes().length() <= MAX_TEMPLATE_DESCRIPTION_BYTES, E_METADATA_TOO_LARGE);
+    if (option::is_some(preview_blob_id)) {
+        assert!(option::borrow(preview_blob_id).length() <= MAX_TEMPLATE_PREVIEW_BLOB_ID_BYTES, E_METADATA_TOO_LARGE);
+    };
+    assert!(tags.length() <= MAX_TEMPLATE_TAGS, E_METADATA_TOO_LARGE);
+    let mut i = 0;
+    while (i < tags.length()) {
+        assert!(tags.borrow(i).as_bytes().length() <= MAX_TEMPLATE_TAG_BYTES, E_METADATA_TOO_LARGE);
+        i = i + 1;
+    };
+}
 
 // === Free clone path (price = 0, no Kiosk) ===
 

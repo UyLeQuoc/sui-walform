@@ -276,6 +276,8 @@ public(package) fun mint_from_template(
     ctx: &mut TxContext,
 ): (Form, FormOwnerCap) {
     assert!(schema.length() <= MAX_SCHEMA_BYTES, E_SCHEMA_TOO_LARGE);
+    assert!(title.as_bytes().length() <= MAX_TITLE_BYTES, E_TITLE_TOO_LONG);
+    assert!(theme.length() <= MAX_THEME_BYTES, E_THEME_TOO_LARGE);
     assert_valid_access_mode(settings.access_mode);
     let uid = object::new(ctx);
     let form_id = object::uid_to_address(&uid);

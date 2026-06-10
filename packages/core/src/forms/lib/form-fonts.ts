@@ -1,8 +1,8 @@
 /**
  * Curated list of fonts the form author can pick from for the whole form.
  *
- * Each font is loaded as a CSS variable in `src/app/layout.tsx` (via
- * `next/font/google`) and referenced here by that variable name. The selected
+ * Each font is loaded as a CSS variable via `@fontsource-variable/*` imports
+ * in `ui/fonts.ts` and referenced here by that variable name. The selected
  * font is stored in `FormSettings.fontFamily` by key.
  */
 
