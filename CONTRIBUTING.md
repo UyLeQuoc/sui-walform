@@ -35,10 +35,10 @@ Read [`CLAUDE.md`](CLAUDE.md) for the architecture map and [`docs/CODE_RULES.md`
 
 | Path | What |
 | --- | --- |
-| `apps/builder` | Next.js builder — landing, authoring, results, submit. Static-exportable (`output: 'export'`). |
+| `apps/builder` | Vite 7 SPA — landing, authoring, results, submit. Static `out/` deployed to Walrus Sites. |
 | `apps/contracts` | Move 2024 package + publish/upgrade/codegen scripts. |
 | `packages/core` | Shared library — UI primitives, forms code, Sui/Walrus/Seal wiring. |
-| `packages/walform-site` | Mode B static shell deployed to Walrus per-form. |
+| `packages/walform-site` | Mode B static Vite SPA shell deployed to Walrus per-form. |
 | `apps/portal` | Vendored Walrus Sites gateway (local dev only). |
 
 ---

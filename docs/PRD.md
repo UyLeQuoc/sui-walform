@@ -7,7 +7,7 @@
 **Transaction model (v2.0):** Every WalForm Sui transaction — creator publish/update/close, marketplace publish/list, marketplace clone/purchase, respondent submit, Mode B deploy — is signed and paid by the **user's connected wallet** via dApp Kit's `useSignAndExecuteTransaction`. There is no app-level sponsorship and no `/api/sponsor` route. Enoki is retained only for `registerEnokiWallets` (Google sign-in). Older sections of this PRD that reference sponsored gas describe the v0.9–v1.1 design — see Appendix A entry dated 2026-05-07 for the supersession.
 **Storage posture:** To minimise the WAL surface, the **mandatory** base flow uses Sui only — both **form schema** and **encrypted submission bodies** are stored inline in their Sui objects. WAL is **only required for opt-in features**: Mode B Walrus-Site deploy, optional cover/theme images, and `FILE_UPLOAD` attachments. A form with none of those features costs zero WAL end-to-end. See §7.4.
 **Distribution modes:** Every form is submittable **by default from `walform.wal.app/f/{form-id}`** (built-in renderer, no extra deploy step). Creators can **optionally** deploy their form as its own **Walrus Site** and attach a **SuiNS** name for a custom URL like `{name}.wal.app`. Both modes share the same Seal whitelist policy.
-**Stack:** Next.js 15 for the builder + Mode B shell; plus a vendored Walrus Sites gateway. `apps/builder` = Next.js full SSR on Vercel (hosts landing + creator dashboard + Mode A renderer + `/api/walrus/upload`). `packages/walform-site` = Next.js `output: 'export'` → static shell deployed to Walrus per-form via the user's wallet (Mode B). `apps/portal` = **Mysten's Walrus Sites portal** (vendored from `MystenLabs/walrus-sites/portal`), the gateway that resolves `{subdomain}.wal.app` requests into Walrus blob fetches — this is infrastructure, not a React app.
+**Stack:** Vite 7 + React 19 + react-router-dom v7 static SPAs for the builder + Mode B shell, deployed to Walrus Sites; plus a vendored Walrus Sites gateway. `apps/builder` = Vite SPA → static `out/` (hosts landing + creator dashboard + Mode A renderer at `/f?formId=…`). `packages/walform-site` = Vite SPA → static `dist/`, shared shell deployed to Walrus once — per-form Mode B deploys just create a `site::Site` PTB pointing at the shared blob. `packages/core` = shared library consumed by both. `apps/portal` = **Mysten's Walrus Sites portal** (vendored from `MystenLabs/walrus-sites/portal`), the gateway that resolves `{subdomain}.wal.app` requests into Walrus blob fetches — this is infrastructure, not a React app. No server routes, no `/api/sponsor` — every Sui tx is signed and paid by the user's connected wallet via `useExecuteTransaction`. Enoki is used only for zkLogin (Google sign-in). **Migrated off Next.js 2026-06-02.**
 **Repo layout:** Turborepo + Bun. `apps/builder`, `apps/renderer`, `apps/portal` (vendored gateway), `apps/contracts` (Move package), and a single shared `packages/core` library.
 
 ---
@@ -19,20 +19,19 @@ The sections below answer the open questions in the scoping conversation. Skim t
 | Open question | Decision | Rationale |
 | --- | --- | --- |
 | **Hackathon target** | **Sui Overflow 2026**, fully on testnet | Bigger flagship event than Haulout, broader judge audience, testnet posture lets us iterate without real-SUI risk. Haulout remains a secondary track we can re-target with the same codebase. |
-| **Builder app framework** | **Next.js 15 (App Router)** on Vercel | Needs a server-side surface for the **sponsor API route** (`/api/sponsor`), which holds the Enoki app secret. Next.js is the easiest way to colocate UI + protected API. Deployment target is Vercel testnet portal for v1. See §5.1. |
-| **Renderer framework** | **Next.js 15 with `output: 'export'`** → static bundle → Walrus Site | Same framework as the builder so the renderer can import shared shadcn/ui components from `packages/core` with one bundler and one tsconfig. Dynamic form IDs handled via hash routing (`#/f/{form-id}`) so static export works cleanly on Walrus Sites without server rewrites. See §5.1. |
+| **Builder app framework** | **Vite 7 + React 19 + react-router-dom v7** static SPA → `out/`, deployed to Walrus Sites | No server runtime needed — every tx is user-wallet-signed; Enoki is only for zkLogin. Replaced Next.js 2026-06-02. See Appendix A. |
+| **Renderer framework** | **Vite 7 SPA** → `dist/`, static shell deployed to Walrus once, shared across all Mode B forms | Hash routing (`#/f/{formId}`) so static export works without server rewrites. Per-form Mode B is just a `site_object::create` PTB. |
 | **Monorepo tooling** | **Turborepo + Bun** | Bun as package manager + runtime (fast installs, native TS). Turbo for task caching across `apps/*` and `packages/*`. |
 | **Shared library** | **Single `packages/core`** — shadcn primitives + Zod schemas + Sui/Walrus/Seal/crypto helpers + Tailwind preset all in one package | One import path across all apps. Kept intentionally flat instead of 4 micro-packages to reduce boilerplate and tsconfig/build juggling. |
-| **Sponsor model** | **Enoki fully sponsors all submissions at the app level. Creators do not deposit SUI. Any wallet works** (Slush, Sui Wallet, Enoki zkLogin, any dApp Kit-detected wallet) and still gets sponsorship. | Testnet gas is effectively free to us. Removes "creator funds reservoir" UX friction and the "respondent needs a specific wallet" friction in one shot. `GasReservoir` Move module is deferred to post-hackathon mainnet work (see §7.1, §8.1). |
-| **Where does the Enoki secret live?** | **Next.js API route `/api/sponsor` on the builder app** | Client never sees the Enoki secret. Client builds tx → POSTs to our API → we call Enoki with server-side secret → return signed-gas tx → client signs sender half → broadcast. See §6 and §7.1. |
+| **Transaction model (v2.0)** | **Every Sui tx is signed and paid by the user's connected wallet** via `useExecuteTransaction` (wraps dApp Kit's `useSignAndExecuteTransaction`) | Original sponsor design (Enoki app-paid) superseded 2026-05-07. No `/api/sponsor`, no app-level gas payment. Enoki retained only for `registerEnokiWallets` (Google sign-in). |
 | **Result visibility model** | **Seal whitelist: creator + submitter only.** No time-locked or public-after-close mode in v1. | Simpler policy, fewer edge cases, covers both "creator reads everything" and "respondent can see their own submission" with a single Move policy. See §7.5, §8. |
 | **Max submissions + deadline controls** | Creator sets **max submissions** and **closes at** timestamp at publish time. Both optional (empty = unlimited / no deadline). Enforced in Move on `submit()`. | See §4.5, §8.2. |
 | **Template marketplace mechanic** | **Sui Kiosk + TransferPolicy only.** No Sui Payment Kit. | Kiosk is native, decentralized, and already handles royalty-enforced purchase. Sui Payment Kit is a managed-checkout layer we don't need and don't want as an extra centralization point. Free templates use a plain `clone_free` entry fn. See §7.2. |
 | **Platform fee on paid templates** | **10% TransferPolicy royalty on every paid-template purchase, routed to the WalForm platform treasury.** Set once at package publish. | We are the `Publisher<FormTemplate>`, so we own the `TransferPolicy<FormTemplate>` and can set a fixed 10% royalty rule that runs on every Kiosk `purchase`. Seller (template creator) still gets the full listed price; buyer pays listed + 10% on top. Free templates bypass the Kiosk path entirely. See §7.2. |
-| **AI integration** | **BYOK via Vercel AI SDK v6**, client-side. Providers: **OpenRouter** (default, unified LLM access) or **OpenAI**. Key stored encrypted in IndexedDB. AI calls go browser → provider direct; no server-side proxy. See §7.3. |
-| **Where do encrypted submission bodies live — Sui or Walrus?** | **Inline in the Sui `Submission` object** (not Walrus). Same logic applies to the form schema, which is also inline in the `Form` object. | Enoki sponsors SUI gas but *not* Walrus WAL. Inlining both schema and ciphertext means the base flow (publish + submit) costs zero WAL — respondents pay nothing, creators pay only SUI gas. WAL is opt-in: Mode B Walrus Site deploy, cover images, FILE_UPLOAD attachments. See §7.4 and §9. |
-| **Form distribution — built-in or Walrus Site?** | **Two modes, creator's choice at publish.** Default: built-in renderer on `walform.wal.app/f/{form-id}` (zero extra steps). Optional: deploy to a Walrus Site and attach a SuiNS name for `{name}.wal.app`. | Default covers 90% of use cases with the simplest possible UX. Walrus-Site + SuiNS is the "ultimate decentralization + branded URL" path for creators who want it. See §5.2. |
-| **Fully on-chain decentralized?** | **Data / logic / access-control: yes (even on testnet). Gas sponsorship, OAuth identity, and the builder portal: no** (Enoki + OAuth + Vercel). Progressive decentralization — documented honestly in the pitch. See §7.5. |
+| **AI integration** | **BYOK via Vercel AI SDK v6**, client-side. Providers: **OpenRouter** (default, free model available) or **OpenAI**. Key stored in localStorage (IndexedDB encryption deferred). AI calls go browser → provider direct; no server-side proxy. See §7.3. |
+| **Where do encrypted submission bodies live — Sui or Walrus?** | **Inline in the Sui `Submission` object** (not Walrus). Same logic applies to the form schema, which is also inline in the `Form` object. | Base flow costs zero WAL — respondents pay SUI gas via their wallet, creators pay at publish. WAL is opt-in: Mode B Walrus Site deploy, cover images, FILE_UPLOAD attachments. See §7.4 and §9. |
+| **Form distribution — built-in or Walrus Site?** | **Two modes, creator's choice at publish.** Default: built-in renderer on `walform.wal.app/f?formId=…` (zero extra steps). Optional: deploy to a Walrus Site for `{name}.wal.app`. | Default covers 90% of use cases with the simplest possible UX. Walrus-Site is the "ultimate decentralization + branded URL" path for creators who want it. See §5.2. |
+| **Fully on-chain decentralized?** | **Data / logic / access-control: yes (even on testnet). Gas payment, OAuth identity: no** (Enoki OAuth + user wallet SUI). Progressive decentralization — documented honestly in the pitch. See §7.5. |
 
 ---
 
@@ -243,9 +242,11 @@ All calls go **browser → provider directly** (no server-side proxy). BYOK stay
 
 ## 5. Tech Stack Decisions
 
-### 5.1 One Next.js app + one shared static shell + one vendored gateway
+### 5.1 One app + one shared static shell + one vendored gateway
 
-**Decision (v1.0, supersedes v0.x):** one builder app + one shared Mode B shell. Earlier drafts had `apps/renderer` as a separate Next.js `output: 'export'` app rebuilt per form and pushed to Walrus per form. That was dropped on 2026-04-26 — N forms generated N copies of identical JS, wasted WAL, and added a build pipeline for nothing. The replacement is a single `packages/walform-site/` shell, built once, pushed to Walrus once, reused by every Mode B form via hash routing.
+> **Note (2026-06-02): This section describes the original Next.js architecture. Both apps have been migrated to Vite 7 SPAs — see Appendix A 2026-06-02. The shared-shell architecture described below remains accurate; only the bundler and hosting have changed.**
+
+**Decision (v1.0, supersedes v0.x):** one builder app + one shared Mode B shell. Earlier drafts had `apps/renderer` as a separate Next.js `output: 'export'` app rebuilt per form and pushed to Walrus per form. That was dropped on 2026-04-26 — N forms generated N copies of identical JS, wasted WAL, and added a build pipeline for nothing. The replacement is a single `packages/walform-site/` shell (now Vite 7 SPA), built once, pushed to Walrus once, reused by every Mode B form via hash routing.
 
 - **Builder app** (`apps/builder`) — **standard Next.js build**, full Node server runtime on Vercel. Holds `/api/sponsor` (Enoki secret), the creator dashboard, authoring canvas, Mode A renderer at `/f/[id]`, landing + public template gallery, marketplace, and the deploy-to-Walrus button. The same `<FormSubmissionView>` rendered at `/f/[id]` is the component the static shell wraps for Mode B.
 - **walform-site** (`packages/walform-site`, future) — vite/next static export. Bundles dApp Kit + Seal + sponsor client + `<FormSubmissionView>`. Reads the form id from URL hash (`#/f/{id}`), fetches the `Form` Sui object at runtime, lets respondents submit via a cross-origin POST to `walform.wal.app/api/sponsor`. Pushed to Walrus ONCE; per-form Mode B deploy is just a `site_object::create` PTB pointing at the shared blob, optionally with a SuiNS attach.
@@ -325,14 +326,14 @@ Both modes use the **same Move contracts, same Seal policy, same `/api/sponsor` 
 ```
 walform/
 ├── apps/
-│   ├── builder/              # Next.js 15, standard build, full SSR — Vercel
-│   │   ├── app/              # App Router
-│   │   │   ├── app/          # authenticated creator dashboard + canvas
-│   │   │   ├── f/[id]/       # built-in renderer (Mode A) — server fetches Form
-│   │   │   └── api/
-│   │   │       └── sponsor/
-│   │   │           └── route.ts  # Enoki secret lives here (ENOKI_SECRET_KEY)
-│   │   └── next.config.ts
+│   ├── builder/              # Vite 7 SPA → static out/, deployed to Walrus Sites
+│   │   ├── src/
+│   │   │   ├── main.tsx      #   SPA entry
+│   │   │   ├── router.tsx    #   react-router-dom v7 flat routes
+│   │   │   └── routes/       #   Home, Forms, FormEdit, FormPreview, FormResults,
+│   │   │                     #   PublicSubmit (/f?formId=…), Admin, NotFound
+│   │   ├── index.html
+│   │   └── vite.config.ts
 │   ├── portal/               # VENDORED + FLATTENED from
 │   │   │                     # MystenLabs/walrus-sites/portal. Local dev only —
 │   │   │                     # production uses the public wal.app portal.
@@ -342,34 +343,35 @@ walform/
 │   │   ├── lib/              # Shared library code (from upstream common/lib/)
 │   │   │   ├── src/          #   core lib
 │   │   │   └── tests/        #   vitest tests
-│   │   ├── html_templates/   # 404 + hash-mismatch HTML (from upstream common/)
-│   │   ├── static/           # Worker's public assets (from upstream worker/)
+│   │   ├── html_templates/   # 404 + hash-mismatch HTML
+│   │   ├── static/           # Worker's public assets
 │   │   ├── webpack.config.*.js, vite.config.mts
 │   │   ├── tsconfig.json, package.json
-│   │   ├── UPSTREAM.md       # Upstream commit SHA, re-sync instructions,
-│   │   │                     #   local flattening rationale.
-│   │   └── wrangler.toml     # Cloudflare Workers deploy config (our additions)
-│   └── contracts/            # Move 2024 package — Sui testnet
+│   │   ├── UPSTREAM.md       # Upstream commit SHA, re-sync instructions
+│   │   └── wrangler.toml
+│   └── contracts/            # Move 2024 package — Sui testnet + mainnet
 │       ├── sources/*.move    #   form, submission, allowlist, template,
-│       │                     #   seal_policies, payment, events
-│       ├── tests/*.move
+│       │                     #   seal_policies, payment, events, voting
+│       ├── tests/*.move      #   47 unit tests
 │       ├── Move.toml
-│       └── deployed.json     # Published package ID (testnet), updated on each publish
+│       └── deployed.json     # Published package IDs
 ├── packages/
-│   ├── core/                 # SHARED library — consumed by builder + (future)
-│   │   │                     # walform-site shell.
+│   ├── core/                 # SHARED library — consumed by builder + walform-site
 │   │   └── src/
-│   │       ├── ui/           #   shadcn primitives
+│   │       ├── ui/           #   shadcn primitives + fonts
 │   │       ├── forms/        #   <FormPreview>, <FormSubmissionView>, hooks,
 │   │       │                 #   IDB drafts, Marketplace browse/buy, publish dialog
 │   │       ├── schema/       #   Zod types (FormSchema, fields)
-│   │       ├── sui/          #   providers, sponsor transport, wallet UI, tx
+│   │       ├── sui/          #   providers, useExecuteTransaction, wallet UI, tx
 │   │       │                 #   builders, codegen bindings
 │   │       ├── crypto/       #   Seal client + identity + session + sub/schema
-│   │       └── tailwind.ts   #   Tailwind preset
-│   └── walform-site/         # FUTURE — single static shell pushed to Walrus
-│                             # once. Reuses <FormSubmissionView> from core.
-│                             # Per-form Mode B = site_object::create + SuiNS.
+│   │       └── tailwind.ts   #   Tailwind v4 config
+│   ├── walform-site/         # Mode B static shell — Vite 7 SPA → dist/
+│   │                         # hash-routed #/f/{formId}, mirrored into builder
+│   ├── build-config/         # nextPublicDefine Vite define helper
+│   ├── eslint-config/        # Shared ESLint
+│   ├── prettier-config/      # Shared Prettier
+│   └── tsconfig/             # Shared TS config
 ├── docs/
 │   └── PRD.md
 ├── package.json              # Bun workspaces root
@@ -380,6 +382,8 @@ walform/
 ---
 
 ## 6. Architecture Overview
+
+> **Note (2026-05-07): The diagram and request flow below describe the original sponsor-based architecture with `/api/sponsor`. The current v2.0 architecture replaces all of this with user-wallet-signed transactions via `useExecuteTransaction` — see §7.1 for the superseding design and Appendix A for the decision log. The data flows (Sui, Walrus, Seal) remain accurate; only the transaction transport changed.**
 
 ```
 +---------------------------------------------------------------------+

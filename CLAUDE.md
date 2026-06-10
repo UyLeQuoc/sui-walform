@@ -25,7 +25,7 @@ Read [`docs/PRD.md`](docs/PRD.md) for binding architectural decisions (Appendix 
 | `apps/portal` | Vendored from `MystenLabs/walrus-sites/portal`. **Local dev only** — production uses public `wal.app`. Resolves `{base36}.localhost:8080` to testnet Walrus blobs. |
 | `packages/core` | Single shared library. Imports from any app. Holds shadcn primitives (`src/ui/*`), all forms code (`src/forms/*` — components, hooks, IDB drafts, store), Sui wiring (`src/sui/*` — providers, `useExecuteTransaction` helper, wallet UI, codegen bindings, tx builders), Seal helpers (`src/crypto/*`). |
 | `packages/{eslint-config,prettier-config,tsconfig}` | Shared dev configs. `eslint-config/react` (used by both apps) pins `react.version` (not `'detect'`) — ESLint 10 + eslint-plugin-react 7.37 crash on auto-detect. |
-| `packages/build-config` | Shared Vite helper. `nextPublicDefine(mode, dir)` builds the `define` map that text-replaces `process.env.NEXT_PUBLIC_*` tokens at build time; both apps' `vite.config.ts` import it (relatively) and pass `apps/builder/.env.local` as the env dir. |
+| `packages/build-config` | Shared Vite helper. `nextPublicDefine(mode, dir)` builds the `define` map that text-replaces `process.env.NEXT_PUBLIC_*` tokens at build time; both apps' `vite.config.ts` import it (relatively) and pass `apps/builder` as the env dir (Vite's `loadEnv` reads `.env`, `.env.local`, `.env.{mode}` from there). |
 | `packages/walform-site` | Mode B static shell — **Vite 7 SPA** → `dist/`, hash/config-routed (`#/f/{formId}` or baked `config.json`), router-free. The builder's Deploy button bundles + pushes per form via the user's connected wallet (`WalrusWalletSigner`); Sui `site::Site` PTB also signed by user. `dist/` is mirrored into `apps/builder/public/walform-site-bundle/` by `scripts/mirror-bundle.ts`. |
 
 ## Commands
@@ -87,7 +87,7 @@ Submission body encryption is wired and shipping. Identity layout = `form.id_add
 
 ## Hackathon target
 
-**Sui Overflow 2026 — testnet only.** `apps/contracts/deployed.json` is the live testnet record (current `packageId`, `originalPackageId`, `transferPolicy`, `platformTreasury`). After every `contracts:upgrade`, mirror `packageId` into `apps/builder/.env.local :: NEXT_PUBLIC_PACKAGE_ID`. `originalPackageId` only moves on a fresh `contracts:publish` (never), so it stays in env across upgrades.
+**Sui Overflow 2026 — testnet only.** `apps/contracts/deployed.json` is the live testnet record (current `packageId`, `originalPackageId`, `transferPolicy`, `platformTreasury`). After every `contracts:upgrade`, mirror `packageId` into `apps/builder/.env :: NEXT_PUBLIC_PACKAGE_ID`. `originalPackageId` only moves on a fresh `contracts:publish` (never), so it stays in env across upgrades.
 
 ## Memory-system note
 

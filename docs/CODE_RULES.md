@@ -41,7 +41,7 @@ Four state buckets. Putting state in the wrong one is a bug.
 
 ## 3. Memoization — sparing, justified, never reflexive
 
-Default: **don't memoize.** React 19 + Next 15 are fast enough that wrapping every value in `useMemo` is noise.
+Default: **don't memoize.** React 19 + Vite 7 are fast enough that wrapping every value in `useMemo` is noise.
 
 Memoize only when one of these is true:
 
@@ -83,7 +83,7 @@ When you do memoize, the dep array must be exhaustive. No `// eslint-disable rea
 - **Function components only.** No class components anywhere.
 - **No `forwardRef` in feature components.** The shadcn primitives in `ui/` already handle refs; consumers don't need them.
 - **Wrap shadcn primitives, don't fork them.** New variants → extend via `cn()` and props. Don't copy a primitive to add one prop.
-- **`'use client'` at the very top of any file using hooks, browser APIs, or event handlers.** Every file in `forms/hooks/` and most in `forms/components/` starts with it. Server components stay in `apps/builder/app/**/page.tsx`; they import client components.
+- **`'use client'` at the very top of any file using hooks, browser APIs, or event handlers.** Every file in `forms/hooks/` and most in `forms/components/` starts with it. Both apps are static Vite SPAs — there are no server components.
 - **Keep components under ~200 lines.** If a component grows past that, the logic almost certainly belongs in a hook.
 - **No prop drilling beyond two levels.** Use the Zustand store or `FormAppearanceContext` instead.
 - **No CSS-in-JS, no inline `style={{}}` for anything Tailwind can express.** Use `cn()` for conditional classes.
@@ -93,7 +93,7 @@ When you do memoize, the dep array must be exhaustive. No `// eslint-disable rea
 ## 7. Async / data fetching
 
 - **Reads of chain state go through `useSuiClientQuery`** (or a hook built on it). Don't call `client.getObject` from a component.
-- **Writes go through `useExecuteTransaction`** (`sui/use-execute-transaction.ts`), which wraps dApp Kit's `useSignAndExecuteTransaction`. Pass a freshly built `Transaction` instance per call; the user's wallet signs and pays gas. There is no app-level sponsorship.
+- **Writes go through `useExecuteTransaction`** (`sui/use-execute-transaction.ts`), which wraps dApp Kit's `useSignAndExecuteTransaction`. Pass a freshly built `Transaction` instance per call; the user's wallet signs and pays gas directly. There is no server-side signing or sponsorship route.
 - **Error states are explicit.** Hooks return discriminated unions like `{ status: 'loading' | 'success' | 'error', ... }` (see `useForms`). Don't return `{ data, error, loading }` triples — match the existing shape.
 - **No optimistic updates** unless explicitly requested. Wait for the digest, invalidate, re-render.
 - **User feedback uses `sonner` toasts.** Don't roll your own toast.
@@ -111,10 +111,10 @@ When you do memoize, the dep array must be exhaustive. No `// eslint-disable rea
 ## 9. Sui / Seal / Walrus specifics (testnet)
 
 - Use **`SuiJsonRpcClient` and `getJsonRpcFullnodeUrl`** from `@mysten/sui/jsonRpc`. The v1 names from `@mysten/sui/client` are only for codegen type imports.
-- **`useActivePackageId()` for MoveCall targets.** **`useOriginalPackageId()` for Seal `packageId` and for matching `objectType` strings** — Sui RPC always reports types under the original package ID regardless of upgrades.
+- **`useActivePackageId()` for MoveCall targets.** **`useOriginalPackageId()` for `seal.encrypt({packageId})` and for matching `objectType` strings** — Sui RPC always reports types under the original package ID regardless of upgrades.
 - **Normalize Sui addresses with `normalizeSuiAddress`** before string equality. `0x2 !== 0x000…002` for naive comparisons.
-- **`MoveCall` allowlist matching uses `validate-move-calls.ts :: normalizeTarget`** on both sides. Don't bypass it.
-- **Pass a `Transaction` instance (not a base64 string) to `useSignTransaction`.** Some wallets rebuild gas data on serialise; the transport relies on the full object to detect and recover.
+- **Every Sui tx is signed and paid by the user's connected wallet** via `useExecuteTransaction` — no app-level sponsorship.
+- **Pass a `Transaction` instance (not a base64 string) to wallet-signing hooks** so dApp Kit can serialise the full tx. `useExecuteTransaction` already does this.
 
 ---
 
@@ -122,7 +122,7 @@ When you do memoize, the dep array must be exhaustive. No `// eslint-disable rea
 
 Order, top to bottom, separated by a blank line:
 
-1. React / Next built-ins.
+1. React / Vite built-ins.
 2. Third-party (`@mysten/*`, `@tanstack/*`, `lucide-react`, `sonner`, …).
 3. `@walform/core/*` aliased imports.
 4. Sibling relative imports (`./foo`, `../bar`).

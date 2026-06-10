@@ -55,7 +55,7 @@ WalForm is different end-to-end:
 - **Ownership** is a transferable Sui object: `FormOwnerCap`.
 - **Access control** is enforced by Move smart contracts: **Public · Private (allowlist) · Token-gated · Paid** — wired end-to-end. Token-gating is enforced client-side; Paid forms route fees into a per-form `FormTreasury` the creator can withdraw from.
 - **Wallet support is broad.** Any Sui-standard wallet works — Slush, Sui Wallet, or Google via Enoki zkLogin. Users sign and pay gas with their connected wallet.
-- **Form delivery is optionally decentralized.** Forms work out-of-the-box at `/f/{id}` (Mode A, served by the builder). Mode B is a single shared static shell at `packages/walform-site/` deployable to Walrus per-form via the user's wallet.
+- **Form delivery is optionally decentralized.** Forms work out-of-the-box at `/f?formId=…` (Mode A, served by the builder). Mode B is a single shared static shell at `packages/walform-site/` deployable to Walrus per-form via the user's wallet.
 - **Marketplace** for templates: free + paid (multi-buyer) listings, with a 10% royalty to the platform treasury. Cover images and file uploads go to Walrus via the SDK.
 - **AI is BYOK and free-by-default.** Generate forms from prompts using Vercel AI SDK v4 + OpenRouter (free model `google/gemini-2.0-flash-exp:free`); your key never leaves your browser.
 
@@ -86,13 +86,13 @@ Full row-by-row status: [`docs/PROGRESS.md`](docs/PROGRESS.md).
 | Layer | Choice |
 | --- | --- |
 | Monorepo | Turborepo + Bun |
-| Builder app (`apps/builder`) | Next.js 15 App Router, full SSR, deployed on Vercel |
-| Mode B static shell (`packages/walform-site`) | Next.js 15 with `output: 'export'`, hash-routed `#/f/{id}`, deployed to Walrus per-form via the builder's Deploy button |
+| Builder app (`apps/builder`) | Vite 7 + React 19 + react-router-dom v7 SPA → static `out/`, deployed to Walrus Sites |
+| Mode B static shell (`packages/walform-site`) | Vite 7 SPA → `dist/`, hash-routed `#/f/{id}`, mirrored into builder and deployed to Walrus per-form via the user's wallet |
 | Portal (`apps/portal`) | **Vendored from [`MystenLabs/walrus-sites/portal`](https://github.com/MystenLabs/walrus-sites/tree/main/portal)** — Cloudflare Worker flavor, configured for Sui + Walrus testnet (local dev only — production uses public `wal.app`) |
 | UI | shadcn/ui primitives + Tailwind, shared via `packages/core` |
 | Wallet / dApp | `@mysten/dapp-kit` 1.0.x — auto-detects all installed Sui-standard wallets |
 | zkLogin | `@mysten/enoki` `registerEnokiWallets` on the client (Google sign-in only — no app-level signing) |
-| Storage | Walrus testnet (`@mysten/walrus`) — server-side via `/api/walrus/upload` for cover images + file attachments; user wallet for Mode B deploys |
+| Storage | Walrus testnet (`@mysten/walrus`) — browser-side via user's wallet for cover images, file attachments, and Mode B deploys |
 | Encryption | Seal testnet (`@mysten/seal`) — submission policy + sealed-schema policy v2 |
 | AI | Vercel AI SDK v4 + `@ai-sdk/openai` pointed at OpenRouter (BYOK, default free model) |
 | Smart contracts | Move 2024, 8 modules deployed + 2 upgrades on testnet |
@@ -104,23 +104,24 @@ Full row-by-row status: [`docs/PROGRESS.md`](docs/PROGRESS.md).
 ```
 walform/
 ├── apps/
-│   ├── builder/     Next.js 15, full SSR — dashboard, canvas,
-│   │                /api/walrus/upload, Mode A renderer at /f/[id],
-│   │                Results dashboard, Submitter receipt at /f/[id]/receipt
+│   ├── builder/     Vite 7 SPA — dashboard, canvas,
+│   │                Mode A renderer at /f?formId=…,
+│   │                Results dashboard, Submitter receipt
 │   ├── portal/      Vendored MystenLabs/walrus-sites/portal (local dev only)
-│   └── contracts/   Move 2024 package — 8 modules, 2 upgrades on testnet
+│   └── contracts/   Move 2024 package — 9 modules on testnet + mainnet
 │       ├── sources/   form, form_owner_cap, allowlist, submission,
-│       │              template, seal_policies, payment, events
-│       ├── tests/     40 unit tests (Move test)
+│       │              template, seal_policies, payment, events, voting
+│       ├── tests/     47 unit tests (Move test)
 │       ├── scripts/   publish.ts, upgrade.ts, codegen.ts
-│       └── deployed.json (live testnet ids)
+│       └── deployed.json (live ids)
 ├── packages/
 │   ├── core/         Single shared library — shadcn primitives, field renderers,
 │   │                 <FormPreview>, Zod schemagen, IDB drafts, Sui wiring
 │   │                 (providers, wallet UI, codegen, tx builders), Seal
 │   │                 helpers, Walrus client, AI generate, Tailwind preset.
-│   ├── walform-site/ Mode B static shell — Next.js output:'export',
-│   │                 hash-routed #/f/{id}, ready to push to Walrus.
+│   ├── walform-site/ Mode B static shell — Vite 7 SPA, hash-routed
+│   │                 #/f/{id}, mirrored into builder public/ at build.
+│   ├── build-config/ Shared Vite define helper (nextPublicDefine).
 │   ├── eslint-config/, prettier-config/, tsconfig/  Shared dev configs.
 ├── docs/
 │   ├── PRD.md         Authoritative spec + decision log
@@ -179,29 +180,28 @@ bun run contracts:codegen                # regenerate TS bindings into packages/
 
 ### Env files
 
-Each app has its own `.env.local`:
+Each app has its own `.env`:
 
 | App | Template | Notes |
 | --- | --- | --- |
-| `apps/builder/.env.example` | `WALRUS_ADMIN_SECRET_KEY`, `NEXT_PUBLIC_*` | Server-side keypair only pays Walrus storage for `/api/walrus/upload` (cover images + file attachments). Does NOT sign Sui transactions on behalf of users — every Sui tx is signed and paid by the user's connected wallet. |
+| `apps/builder/.env.example` | `NEXT_PUBLIC_*` | All client-side env vars (package ids, Walrus/Seal URLs, Enoki keys). No server-side secrets — every Sui tx is signed and paid by the user's connected wallet via `useExecuteTransaction`. |
 | `apps/portal/.env.example` | `RPC_URL_LIST`, `AGGREGATOR_URL_LIST`, etc. | Build-time vars for the vendored portal (local dev only). |
-| `apps/contracts/.env.local` | `SUI_DEPLOYER_PRIVATE_KEY` | Required only when publishing or upgrading contracts. |
+| `apps/contracts/.env` | `SUI_DEPLOYER_PRIVATE_KEY` | Required only when publishing or upgrading contracts. |
 
 ---
 
 ## Mode B: deploy a form site to Walrus
 
-The Mode B static shell lives at [`packages/walform-site/`](packages/walform-site). It's bundled and mirrored into the builder's `public/walform-site-bundle/` so the Deploy button can read it at runtime.
+The Mode B static shell lives at [`packages/walform-site/`](packages/walform-site). It's built and mirrored into the builder's `public/walform-site-bundle/` so the Deploy button can read it at runtime.
 
 ```bash
-# 1. Build the static shell + mirror it into the builder
+# Build the static shell + mirror into builder public/
 bun run build --filter=@walform/walform-site
-bun run --cwd packages/walform-site bundle:mirror
 
-# 2. From the builder UI, open any on-chain form card → "Deploy to Walrus"
-#    The browser pushes the bundle to Walrus via the connected wallet
-#    (single tx for Walrus registration), then runs the Site PTB to
-#    create the per-form Site object and mirror its id onto the Form.
+# Then from the builder UI, open any on-chain form card → "Deploy to Walrus"
+# The browser pushes the bundle to Walrus via the connected wallet
+# (single tx for Walrus registration), then runs the Site PTB to
+# create the per-form Site object and mirror its id onto the Form.
 ```
 
 The deploy resolves at `https://<base36(siteId)>.wal.app/#/f/{formId}` once Walrus epochs activate.
@@ -215,7 +215,7 @@ The deploy resolves at `https://<base36(siteId)>.wal.app/#/f/{formId}` once Walr
 - **Seal:** submit with account A, then try to decrypt with account B (denied), then with account A or the form owner (allowed). For Private forms with sealed schemas, even *viewing the questions* requires being on the allowlist.
 - **Marketplace:** clone a paid template from the Marketplace tab — Sui explorer shows the buyer paying listed price + 10%, with the 10% flowing into `PlatformTreasury` and the listed price routed to the seller via `clone_paid`.
 - **AI client-side:** open browser dev tools on the builder. Click "Generate with AI" in the editor toolbar, paste an OpenRouter free key, generate a form. Network tab shows calls going directly to `openrouter.ai` — no WalForm server in the loop.
-- **Walrus:** attach a cover image or file upload — `apps/builder/app/api/walrus/upload/route.ts` PUTs the bytes via the SDK and returns an aggregator URL. Resolves at the public `aggregator.walrus-testnet.walrus.space` endpoint.
+- **Walrus:** attach a cover image or file upload — the browser uploads bytes via `WalrusClient.writeBlob` using the connected wallet's `WalrusWalletSigner`. Resolves at the public `aggregator.walrus-testnet.walrus.space` endpoint.
 
 ---
 
@@ -247,7 +247,7 @@ Built on:
 - [Enoki](https://enoki.mystenlabs.com/) — zkLogin (Google sign-in)
 - [MystenLabs/walrus-sites/portal](https://github.com/MystenLabs/walrus-sites/tree/main/portal) — vendored Walrus Sites gateway
 - [Vercel AI SDK](https://ai-sdk.dev/) — AI runtime for BYOK form generation
-- [shadcn/ui](https://ui.shadcn.com/), [Next.js](https://nextjs.org/), [Turborepo](https://turborepo.com/), [Bun](https://bun.sh/)
+- [Vite](https://vite.dev/), [React](https://react.dev/), [shadcn/ui](https://ui.shadcn.com/), [Turborepo](https://turborepo.com/), [Bun](https://bun.sh/)
 
 ---
 
