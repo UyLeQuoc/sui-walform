@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-WalForm — decentralized form builder on Sui. Stack lives end-to-end on testnet:
+WalForm — decentralized form builder on Sui. Stack runs on both mainnet (production at walform.wal.app) and testnet (selectable via env):
 
 - **Sui Move contracts** (`apps/contracts/sources/*.move`) own form schemas, submissions, allowlists, templates, Kiosk royalty, Seal policies.
 - **Seal** encrypts submission bodies + (post-upgrade) form schemas client-side; key servers via the Mysten testnet committee + aggregator.
@@ -87,7 +87,7 @@ Submission body encryption is wired and shipping. Identity layout = `form.id_add
 
 ## Hackathon target
 
-**Sui Overflow 2026 — testnet only.** `apps/contracts/deployed.json` is the live testnet record (current `packageId`, `originalPackageId`, `transferPolicy`, `platformTreasury`). After every `contracts:upgrade`, mirror `packageId` into `apps/builder/.env :: NEXT_PUBLIC_PACKAGE_ID`. `originalPackageId` only moves on a fresh `contracts:publish` (never), so it stays in env across upgrades.
+**Sui Overflow 2026** (<https://overflow.sui.io>). The app is network-selectable: **mainnet** is the live production deploy (walform.wal.app); **testnet** is fully supported for development and for judges who prefer faucet SUI (set `NEXT_PUBLIC_DEFAULT_NETWORK=testnet`). `apps/contracts/deployed.{mainnet,testnet}.json` track the per-network records (`packageId`, `originalPackageId`, `transferPolicy`, `platformTreasury`). After every `contracts:upgrade`, mirror the relevant network's `packageId` into `apps/builder/.env :: NEXT_PUBLIC_PACKAGE_ID`. `originalPackageId` only moves on a fresh `contracts:publish` (never), so it stays in env across upgrades.
 
 ## Memory-system note
 

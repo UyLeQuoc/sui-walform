@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Lock, Globe, Store, Send, Coins, ImageIcon, Wallet } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -166,6 +167,12 @@ export function PublishDialog({
       const parsedMax = Number(maxSubmissions);
       const max = limitEnabled && Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : 0;
       const closesAtMs = deadlineEnabled && closesAt ? new Date(closesAt).getTime() : null;
+      // A close date in the past publishes a form the contract treats as
+      // already-ended — every submit reverts. Block it before signing.
+      if (closesAtMs !== null && (!Number.isFinite(closesAtMs) || closesAtMs <= Date.now())) {
+        toast.error('Pick a close date in the future.');
+        return;
+      }
       // Token: amount stored in u64 base units (assume the user enters whole
       // units and the contract treats it raw — caller is responsible for the
       // display↔base conversion since we don't fetch coin metadata in the
@@ -184,6 +191,13 @@ export function PublishDialog({
       });
     } else {
       const price = Number(priceSui);
+      // Paid templates must carry a price > 0 — the contract's
+      // create_listing_and_share asserts price_mist > 0 and would otherwise
+      // abort the whole publish PTB after the user has already signed.
+      if (pricing === 'paid' && !(price > 0)) {
+        toast.error('Set a price greater than 0 SUI for a paid template, or choose Free.');
+        return;
+      }
       void onSubmit({
         mode: 'marketplace',
         title,

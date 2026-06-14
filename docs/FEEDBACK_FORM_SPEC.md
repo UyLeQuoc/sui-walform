@@ -1,14 +1,14 @@
-# Walrus Sessions — Tooling Feedback Form (build spec)
+# Sui Overflow 2026 — Tooling Feedback Form (build spec)
 
-The form you'll build on **walform.wal.app** to run the community feedback cycle. Dogfood: WalForm collects feedback about form tools.
+The form you'll build on **walform.wal.app** to run the community feedback cycle for Sui Overflow 2026. Dogfood: WalForm collects feedback about form tools.
 
 ## Form-level settings
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| Title | `Walrus Sessions — Form Tooling Feedback` | |
-| Access mode | **Private (allowlist)** | Sybil resistance — only prior-session participants vote |
-| Allowlist | Wallet addresses of all Session 1 + Session 2 participants | The gate. Paste the participant wallet list at publish. |
+| Title | `Sui Overflow 2026 — Form Tooling Feedback` | |
+| Access mode | **Private (allowlist)** | Sybil resistance — only verified Sui Overflow 2026 participants vote |
+| Allowlist | <!-- TODO: wallet addresses of verified Sui Overflow 2026 participants --> | The gate. Paste the participant wallet list at publish. |
 | Max submissions | unlimited (0) | One per wallet is naturally enforced; allowlist caps the pool |
 | Closes at | +14 days (one cycle) | Fixed cadence — momentum dies in open-ended loops |
 | Sealed schema | optional | Questions aren't secret; can leave off |
@@ -27,8 +27,8 @@ Field types map 1:1 to WalForm's built-in types. `*` = required.
 | # | Type | Label | Notes |
 | --- | --- | --- | --- |
 | A1 | `heading` | **About you** | Section header |
-| A2 | `single_choice` * | Which Walrus Session(s) did you participate in? | Options: `Session 1`, `Session 2`, `Both` |
-| A3 | `single_choice` * | Which tool are you reviewing? | Options: the Session 2 winners + 1 community wildcard. (List the actual project names.) |
+| A2 | `single_choice` * | Did you participate in Sui Overflow 2026? | Options: `Yes — as a builder`, `Yes — as a judge/reviewer`, `Both` |
+| A3 | `single_choice` * | Which tool are you reviewing? | <!-- TODO: list Sui Overflow 2026 finalists/participants once known --> Options: the Overflow finalists + 1 community wildcard. |
 | A4 | `single_choice` * | Which perspective are you reviewing from? | Options: `End user (filling forms)`, `Admin/Creator (building forms)`, `Both` |
 
 ### Section B — End-user experience (filling a form)
@@ -59,7 +59,7 @@ Field types map 1:1 to WalForm's built-in types. `*` = required.
 | # | Type | Label | Notes |
 | --- | --- | --- | --- |
 | D1 | `heading` | **Your overall preference** | |
-| D2 | `single_choice` * | If you had to pick ONE tool to use end-to-end, which? | Options: same tool list as A3. **This is the vote.** |
+| D2 | `single_choice` * | If you had to pick ONE tool to use end-to-end, which? | <!-- TODO: same tool list as A3 once Sui Overflow 2026 participants are known --> **This is the vote.** |
 | D3 | `long_text` * | Why that one? | Forces a reason — filters low-effort votes |
 
 ### Section E — Improvements (feeds the bounty board)

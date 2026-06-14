@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Logo } from '../logo';
+import { AwardBadge } from './award-badge';
 
 const GROUPS = [
   {
@@ -25,7 +26,7 @@ const GROUPS = [
     links: [
       { label: 'Docs', href: '#' },
       { label: 'GitHub', href: 'https://github.com' },
-      { label: 'Walrus Session 2', href: 'https://www.walrus.xyz' },
+      { label: 'Sui Overflow 2026', href: 'https://overflow.sui.io' },
       { label: 'Roadmap', href: '#' },
     ],
   },
@@ -43,8 +44,9 @@ export function Footer() {
           <p className="text-muted-foreground max-w-xs text-sm">
             Build forms that can&apos;t be taken down. Own the data. Encrypt by default.
           </p>
+          <AwardBadge compact className="w-fit" />
           <p className="text-muted-foreground text-xs">
-            Built on Sui + Walrus mainnet for Walrus Session 2.
+            Built on Sui + Walrus + Seal for Sui Overflow 2026.
           </p>
         </div>
 

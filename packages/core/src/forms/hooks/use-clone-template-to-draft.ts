@@ -161,7 +161,11 @@ export function useCloneTemplateToDraft(
         await invalidateChain(digest);
       }
 
-      // 2. Materialise the draft.
+      // 2. Materialise the draft. For PAID clones this runs AFTER the
+      //    (irreversible) payment, so a transient IndexedDB failure (cross-tab
+      //    lock, quota) must NOT silently swallow the purchase. Retry a few
+      //    times, and if it still fails surface the digest so the buyer knows
+      //    the payment settled on-chain rather than just seeing "Clone failed".
       const draft = createDraftFromTemplate({
         templateId: template.templateId,
         originalTitle: template.title,
@@ -169,7 +173,31 @@ export function useCloneTemplateToDraft(
         templateSchema: schemaQuery.schema!,
         purchaseDigest: digest,
       });
-      await formDb.save(draft);
+      let saved = false;
+      let lastSaveErr: unknown;
+      for (let attempt = 0; attempt < 3 && !saved; attempt++) {
+        try {
+          await formDb.save(draft);
+          saved = true;
+        } catch (e) {
+          lastSaveErr = e;
+          await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
+        }
+      }
+      if (!saved) {
+        if (digest) {
+          console.error('Purchase settled but draft save failed', { digest, lastSaveErr });
+          toast.error(
+            `Payment went through (tx ${digest.slice(0, 8)}…) but saving the draft to this browser failed. Your purchase is recorded on-chain — free up storage or close other WalForm tabs, then reload.`,
+            { duration: 15000 },
+          );
+        } else {
+          toast.error(
+            'Could not save the draft to this browser — free up storage or close other WalForm tabs and try again.',
+          );
+        }
+        return null;
+      }
 
       if (digest) {
         toast.success(`Purchased — opened in Drafts to edit before publish`);

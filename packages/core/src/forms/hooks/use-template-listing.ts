@@ -1,6 +1,7 @@
 'use client';
 
-import { useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { useActivePackageId } from '../../sui/package-id';
 
@@ -14,13 +15,22 @@ export interface TemplateListing {
 /**
  * Look up the pay-to-clone listing bound to a given template (if any).
  * Creators publish a `TemplateListing` shared object alongside the template;
- * this hook queries `queryEvents` on the creator's publish tx history to
- * find matching listings. React Query deduplicates so multiple cards asking
- * for the same `templateId` hit the cache.
+ * this hook scans the `create_listing_and_share` tx history to build a
+ * `templateId → listing` map, then returns the entry for the requested
+ * template.
  *
- * NOTE: this is a stop-gap for v1 — a proper indexer or a shared registry
- * object would be cheaper. Contract exposes `listing_template_id` but there's
- * no reverse index.
+ * The scan is keyed WITHOUT `templateId`, so every marketplace card shares a
+ * single React Query cache entry / single RPC scan instead of one full scan
+ * per card.
+ *
+ * The tx scan is PAGINATED with a cursor loop — `queryTransactionBlocks` caps
+ * at 50 results per call, so the previous single `limit: 50` call silently lost
+ * every listing past the newest 50. A paid template that fell off page 1 then
+ * resolved to `null` and `useCloneTemplateToDraft` cloned it for FREE (creator
+ * lost the sale + royalty). The cursor loop fixes that.
+ *
+ * NOTE: still a stop-gap for v1 — a shared registry object or an indexer would
+ * be cheaper than scanning tx history.
  */
 export function useTemplateListing(templateId: string | undefined): {
   listing: TemplateListing | null;
@@ -29,40 +39,50 @@ export function useTemplateListing(templateId: string | undefined): {
 } {
   const activePackageId = useActivePackageId();
   const { network } = useSuiClientContext();
+  const client = useSuiClient();
+  const normalizedTarget = templateId ? normalizeSuiAddress(templateId) : undefined;
 
-  // MoveFunction filter matches the package used at call time. After a
-  // `contracts:upgrade`, new `create_listing_and_share` txs target the
-  // CURRENT packageId — not the original. Using `originalPackageId` here
-  // missed every post-upgrade listing → marketplace card fell back to
-  // status='free' even when the creator had set a price.
-  //
-  // Stop-gap: just filter by the current packageId. Listings published
-  // under an earlier package version are stale and won't surface here;
-  // acceptable since marketplace is post-upgrade in practice.
-  const txQuery = useSuiClientQuery(
-    'queryTransactionBlocks',
-    {
-      filter: activePackageId
-        ? {
-            MoveFunction: {
-              package: activePackageId,
-              module: 'template',
-              function: 'create_listing_and_share',
-            },
-          }
-        : ({} as never),
-      options: { showObjectChanges: true, showInput: true },
+  const query = useQuery<Map<string, TemplateListing>>({
+    // Network-prefixed (so `invalidateChain` refreshes it) and NOT keyed by
+    // templateId — all cards reuse the one scan.
+    queryKey: [network, 'walform:template-listings', activePackageId],
+    enabled: !!activePackageId && !!normalizedTarget,
+    staleTime: 10_000,
+    queryFn: () => buildListingMap(client, activePackageId!),
+  });
+
+  const listing = normalizedTarget ? (query.data?.get(normalizedTarget) ?? null) : null;
+
+  return {
+    listing,
+    isLoading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
+  };
+}
+
+type SuiClient = ReturnType<typeof useSuiClient>;
+
+async function buildListingMap(
+  client: SuiClient,
+  packageId: string,
+): Promise<Map<string, TemplateListing>> {
+  // 1) Paginate every create_listing_and_share tx → TemplateListing object ids.
+  //    After a contracts:upgrade, new listings target the CURRENT packageId, so
+  //    listings published under an earlier version won't surface — acceptable
+  //    since the marketplace is post-upgrade in practice.
+  const listingIds: string[] = [];
+  let cursor: string | null | undefined = null;
+  for (let page = 0; page < 100; page++) {
+    const res = await client.queryTransactionBlocks({
+      filter: {
+        MoveFunction: { package: packageId, module: 'template', function: 'create_listing_and_share' },
+      },
+      options: { showObjectChanges: true },
       order: 'descending',
       limit: 50,
-    },
-    { enabled: !!activePackageId && !!templateId },
-  );
-
-  // Collect Listing object ids created in those txs. React Compiler memoizes.
-  const listingIds: string[] = [];
-  if (templateId) {
-    const txs = txQuery.data?.data ?? [];
-    for (const t of txs) {
+      cursor,
+    });
+    for (const t of res.data) {
       const changes = (t.objectChanges ?? []) as Array<{
         type?: string;
         objectType?: string;
@@ -78,58 +98,39 @@ export function useTemplateListing(templateId: string | undefined): {
         }
       }
     }
+    if (!res.hasNextPage || !res.nextCursor) break;
+    cursor = res.nextCursor;
   }
 
-  const objectsQuery = useSuiClientQuery(
-    'multiGetObjects',
-    {
-      ids: listingIds,
+  // 2) Resolve the listing objects in batches of 50 (RPC cap) → map by
+  //    templateId. Descending scan order means the first listing seen per
+  //    template is the newest; keep it.
+  const map = new Map<string, TemplateListing>();
+  for (let i = 0; i < listingIds.length; i += 50) {
+    const part = await client.multiGetObjects({
+      ids: listingIds.slice(i, i + 50),
       options: { showContent: true, showType: true },
-    },
-    { enabled: listingIds.length > 0 },
-  );
-
-  const listing = resolveListing(templateId, objectsQuery.data);
-
-  void network;
-  return {
-    listing,
-    isLoading: txQuery.isPending || (listingIds.length > 0 && objectsQuery.isPending),
-    error: (txQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null,
-  };
-}
-
-type MultiGetObjectsData = ReturnType<typeof useSuiClientQuery<'multiGetObjects'>>['data'];
-
-function resolveListing(
-  templateId: string | undefined,
-  data: MultiGetObjectsData,
-): TemplateListing | null {
-  if (!templateId) return null;
-  const normalizedTarget = normalizeSuiAddress(templateId);
-  const results = data ?? [];
-  for (const entry of results) {
-    const obj = entry.data;
-    if (!obj?.objectId) continue;
-    const content = obj.content as unknown as
-      | {
-          dataType: 'moveObject';
-          fields: {
-            template_id?: string;
-            creator?: string;
-            price_mist?: string | number;
-          };
-        }
-      | undefined;
-    const fields = content?.fields;
-    if (!fields?.template_id) continue;
-    if (normalizeSuiAddress(fields.template_id) !== normalizedTarget) continue;
-    return {
-      listingId: obj.objectId,
-      templateId: normalizedTarget,
-      creator: fields.creator ? normalizeSuiAddress(fields.creator) : '',
-      priceMist: fields.price_mist ? BigInt(fields.price_mist) : 0n,
-    };
+    });
+    for (const entry of part) {
+      const obj = entry.data;
+      if (!obj?.objectId) continue;
+      const content = obj.content as unknown as
+        | {
+            dataType: 'moveObject';
+            fields: { template_id?: string; creator?: string; price_mist?: string | number };
+          }
+        | undefined;
+      const fields = content?.fields;
+      if (!fields?.template_id) continue;
+      const tid = normalizeSuiAddress(fields.template_id);
+      if (map.has(tid)) continue;
+      map.set(tid, {
+        listingId: obj.objectId,
+        templateId: tid,
+        creator: fields.creator ? normalizeSuiAddress(fields.creator) : '',
+        priceMist: fields.price_mist ? BigInt(fields.price_mist) : 0n,
+      });
+    }
   }
-  return null;
+  return map;
 }

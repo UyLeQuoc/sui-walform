@@ -209,8 +209,8 @@ export function useSubmissionDecryption(
       // Pre-warm the Seal session FIRST so the wallet only pops one signature
       // prompt for the whole batch. ensureSession sets its own error state on
       // failure (e.g. the user rejects the signature), so just bail.
-      const sessionKey = await sealSession.ensureSession().catch(() => null);
-      if (!sessionKey) return;
+      const warm = await sealSession.ensureSession().catch(() => null);
+      if (!warm) return;
       const todo = rows.filter((r) => !decryptedById[r.submissionId]);
       if (todo.length === 0) return;
 
@@ -226,6 +226,13 @@ export function useSubmissionDecryption(
       // instead of N — which is what keeps the public fullnode from 429-ing.
       for (let i = 0; i < todo.length; i += BATCH_SIZE) {
         const batch = todo.slice(i, i + BATCH_SIZE);
+        // Re-acquire the session each batch — a large "Decrypt all" can outlive
+        // the 30-min SessionKey TTL mid-run. ensureSession returns the cached
+        // key while it's still valid (no new prompt) and only re-signs once it
+        // has actually expired, so the remaining batches don't all fail with an
+        // opaque auth error.
+        const batchSessionKey = await sealSession.ensureSession().catch(() => null);
+        if (!batchSessionKey) return;
         let batchTxBytes: Uint8Array | undefined;
         try {
           const approve = await buildSealApproveBatch({
@@ -238,7 +245,7 @@ export function useSubmissionDecryption(
           await seal.fetchKeys({
             ids: approve.ids,
             txBytes: approve.txBytes,
-            sessionKey,
+            sessionKey: batchSessionKey,
             threshold,
           });
           batchTxBytes = approve.txBytes;

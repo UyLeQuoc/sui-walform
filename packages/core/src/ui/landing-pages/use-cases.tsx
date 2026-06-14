@@ -11,7 +11,7 @@ const CASES = [
   },
   {
     title: 'DAO governance survey',
-    body: 'Token-gated by Coin<T> balance. Members sign + Enoki sponsors gas, you decrypt everything, each voter keeps a receipt only they can read.',
+    body: 'Token-gated by Coin<T> balance. Members sign + pay gas from their own wallet, you decrypt everything, each voter keeps a receipt only they can read.',
     tag: 'Encrypted · Token-gated',
   },
   {

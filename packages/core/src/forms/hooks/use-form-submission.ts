@@ -183,9 +183,16 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       }
 
       setIsSubmitting(true);
+      // Work on a shallow clone so we never mutate the RHF-owned `values`
+      // object. The file-attachment rewrite below (File → FileAttachmentValue)
+      // would otherwise corrupt the caller's snapshot: on a deferred/retry
+      // submit `collectPendingFiles` would no longer see the `File`s (already
+      // rewritten) and we'd re-encrypt a half-mutated object — and re-upload
+      // the attachments, double-spending WAL.
+      const submitValues: FieldValues = { ...values };
       // File auto-upload step is only listed when there are pending File
-      // objects in `values` — keeps the step list tight when no attachments.
-      const pendingFiles = collectPendingFiles(values);
+      // objects in `submitValues` — keeps the step list tight when no attachments.
+      const pendingFiles = collectPendingFiles(submitValues);
       const flow: Array<{ id: string; label: string }> = [];
       if (pendingFiles.length > 0) {
         flow.push({
@@ -237,13 +244,13 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
               size: file.size,
               type: file.type || '',
             };
-            (values as Record<string, unknown>)[fieldId] = next;
+            (submitValues as Record<string, unknown>)[fieldId] = next;
           });
         }
 
         // 2. Encrypt the serialized form values (now with file URLs).
         steps.advance('encrypt');
-        const plaintext = new TextEncoder().encode(JSON.stringify(values));
+        const plaintext = new TextEncoder().encode(JSON.stringify(submitValues));
         const { ciphertext, nonce } = await sealEncryptSubmission({
           seal,
           // Use originalPackageId for Seal identity namespace stability.

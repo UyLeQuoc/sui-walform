@@ -1,6 +1,6 @@
-# Walrus Session 2 — Form Tooling Submission
+# Sui Overflow 2026 Submission
 
-> Pre-filled answers for <https://airtable.com/appoDAKpC74UOqoDa/shrN8UbJRdbkd5Lso>.
+> Pre-filled answers for the Sui Overflow 2026 submission form (<https://overflow.sui.io>).
 > `(FILL)` markers are fields that need a human decision before submission.
 
 ---
@@ -33,9 +33,9 @@
 
 WalForm
 
-### Please select the session *
+### Please select the track / category *
 
-Walrus Session 2 — Form Tooling
+<!-- TODO: Sui Overflow 2026 submission — select the applicable track(s) from the official submission form -->
 
 ### Team Leader Name *
 
@@ -176,7 +176,7 @@ Suggestions:
 
 ### Rules confirmation *
 
-✅ I confirm that I have read, understood, and agree to the rules and regulations of Walrus Session 2.
+<!-- TODO: Sui Overflow 2026 submission — confirm agreement to the official Sui Overflow 2026 rules and regulations at https://overflow.sui.io -->
 
 ---
 

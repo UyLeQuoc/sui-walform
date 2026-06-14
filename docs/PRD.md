@@ -2,8 +2,8 @@
 
 **Status:** Draft v2.0
 **Last updated:** 2026-05-07
-**Target submission:** Sui Overflow 2026 Hackathon — testnet demo
-**Network scope:** 100% Sui testnet + Walrus testnet for the hackathon build. No mainnet in v1.
+**Target submission:** Sui Overflow 2026 Hackathon (<https://overflow.sui.io>)
+**Network scope:** Network-selectable via env. Production deploy at walform.wal.app runs on **Sui mainnet + Walrus mainnet**. Testnet is fully supported for development and for judges who prefer faucet SUI (set `NEXT_PUBLIC_DEFAULT_NETWORK=testnet`).
 **Transaction model (v2.0):** Every WalForm Sui transaction — creator publish/update/close, marketplace publish/list, marketplace clone/purchase, respondent submit, Mode B deploy — is signed and paid by the **user's connected wallet** via dApp Kit's `useSignAndExecuteTransaction`. There is no app-level sponsorship and no `/api/sponsor` route. Enoki is retained only for `registerEnokiWallets` (Google sign-in). Older sections of this PRD that reference sponsored gas describe the v0.9–v1.1 design — see Appendix A entry dated 2026-05-07 for the supersession.
 **Storage posture:** To minimise the WAL surface, the **mandatory** base flow uses Sui only — both **form schema** and **encrypted submission bodies** are stored inline in their Sui objects. WAL is **only required for opt-in features**: Mode B Walrus-Site deploy, optional cover/theme images, and `FILE_UPLOAD` attachments. A form with none of those features costs zero WAL end-to-end. See §7.4.
 **Distribution modes:** Every form is submittable **by default from `walform.wal.app/f/{form-id}`** (built-in renderer, no extra deploy step). Creators can **optionally** deploy their form as its own **Walrus Site** and attach a **SuiNS** name for a custom URL like `{name}.wal.app`. Both modes share the same Seal whitelist policy.
@@ -18,7 +18,7 @@ The sections below answer the open questions in the scoping conversation. Skim t
 
 | Open question | Decision | Rationale |
 | --- | --- | --- |
-| **Hackathon target** | **Sui Overflow 2026**, fully on testnet | Bigger flagship event than Haulout, broader judge audience, testnet posture lets us iterate without real-SUI risk. Haulout remains a secondary track we can re-target with the same codebase. |
+| **Hackathon target** | **Sui Overflow 2026** — production on mainnet, testnet supported via env | Bigger flagship event than Haulout, broader judge audience. Live mainnet deploy at walform.wal.app; judges who prefer faucet SUI can use testnet. Haulout remains a secondary track we can re-target with the same codebase. |
 | **Builder app framework** | **Vite 7 + React 19 + react-router-dom v7** static SPA → `out/`, deployed to Walrus Sites | No server runtime needed — every tx is user-wallet-signed; Enoki is only for zkLogin. Replaced Next.js 2026-06-02. See Appendix A. |
 | **Renderer framework** | **Vite 7 SPA** → `dist/`, static shell deployed to Walrus once, shared across all Mode B forms | Hash routing (`#/f/{formId}`) so static export works without server rewrites. Per-form Mode B is just a `site_object::create` PTB. |
 | **Monorepo tooling** | **Turborepo + Bun** | Bun as package manager + runtime (fast installs, native TS). Turbo for task caching across `apps/*` and `packages/*`. |
@@ -64,24 +64,23 @@ WalForm is the first truly decentralized form builder on Sui. Drag-and-drop UX f
 
 ### Hackathon target
 
-**Sui Overflow 2026** — Mysten Labs' flagship annual hackathon. We submit on Sui testnet, with all infra (Sui, Walrus, Seal, Enoki) on their respective testnet endpoints.
+**Sui Overflow 2026** (<https://overflow.sui.io>) — Mysten Labs' flagship annual hackathon. The production app runs on Sui mainnet + Walrus mainnet (walform.wal.app). Testnet is fully supported via env for judges who prefer faucet SUI.
 
 Tracks we're eligible for / targeting:
 
-- **Programmable Storage (Walrus)** — primary fit. Every form schema + every submission blob is on Walrus testnet; the renderer itself is a Walrus Site. Heavy, visible Walrus usage.
+- **Programmable Storage (Walrus)** — primary fit. Every form schema + every submission blob is stored on Walrus; the renderer itself is a Walrus Site. Heavy, visible Walrus usage.
 - **Cryptography (Seal)** — primary fit. All submissions are Seal-encrypted client-side; the Seal whitelist policy guards read access so only the creator and the original submitter can decrypt.
 - **Infra & Tooling** — secondary fit. WalForm is a general-purpose tool: a Sui-native replacement for Tally/Typeform. Gives judges an easy "I'd actually use this" reaction.
 - **AI × Data** — secondary fit via AI form generation / response summarization using BYOK client-side AI.
 
 **Secondary target:** **Walrus Haulout Hackathon** — same codebase, separate submission if timing allows. Haulout's "Data Privacy" and "Data Economy" tracks map cleanly onto our existing features.
 
-### Why testnet-only for v1
+### Network posture — both mainnet and testnet
 
-- Overflow judges test on testnet; mainnet-only projects are harder to evaluate.
-- Testnet SUI is free via faucet. Enoki testnet quota is effectively unlimited for demo traffic.
-- No real-money blast radius during rapid iteration.
-- We can still point judges at live Sui testnet explorer + Walrus testnet to verify all on-chain claims.
-- Mainnet migration is a post-hackathon effort with its own economics (creator-funded `GasReservoir`, paid templates priced in real SUI, etc).
+- **Production (mainnet):** walform.wal.app is deployed to Sui mainnet + Walrus mainnet. Real SUI gas; real on-chain state. Judges can verify contract objects on Suivision mainnet.
+- **Testnet supported:** set `NEXT_PUBLIC_DEFAULT_NETWORK=testnet` (see `.env.example`) and the app uses the testnet package + Walrus testnet endpoints. Testnet SUI is free via faucet. Enoki testnet quota is effectively unlimited for demo traffic.
+- The network dropdown in the wallet UI lets users switch between networks at runtime with no rebuild.
+- Long-term mainnet economics (creator-funded `GasReservoir`, paid templates priced in real SUI) are discussed in §1 Guiding Principles and remain relevant for the live production deploy.
 
 ### Competitive landscape (explicit)
 
@@ -1535,7 +1534,8 @@ Hackathon timeline assumed ~3 weeks from kickoff. Adjust to Haulout dates.
 
 | Date | Decision | Status |
 | --- | --- | --- |
-| 2026-04-21 | Primary hackathon target = **Sui Overflow 2026**, 100% Sui testnet | Locked |
+| 2026-04-21 | Primary hackathon target = **Sui Overflow 2026**, 100% Sui testnet | Superseded 2026-06-14 |
+| 2026-06-14 | Network posture updated: production runs on **Sui mainnet** (walform.wal.app); testnet supported via env — both networks are live | Locked |
 | 2026-04-21 | Walrus Haulout = secondary target with the same codebase | Locked |
 | 2026-04-21 | **Both apps on Next.js 15**; renderer uses `output: 'export'` + hash routing to fit Walrus Sites | Locked (v0.3) |
 | 2026-04-21 | Shared **`packages/core`** (shadcn + schema + sui/seal/walrus helpers + Tailwind preset, all in one flat package) consumed by both apps | Locked (v0.3) |

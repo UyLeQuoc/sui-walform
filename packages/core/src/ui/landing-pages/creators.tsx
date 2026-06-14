@@ -26,7 +26,7 @@ const CREATORS = [
   {
     handle: 'Huanngdev',
     role: 'Fullstack dev',
-    bio: 'Next.js 15, shadcn, Seal client-side crypto, Walrus storage glue — ships the surface users actually touch.',
+    bio: 'React 19 + Vite, shadcn, Seal client-side crypto, Walrus storage glue — ships the surface users actually touch.',
     accent: 'from-[color-mix(in_oklch,var(--primary)_70%,black)]/30 via-primary/10 to-transparent',
     initials: 'HN',
     image: '/creators/huanngdev.jpg',
@@ -78,7 +78,7 @@ export function Creators() {
         <SectionHeader
           eyebrow="Creators"
           title="Shipped by two humans."
-          description="WalForm is a weekend-and-nights build for Walrus Session 2. No team, no funding, no excuses."
+          description="WalForm is a weekend-and-nights build for Sui Overflow 2026. No team, no funding, no excuses."
         />
 
         <div className="mt-16 grid grid-cols-1 gap-6 md:grid-cols-2" style={{ perspective: 1400 }}>
@@ -161,7 +161,7 @@ function CreatorCard({ handle, role, bio, accent, initials, image }: (typeof CRE
           <p className="text-muted-foreground mt-3 text-sm leading-relaxed">{bio}</p>
 
           <div className="mt-5 flex flex-wrap gap-2 text-[11px] font-medium">
-            {['Sui', 'Move', 'Next.js', 'Seal', 'Walrus'].map((t) => (
+            {['Sui', 'Move', 'Vite', 'Seal', 'Walrus'].map((t) => (
               <span
                 key={t}
                 className="border-border/60 bg-background text-muted-foreground group-hover:border-primary/30 group-hover:text-foreground rounded-full border px-2.5 py-1 transition-colors"

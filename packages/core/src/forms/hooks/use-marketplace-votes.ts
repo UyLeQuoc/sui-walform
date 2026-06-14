@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { useOriginalPackageId } from '../../sui/package-id';
 
@@ -21,87 +21,92 @@ export interface UseMarketplaceVotesResult {
 
 /**
  * Bulk resolve `TemplateVotes` objects for every template in the marketplace.
- * Single event scan (`TemplateVotesInitialized`) → multiGetObjects on every
- * unique votes object → map by templateId. React Query dedupes across cards.
+ * Paginated `TemplateVotesInitialized` scan → multiGetObjects on every unique
+ * votes object → map by templateId.
  *
- * Stop-gap pattern; same caveat as `useTemplateListing` — limit 100 events,
- * older trackers fall off. Production needs an indexer.
+ * Previously this was a single `limit: 100, order: 'ascending'` query. Two bugs:
+ * (1) `queryEvents` caps at 50/page so >50 trackers were dropped, and (2)
+ * ascending order kept the OLDEST 100, so newly listed templates got no vote
+ * tracker at all. The cursor loop (descending, full scan) resolves both — every
+ * template that has a tracker now surfaces.
+ *
+ * Stop-gap pattern; production needs an indexer.
  */
 export function useMarketplaceVotes(): UseMarketplaceVotesResult {
   const originalPackageId = useOriginalPackageId();
+  const { network } = useSuiClientContext();
+  const client = useSuiClient();
 
-  const eventsQuery = useSuiClientQuery(
-    'queryEvents',
-    {
-      query: originalPackageId
-        ? {
-            MoveEventType: `${originalPackageId}::voting::TemplateVotesInitialized`,
-          }
-        : ({} as never),
-      order: 'ascending',
-      limit: 100,
+  const query = useQuery<Map<string, TemplateVoteCounts>>({
+    queryKey: [network, 'walform:marketplace-votes', originalPackageId],
+    enabled: !!originalPackageId,
+    staleTime: 10_000,
+    queryFn: async () => {
+      if (!originalPackageId) return new Map();
+
+      // 1) Paginate the full TemplateVotesInitialized stream → newest tracker
+      //    per template (descending scan = first-seen is newest).
+      const votesByTemplate = new Map<string, string>();
+      let cursor: { txDigest: string; eventSeq: string } | null = null;
+      for (let page = 0; page < 100; page++) {
+        const res = await client.queryEvents({
+          query: { MoveEventType: `${originalPackageId}::voting::TemplateVotesInitialized` },
+          order: 'descending',
+          limit: 50,
+          cursor,
+        });
+        for (const ev of res.data) {
+          const parsed = ev.parsedJson as { template_id?: string; votes_id?: string } | undefined;
+          if (!parsed?.template_id || !parsed.votes_id) continue;
+          const tid = normalizeSuiAddress(parsed.template_id);
+          if (votesByTemplate.has(tid)) continue;
+          votesByTemplate.set(tid, parsed.votes_id);
+        }
+        if (!res.hasNextPage || !res.nextCursor) break;
+        cursor = res.nextCursor;
+      }
+
+      const votesIds = [...votesByTemplate.values()];
+      if (votesIds.length === 0) return new Map();
+
+      // 2) Fetch the TemplateVotes objects in batches of 50 (RPC cap).
+      const out = new Map<string, TemplateVoteCounts>();
+      for (let i = 0; i < votesIds.length; i += 50) {
+        const part = await client.multiGetObjects({
+          ids: votesIds.slice(i, i + 50),
+          options: { showContent: true, showType: true },
+        });
+        for (const entry of part) {
+          const obj = entry.data;
+          if (!obj?.objectId) continue;
+          const content = obj.content as unknown as
+            | {
+                dataType: 'moveObject';
+                fields: {
+                  template_id?: string;
+                  upvotes?: string | number;
+                  downvotes?: string | number;
+                };
+              }
+            | undefined;
+          const fields = content?.fields;
+          if (!fields?.template_id) continue;
+          const tid = normalizeSuiAddress(fields.template_id);
+          out.set(tid, {
+            votesId: obj.objectId,
+            templateId: tid,
+            upvotes: Number(fields.upvotes ?? 0),
+            downvotes: Number(fields.downvotes ?? 0),
+          });
+        }
+      }
+      return out;
     },
-    { enabled: !!originalPackageId },
-  );
+  });
 
-  // Keep the earliest initialization per template_id; dedup duplicates.
-  const earliestByTemplate = useMemo(() => {
-    const events = eventsQuery.data?.data ?? [];
-    const map = new Map<string, string>();
-    for (const ev of events) {
-      const parsed = ev.parsedJson as { template_id?: string; votes_id?: string } | undefined;
-      if (!parsed?.template_id || !parsed.votes_id) continue;
-      const tid = normalizeSuiAddress(parsed.template_id);
-      if (map.has(tid)) continue;
-      map.set(tid, parsed.votes_id);
-    }
-    return map;
-  }, [eventsQuery.data]);
-
-  const votesIds = useMemo(() => [...earliestByTemplate.values()], [earliestByTemplate]);
-
-  const objectsQuery = useSuiClientQuery(
-    'multiGetObjects',
-    {
-      ids: votesIds,
-      options: { showContent: true, showType: true },
-    },
-    { enabled: votesIds.length > 0 },
-  );
-
-  const byTemplate = useMemo(() => {
-    const out = new Map<string, TemplateVoteCounts>();
-    const objects = objectsQuery.data ?? [];
-    for (const entry of objects) {
-      const obj = entry.data;
-      if (!obj?.objectId) continue;
-      const content = obj.content as unknown as
-        | {
-            dataType: 'moveObject';
-            fields: {
-              template_id?: string;
-              upvotes?: string | number;
-              downvotes?: string | number;
-            };
-          }
-        | undefined;
-      const fields = content?.fields;
-      if (!fields?.template_id) continue;
-      const tid = normalizeSuiAddress(fields.template_id);
-      out.set(tid, {
-        votesId: obj.objectId,
-        templateId: tid,
-        upvotes: Number(fields.upvotes ?? 0),
-        downvotes: Number(fields.downvotes ?? 0),
-      });
-    }
-    return out;
-  }, [objectsQuery.data]);
-
-  const isLoading =
-    (!!originalPackageId && eventsQuery.isPending) ||
-    (votesIds.length > 0 && objectsQuery.isPending);
-  const error = (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
-
-  return { byTemplate, isLoading, error };
+  return {
+    byTemplate: query.data ?? new Map(),
+    isLoading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
+  };
 }

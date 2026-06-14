@@ -11,6 +11,7 @@ import { ArrowRight } from 'lucide-react';
 import { useActiveNetwork, useActivePackageId } from '../../sui/env-network';
 import { suivisionUrl } from '../../sui/explorer';
 import { NetworkBadge } from '../../sui/wallet-ui/NetworkBadge';
+import { AwardBadge } from './award-badge';
 
 export function Hero() {
   const root = useRef<HTMLDivElement>(null);
@@ -56,6 +57,7 @@ export function Hero() {
           transition={{ delay: 0.1, duration: 0.6 }}
           className="mb-6 flex flex-wrap items-center justify-center gap-2"
         >
+          <AwardBadge className="h-9" />
           <a
             href={badgeHref}
             target="_blank"
@@ -66,7 +68,7 @@ export function Hero() {
               <span className="bg-primary absolute inline-flex size-full animate-ping opacity-75" />
               <span className="bg-primary relative inline-flex size-2" />
             </span>
-            Live on Sui {networkLabel} · Built for Walrus Session 2
+            Live on Sui {networkLabel} · Built for Sui Overflow 2026
             <span aria-hidden className="text-muted-foreground/70">
               ↗
             </span>
@@ -83,7 +85,7 @@ export function Hero() {
           className="text-muted-foreground mt-8 max-w-2xl text-base text-balance sm:text-lg"
         >
           The first truly decentralized form builder on Walrus. End-to-end encrypted submissions,
-          sponsored-or-self-paid gas, and{' '}
+          wallet-paid gas (no platform in the loop), and{' '}
           <strong className="text-foreground font-semibold">
             publish your form to its own Walrus Site straight from the browser — same as Walgo,
             with zero platform fee

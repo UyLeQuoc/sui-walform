@@ -1,6 +1,6 @@
 # Contributing to WalForm
 
-WalForm is a decentralized form builder on Sui + Walrus + Seal. It won **Walrus Session 2 — Form Tooling**, and we're keeping it alive as community infrastructure: a tool the Walrus ecosystem can use and improve together, session after session.
+WalForm is a decentralized form builder on Sui + Walrus + Seal. It won **🏆 1st place in Walrus Session 2 — Form Tooling**, and is now submitted to **Sui Overflow 2026** (<https://overflow.sui.io>) and maintained as community infrastructure: a tool the Walrus / Sui ecosystem can use and improve together.
 
 This guide is for anyone who wants to file an issue, claim a bounty, or open a pull request.
 
@@ -61,7 +61,7 @@ A maintainer reviews + merges. We aim for a first response within a few days.
 
 ## Bounties
 
-We run improvement cycles tied to the Walrus Sessions feedback loop:
+We run improvement cycles tied to the community feedback loop:
 
 1. Community tests the tools and submits feedback (via WalForm itself — dogfood).
 2. Feedback is triaged into a public board (GitHub Projects).

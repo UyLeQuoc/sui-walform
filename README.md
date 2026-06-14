@@ -1,10 +1,13 @@
 # WalForm
 
+[![Walrus Session 2 — 1st Place](https://img.shields.io/badge/Walrus%20Session%202-%F0%9F%8F%86%201st%20Place-D4AF37?style=for-the-badge)](https://www.walrus.xyz)
+[![Sui Overflow 2026](https://img.shields.io/badge/Sui%20Overflow%202026-Submission-4da2ff?style=for-the-badge)](https://overflow.sui.io)
+
 **Build forms that can't be taken down. Own the data. Encrypt by default.**
 
 WalForm is a decentralized form builder on Sui. Creators get drag-and-drop authoring; respondents get mainstream UX (any wallet or Google-via-zkLogin); and every form, every submission, every access rule lives on Sui, Walrus, and Seal. No operator can suspend your form. No server can read your submissions. Not even us.
 
-> **Walrus Session 2 — Form Tooling submission.**
+> 🏆 **1st place — Walrus Session 2 (Form Tooling).** Now submitted to **Sui Overflow 2026** — <https://overflow.sui.io>
 > Same outcome as paid services like Walgo for per-form Walrus Sites, but **zero platform fee** — the creator's wallet pays Walrus + Sui directly; nothing routes through us.
 
 ## Links
@@ -253,4 +256,4 @@ Built on:
 
 ## Status
 
-Walrus Session 2 — Form Tooling submission. Builder live at <https://walform.wal.app>. See [`docs/PROGRESS.md`](docs/PROGRESS.md) for row-by-row status and known issues; [`docs/SUBMISSION.md`](docs/SUBMISSION.md) for the registration form answer template.
+Sui Overflow 2026 submission (<https://overflow.sui.io>). Builder live at <https://walform.wal.app>. See [`docs/PROGRESS.md`](docs/PROGRESS.md) for row-by-row status and known issues; [`docs/SUBMISSION.md`](docs/SUBMISSION.md) for the registration form answer template.

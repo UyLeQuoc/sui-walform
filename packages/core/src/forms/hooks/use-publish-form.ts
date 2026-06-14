@@ -124,28 +124,42 @@ export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormR
         }
         const followUpDigests: string[] = [];
 
+        // Tier-3 follow-ups are NON-FATAL: the Form already exists on-chain, so
+        // a follow-up failure must NOT report "Publish failed" (which would hide
+        // the live form and leave the user no signal to recover). Each is
+        // isolated so a failure warns + continues to draft-delete + success.
         if (needsSealedSchemaFollowUp && originalPackageId && seal) {
           steps.advance('seal', 'Encrypting schema with Seal — one extra wallet sign.');
-          const sealDigest = await runSealedSchemaFollowUp({
-            formId,
-            packageId,
-            originalPackageId,
-            formObjectId: ids.formObjectId,
-            formOwnerCapId: ids.formOwnerCapId,
-            seal,
-            execute,
-          });
-          followUpDigests.push(sealDigest);
+          try {
+            const sealDigest = await runSealedSchemaFollowUp({
+              formId,
+              packageId,
+              originalPackageId,
+              formObjectId: ids.formObjectId,
+              formOwnerCapId: ids.formOwnerCapId,
+              seal,
+              execute,
+            });
+            followUpDigests.push(sealDigest);
+          } catch (e) {
+            console.warn('Sealed-schema follow-up failed (non-fatal) — form is live with a placeholder schema; retry from Manage', e);
+            toast.warning('Form published, but sealing the schema failed — open Manage to retry before sharing.');
+          }
         }
 
         if (options.mode === 'on-chain' && options.access === 'paid') {
           steps.advance('treasury', 'Creating an on-chain treasury to collect submission fees.');
-          const treasuryDigest = await runTreasuryFollowUp({
-            packageId,
-            formOwnerCapId: ids.formOwnerCapId,
-            execute,
-          });
-          followUpDigests.push(treasuryDigest);
+          try {
+            const treasuryDigest = await runTreasuryFollowUp({
+              packageId,
+              formOwnerCapId: ids.formOwnerCapId,
+              execute,
+            });
+            followUpDigests.push(treasuryDigest);
+          } catch (e) {
+            console.warn('Treasury follow-up failed (non-fatal) — form is live but cannot accept paid submissions until a treasury exists; retry from Manage', e);
+            toast.warning('Form published, but treasury setup failed — open Manage to create it before accepting paid submissions.');
+          }
         }
 
         // Best-effort: if this draft came from a free marketplace template
