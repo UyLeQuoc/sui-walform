@@ -9,13 +9,17 @@ import { memo, useCallback, useMemo } from 'react';
 import { cn } from '../../../lib/utils';
 import { useFieldLabelEditor } from '../../hooks/use-field-label-editor';
 import { useInlineLabelEditor } from '../../hooks/use-inline-label-editor';
+import { useFocusPeer } from '../../hooks/use-presence';
 import {
   HEADING_CLASSES,
   TEXT_ALIGN_CLASSES,
   buildInlineTextStyle,
 } from '../../lib/inline-text-style';
+import { peerLabel } from '../../lib/collab-identity';
 import { useFormBuilderStore } from '../../store/form-builder-store';
-import type { FormField } from '../../../types';
+import type { FormField, PresencePeer } from '../../../types';
+import { useCollab } from './CollabProvider';
+import { PeerAvatar } from './PeerAvatar';
 import { FieldEditPreview } from './FieldEditPreview';
 import { FieldTypeIcon } from '../FieldTypeIcon';
 import { MarkdownField } from '../fields/MarkdownField';
@@ -199,10 +203,35 @@ const MarkdownCanvasBlock = memo(function MarkdownCanvasBlock({
   );
 });
 
+function RemoteFocusOverlay({ peer }: { peer: PresencePeer }) {
+  const label = peerLabel(peer.user.address, peer.user.name);
+  return (
+    <>
+      {/* "currently being edited by …" banner sitting on the top border line */}
+      <span
+        className="pointer-events-none absolute -top-2.5 left-3 z-20 max-w-[75%] truncate rounded-full px-2 py-0.5 text-[10px] font-medium text-white shadow-sm"
+        style={{ backgroundColor: peer.user.color }}
+      >
+        This field is being edited by {label}
+      </span>
+      {/* Avatar tucked flush into the top-right corner, ringed in the peer's color */}
+      <PeerAvatar
+        address={peer.user.address}
+        size="sm"
+        title={label}
+        className="pointer-events-none absolute top-0 right-0 z-20"
+        style={{ boxShadow: `0 0 0 2px ${peer.user.color}` }}
+      />
+    </>
+  );
+}
+
 function FieldBlockImpl({ field, index, questionNumber }: FieldBlockProps) {
   const selectedFieldId = useFormBuilderStore((s) => s.selectedFieldId);
   const setSelectedFieldId = useFormBuilderStore((s) => s.setSelectedFieldId);
   const isSelected = selectedFieldId === field.id;
+  const { awareness } = useCollab();
+  const remotePeer = useFocusPeer(awareness, field.id);
 
   const {
     attributes,
@@ -293,7 +322,11 @@ function FieldBlockImpl({ field, index, questionNumber }: FieldBlockProps) {
   return (
     <div
       ref={setRefs}
-      style={style}
+      style={
+        remotePeer
+          ? { ...style, outline: `2px solid ${remotePeer.user.color}`, outlineOffset: 2 }
+          : style
+      }
       {...attributes}
       {...listeners}
       onClick={handleSelect}
@@ -301,8 +334,10 @@ function FieldBlockImpl({ field, index, questionNumber }: FieldBlockProps) {
         BLOCK_WRAPPER_CLASS,
         isSelected && BLOCK_SELECTED_CLASS,
         isDragging && 'opacity-40',
+        remotePeer && 'relative',
       )}
     >
+      {remotePeer && <RemoteFocusOverlay peer={remotePeer} />}
       {/* Label row */}
       <div className="relative flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0">
         {questionNumber != null && (

@@ -163,6 +163,16 @@ export interface StoredForm {
     purchaseDigest?: string;
     purchasedAtMs?: number;
   };
+  /**
+   * Realtime-collab sharing state. Set when the owner first enables sharing:
+   * `shareToken` is the invite-link capability (the PartyKit room gates on it,
+   * TOFU). Stored so re-opening the Share panel reproduces the same link.
+   * Absent on drafts that were never shared (those never touch the network).
+   */
+  collab?: {
+    shareToken: string;
+    sharedAt: number;
+  };
 }
 
 // PublishedMeta was a transitional type when drafts tracked publish state in
@@ -253,4 +263,37 @@ export interface FileAttachmentValue {
   size: number;
   /** MIME content-type from the File object (e.g. "video/mp4"). May be empty. */
   type: string;
+}
+
+// ── Realtime collaboration (presence) ──
+
+export type CollabSessionStatus = 'idle' | 'connecting' | 'synced';
+
+export interface PresenceUser {
+  address: string;
+  color: string;
+  name?: string;
+}
+
+/** Pointer position as a fraction (0–1) of the form card, so cursors align
+ *  across viewers whose cards differ in size. */
+export interface PresenceCursor {
+  x: number;
+  y: number;
+}
+
+/** Local Awareness state broadcast by this client (never persisted). */
+export interface CollabLocalState {
+  user: PresenceUser;
+  selectedFieldId: string | null;
+  activePageId: string | null;
+  cursor: PresenceCursor | null;
+}
+
+/** A remote collaborator derived from Awareness. */
+export interface PresencePeer {
+  clientId: number;
+  user: PresenceUser;
+  selectedFieldId: string | null;
+  cursor: PresenceCursor | null;
 }

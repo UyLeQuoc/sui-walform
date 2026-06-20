@@ -33,6 +33,25 @@ const EMPTY_SCHEMA: FormSchema = {
   },
 };
 
+/**
+ * In-memory shell for a draft the local device doesn't have yet — used when a
+ * collaborator opens an invite link (`&room=`). The collab session projects the
+ * real schema over this once peers sync.
+ */
+export function createEmptyStoredForm(id: string): StoredForm {
+  const now = Date.now();
+  return {
+    id,
+    schema: { ...EMPTY_SCHEMA, id },
+    past: [],
+    future: [],
+    currentLabel: 'Joined session',
+    createdAt: now,
+    updatedAt: now,
+    rev: 0,
+  };
+}
+
 const DEFAULT_LABELS = {
   short_text: 'Short Answer',
   long_text: 'Long Answer',
@@ -223,11 +242,21 @@ interface FormBuilderState {
    * page is materialized.
    */
   activePageId: string | null;
+  /** True while a realtime collab session owns the live doc (dual-mode). */
+  collabActive: boolean;
 }
 
 interface FormBuilderActions {
   /** Populate the store from a stored form (called by FormEditorClient on mount). */
   loadFromDb: (stored: StoredForm) => void;
+  /**
+   * Project a schema from the collab Y doc into the store without pushing
+   * history (undo/redo is owned by the Y UndoManager in collab mode). Repairs
+   * selection / active-page references the remote edit may have removed.
+   */
+  applyRemoteSchema: (schema: FormSchema) => void;
+  /** Toggle dual-mode: when true, undo/redo + history UI route to the collab session. */
+  setCollabActive: (active: boolean) => void;
   addField: (type: FieldType) => void;
   /**
    * Insert a new field at the given flat index. When `targetPageId` is
@@ -302,6 +331,7 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
   activeMode: 'edit' as const,
   createdAt: 0,
   activePageId: null,
+  collabActive: false,
 
   loadFromDb: (stored) => {
     cancelDeferred();
@@ -318,6 +348,23 @@ export const useFormBuilderStore = create<FormBuilderStore>()((set, get) => ({
       activePageId: stored.schema.pages?.[0]?.id ?? null,
     });
   },
+
+  applyRemoteSchema: (schema) =>
+    set((state) => {
+      const selectedExists = state.selectedFieldId
+        ? schema.fields.some((f) => f.id === state.selectedFieldId)
+        : false;
+      const activePageExists = state.activePageId
+        ? (schema.pages?.some((p) => p.id === state.activePageId) ?? false)
+        : false;
+      return {
+        schema,
+        selectedFieldId: selectedExists ? state.selectedFieldId : null,
+        activePageId: activePageExists ? state.activePageId : (schema.pages?.[0]?.id ?? null),
+      };
+    }),
+
+  setCollabActive: (active) => set({ collabActive: active }),
 
   addField: (type) => {
     const newField = buildDefaultField(type);

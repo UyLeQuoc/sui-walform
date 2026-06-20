@@ -1,8 +1,9 @@
 'use client';
 
-import { Eye, History, Redo2, Settings, Sparkles, Undo2 } from 'lucide-react';
+import { Eye, History, Redo2, Settings, Sparkles, Undo2, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
+import { AvatarGroup, AvatarGroupCount } from '../../../ui/avatar';
 import { Button } from '../../../ui/button';
 import { ButtonGroup } from '../../../ui/button-group';
 import { Kbd, KbdGroup } from '../../../ui/kbd';
@@ -13,6 +14,10 @@ import type { SaveStatus } from '../../hooks/use-auto-save';
 import type { RightSidebarMode } from '../../hooks/use-right-sidebar-mode';
 import { formsRoute } from '../../lib/routes';
 import { useFormBuilderStore } from '../../store/form-builder-store';
+import { usePresence } from '../../hooks/use-presence';
+import { peerLabel } from '../../lib/collab-identity';
+import { useCollab } from './CollabProvider';
+import { PeerAvatar } from './PeerAvatar';
 import { EditorPublishButton } from './EditorPublishButton';
 import { ExportButton } from './ExportButton';
 import { SaveStatusBadge } from './SaveStatusBadge';
@@ -28,6 +33,7 @@ interface FormBuilderHeaderProps {
   rightMode: RightSidebarMode;
   onToggleHistory: () => void;
   onToggleSettings: () => void;
+  onToggleCollab: () => void;
   onOpenAiGenerate: () => void;
 }
 
@@ -41,9 +47,13 @@ export function FormBuilderHeader({
   rightMode,
   onToggleHistory,
   onToggleSettings,
+  onToggleCollab,
   onOpenAiGenerate,
 }: FormBuilderHeaderProps) {
   const title = useFormBuilderStore((s) => s.schema.title);
+  const collabActive = useFormBuilderStore((s) => s.collabActive);
+  const { awareness } = useCollab();
+  const peers = usePresence(awareness);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -77,6 +87,20 @@ export function FormBuilderHeader({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {peers.length > 0 && (
+              <AvatarGroup className="grayscale">
+                {peers.slice(0, 3).map((peer) => (
+                  <PeerAvatar
+                    key={peer.clientId}
+                    address={peer.user.address}
+                    size="sm"
+                    title={peerLabel(peer.user.address, peer.user.name)}
+                  />
+                ))}
+                {peers.length > 3 && <AvatarGroupCount>+{peers.length - 3}</AvatarGroupCount>}
+              </AvatarGroup>
+            )}
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" onClick={onOpenAiGenerate} className="gap-1.5">
@@ -132,20 +156,22 @@ export function FormBuilderHeader({
             </ButtonGroup>
 
             <ButtonGroup>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={rightMode === 'history' ? 'default' : 'outline'}
-                    size="icon"
-                    aria-label="History"
-                    aria-pressed={rightMode === 'history'}
-                    onClick={onToggleHistory}
-                  >
-                    <History className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">History</TooltipContent>
-              </Tooltip>
+              {!collabActive && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={rightMode === 'history' ? 'default' : 'outline'}
+                      size="icon"
+                      aria-label="History"
+                      aria-pressed={rightMode === 'history'}
+                      onClick={onToggleHistory}
+                    >
+                      <History className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">History</TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -159,6 +185,20 @@ export function FormBuilderHeader({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Form settings</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={rightMode === 'collaboration' ? 'default' : 'outline'}
+                    size="icon"
+                    aria-label="Collaborate"
+                    aria-pressed={rightMode === 'collaboration'}
+                    onClick={onToggleCollab}
+                  >
+                    <Users className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Collaborate</TooltipContent>
               </Tooltip>
             </ButtonGroup>
 

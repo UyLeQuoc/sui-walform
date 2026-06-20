@@ -31,6 +31,9 @@ apps/contracts/Move.lock
 # bun
 .bun/
 
+# partykit local dev state (Durable Object storage — not source)
+.partykit/
+
 # tsconfig.tsbuildinfo
 **/tsconfig.tsbuildinfo
 

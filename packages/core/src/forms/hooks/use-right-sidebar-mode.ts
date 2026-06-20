@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useFormBuilderStore } from '../store/form-builder-store';
 
-export type RightSidebarMode = 'auto' | 'history' | 'settings';
+export type RightSidebarMode = 'auto' | 'history' | 'settings' | 'collaboration';
 
 export interface UseRightSidebarModeResult {
   mode: RightSidebarMode;

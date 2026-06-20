@@ -1,4 +1,6 @@
 export * from './use-auto-save';
+export * from './use-collab-session';
+export * from './use-presence';
 export * from './use-cover-image-upload';
 export * from './use-create-form-action';
 export * from './use-editor-shortcuts';

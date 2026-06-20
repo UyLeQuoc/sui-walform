@@ -1,4 +1,7 @@
 export * from './code-languages';
+export * from './collab-identity';
+export * from './collab-schema';
+export * from './collab-share-token';
 export * from './create-draft-from-template';
 export * from './create-stored-form';
 export * from './drag-ids';

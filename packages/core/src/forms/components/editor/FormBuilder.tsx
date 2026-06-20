@@ -14,6 +14,7 @@ import { useFormBuilderStore } from '../../store/form-builder-store';
 import { AiGenerateDialog } from './AiGenerateDialog';
 import { CanvasViewport } from './CanvasViewport';
 import { ClonedFromBanner } from './ClonedFromBanner';
+import { useCollab } from './CollabProvider';
 import { FieldPaletteSidebar } from './FieldPaletteSidebar';
 import { FormBuilderDragOverlay } from './FormBuilderDragOverlay';
 import { FormBuilderHeader } from './FormBuilderHeader';
@@ -30,9 +31,21 @@ interface FormBuilderProps {
   initialRev: number;
   /** Marketplace template provenance, when draft was cloned via useCloneTemplateToDraft. */
   sourceTemplate?: StoredForm['sourceTemplate'];
+  /**
+   * Persist the store to IndexedDB on a debounce. Off for a *joined* collab
+   * session — an invitee has no local draft and the Y doc lives on the server,
+   * so writing to their IDB would pollute their Drafts list (see COLLAB_DESIGN §6).
+   */
+  autoSave?: boolean;
 }
 
-export function FormBuilder({ formId, createdAt, initialRev, sourceTemplate }: FormBuilderProps) {
+export function FormBuilder({
+  formId,
+  createdAt,
+  initialRev,
+  sourceTemplate,
+  autoSave = true,
+}: FormBuilderProps) {
   const title = useFormBuilderStore((s) => s.schema.title);
   useDocumentTitle(title || 'Untitled form');
   const fontFamily = useFormBuilderStore((s) => s.schema.settings.fontFamily);
@@ -40,11 +53,15 @@ export function FormBuilder({ formId, createdAt, initialRev, sourceTemplate }: F
   const primaryColor = useFormBuilderStore((s) => s.schema.settings.primaryColor);
   const past = useFormBuilderStore((s) => s.past);
   const future = useFormBuilderStore((s) => s.future);
-  const undo = useFormBuilderStore((s) => s.undo);
-  const redo = useFormBuilderStore((s) => s.redo);
+  const storeUndo = useFormBuilderStore((s) => s.undo);
+  const storeRedo = useFormBuilderStore((s) => s.redo);
+  const collabActive = useFormBuilderStore((s) => s.collabActive);
   const clearSelection = useFormBuilderStore((s) => s.clearSelection);
+  const collab = useCollab();
+  const undo = collabActive ? collab.undo : storeUndo;
+  const redo = collabActive ? collab.redo : storeRedo;
 
-  const { saveStatus } = useAutoSave({ formId, createdAt, initialRev });
+  const { saveStatus } = useAutoSave({ formId, createdAt, initialRev, enabled: autoSave });
   const mounted = useMounted();
   const { mode: rightMode, toggle: toggleRightMode, resetToAuto } = useRightSidebarMode();
 
@@ -70,10 +87,14 @@ export function FormBuilder({ formId, createdAt, initialRev, sourceTemplate }: F
 
   const handleToggleHistory = useCallback(() => toggleRightMode('history'), [toggleRightMode]);
   const handleToggleSettings = useCallback(() => toggleRightMode('settings'), [toggleRightMode]);
+  // Opening the panel is purely a UI toggle — it must NOT start a session. The
+  // session begins only when a share token lands in the URL ("Start
+  // collaboration"), so an unshared draft stays local and keeps its undo stack.
+  const handleToggleCollab = useCallback(() => toggleRightMode('collaboration'), [toggleRightMode]);
   const handleOpenAiGenerate = useCallback(() => setAiOpen(true), []);
 
-  const canUndo = past.length > 0;
-  const canRedo = future.length > 0;
+  const canUndo = collabActive ? collab.canUndo : past.length > 0;
+  const canRedo = collabActive ? collab.canRedo : future.length > 0;
 
   if (!mounted) {
     return <div className="bg-muted/30 min-h-screen animate-pulse" />;
@@ -91,6 +112,7 @@ export function FormBuilder({ formId, createdAt, initialRev, sourceTemplate }: F
         rightMode={rightMode}
         onToggleHistory={handleToggleHistory}
         onToggleSettings={handleToggleSettings}
+        onToggleCollab={handleToggleCollab}
         onOpenAiGenerate={handleOpenAiGenerate}
       />
 

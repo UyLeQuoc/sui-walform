@@ -6,7 +6,8 @@
     "apps/builder",
     "apps/portal",
     "apps/contracts",
-    "packages/*"
+    "packages/*",
+    "services/*"
   ],
   "scripts": {
     "build": "turbo run build",
@@ -22,7 +23,8 @@
     "contracts:upgrade": "bun run --cwd apps/contracts upgrade",
     "contracts:setup-public-allowlist": "bun run --cwd apps/contracts setup-public-allowlist",
     "contracts:codegen": "bun run --cwd apps/contracts codegen",
-    "contracts:test": "bun run --cwd apps/contracts test"
+    "contracts:test": "bun run --cwd apps/contracts test",
+    "collab:deploy": "bun run --cwd services/collab deploy"
   },
   "devDependencies": {
     "turbo": "^2.9.18",

@@ -1,11 +1,12 @@
 'use client';
 
-import { Sliders, X } from 'lucide-react';
+import { Sliders, Users, X } from 'lucide-react';
 import { Button } from '../../../ui/button';
 import { ScrollArea } from '../../../ui/scroll-area';
 import { cn } from '../../../lib/utils';
 import type { RightSidebarMode } from '../../hooks/use-right-sidebar-mode';
 import { useFormBuilderStore } from '../../store/form-builder-store';
+import { CollaborationPanel } from './CollaborationPanel';
 import { CoverImageSettingsPanel } from './CoverImageSettingsPanel';
 import { FieldSettings } from './FieldSettings';
 import { FormOverview } from './FormOverview';
@@ -40,7 +41,16 @@ export function RightSidebar({ mode, onClose }: RightSidebarProps) {
       )}
       aria-label="Right sidebar"
     >
-      {mode === 'history' ? (
+      {mode === 'collaboration' ? (
+        <SidebarPane
+          eyebrow="Collaborate"
+          subtitle="Live co-editing & invite link."
+          icon={<Users className="text-muted-foreground h-3.5 w-3.5" />}
+          onClose={onClose}
+        >
+          <CollaborationPanel />
+        </SidebarPane>
+      ) : mode === 'history' ? (
         <SidebarPane
           eyebrow="Change history"
           subtitle="Click an entry to jump to that state."

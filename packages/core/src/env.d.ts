@@ -66,6 +66,14 @@ declare const process: {
     // Network-neutral
     NEXT_PUBLIC_SEAL_THRESHOLD?: string;
     NEXT_PUBLIC_ENABLE_SEALED_SCHEMA?: string;
+
+    // Realtime collaboration (PartyKit). The Yjs doc is hosted + persisted by a
+    // PartyKit server (one room per formId); networking turns on when both the
+    // enable flag and the PartyKit host are set, otherwise collab stays local
+    // (IndexedDB-only). Access is gated by a share token in the invite link.
+    // Dev host: 127.0.0.1:1999; prod: walform-collab.<account>.partykit.dev.
+    NEXT_PUBLIC_ENABLE_COLLAB?: string;
+    NEXT_PUBLIC_PARTYKIT_HOST?: string;
     NEXT_PUBLIC_ENOKI_PUBLIC_KEY?: string;
     NEXT_PUBLIC_ENOKI_REDIRECT_URL?: string;
     NEXT_PUBLIC_GOOGLE_CLIENT_ID?: string;

@@ -1,8 +1,13 @@
 'use client';
 
-import { type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { type CSSProperties, type PointerEvent, type ReactNode, useRef } from 'react';
 import { ScrollArea } from '../../../ui/scroll-area';
+import { usePresence } from '../../hooks/use-presence';
 import { useFormBuilderStore } from '../../store/form-builder-store';
+import { useCollab } from './CollabProvider';
+import { CursorsOverlay } from './CursorsOverlay';
+
+const CURSOR_THROTTLE_MS = 50;
 
 interface CanvasViewportProps {
   children: ReactNode;
@@ -22,6 +27,10 @@ export function CanvasViewport({ children, suppressDeselect }: CanvasViewportPro
   const clearSelection = useFormBuilderStore((s) => s.clearSelection);
   const displayMode = useFormBuilderStore((s) => s.schema.settings.displayMode ?? 'card');
   const isPageMode = displayMode === 'page';
+  const { awareness, setCursor } = useCollab();
+  const peers = usePresence(awareness);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const lastMoveRef = useRef(0);
 
   const handleEmptyClick = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || suppressDeselect) return;
@@ -30,6 +39,25 @@ export function CanvasViewport({ children, suppressDeselect }: CanvasViewportPro
     if (e.target === e.currentTarget) {
       clearSelection();
     }
+  };
+
+  const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (!awareness) return;
+    const now = Date.now();
+    if (now - lastMoveRef.current < CURSOR_THROTTLE_MS) return;
+    lastMoveRef.current = now;
+    const card = wrapperRef.current?.querySelector('[data-form-card]') as HTMLElement | null;
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    // Broadcast as a fraction of the card so cursors line up across viewers
+    // whose cards differ in size (responsive widths). CursorsOverlay scales
+    // back up by the local card's dimensions.
+    setCursor({ x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height });
+  };
+
+  const handlePointerLeave = () => {
+    if (awareness) setCursor(null);
   };
 
   // Pattern tint is driven by a CSS var so it can flip with the theme —
@@ -52,10 +80,14 @@ export function CanvasViewport({ children, suppressDeselect }: CanvasViewportPro
       data-canvas-viewport
     >
       <div
+        ref={wrapperRef}
         onPointerDown={handleEmptyClick}
-        className="flex min-h-full w-full items-start justify-center px-6 py-12"
+        onPointerMove={handlePointerMove}
+        onPointerLeave={handlePointerLeave}
+        className="relative flex min-h-full w-full items-start justify-center px-6 py-12"
       >
         {children}
+        {awareness && <CursorsOverlay peers={peers} containerRef={wrapperRef} />}
       </div>
     </ScrollArea>
   );

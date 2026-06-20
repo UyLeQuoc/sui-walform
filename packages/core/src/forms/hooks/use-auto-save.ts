@@ -29,6 +29,12 @@ interface UseAutoSaveParams {
    * we surface a `conflict` status and stop saving.
    */
   initialRev: number;
+  /**
+   * When false, the store is never persisted to IDB. Used for a *joined* collab
+   * session: the invitee has no local draft and the doc lives on the collab
+   * server, so writing to their IDB would pollute their Drafts list. Defaults true.
+   */
+  enabled?: boolean;
 }
 
 /**
@@ -53,7 +59,7 @@ interface UseAutoSaveParams {
  *    `FormConflictError` and we switch to `conflict` status; further
  *    auto-saves are paused until the user reloads.
  */
-export function useAutoSave({ formId, createdAt, initialRev }: UseAutoSaveParams): {
+export function useAutoSave({ formId, createdAt, initialRev, enabled = true }: UseAutoSaveParams): {
   saveStatus: SaveStatus;
 } {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -127,6 +133,7 @@ export function useAutoSave({ formId, createdAt, initialRev }: UseAutoSaveParams
   }, [persist]);
 
   useEffect(() => {
+    if (!enabled) return;
     const unsubscribe = useFormBuilderStore.subscribe((curr, prev) => {
       // Skip if only UI-only state changed (selectedFieldId, activeMode).
       if (
@@ -168,7 +175,7 @@ export function useAutoSave({ formId, createdAt, initialRev }: UseAutoSaveParams
       // is enough — the browser will run it to completion.
       void flush();
     };
-  }, [flush]);
+  }, [flush, enabled]);
 
   return { saveStatus };
 }

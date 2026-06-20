@@ -8,6 +8,6 @@ export default [
     // (a11y on input-group focus delegation, anchor children spread via
     // `{...props}`, intentional cascading effects in carousel, etc.) that
     // create churn on every shadcn re-sync without improving the surface.
-    ignores: ['dist/**', 'src/sui/**', 'src/ui/**'],
+    ignores: ['dist/**', 'src/sui/**', 'src/ui/**', '**/*.test.ts'],
   },
 ];
