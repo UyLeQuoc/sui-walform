@@ -1,4 +1,30 @@
-import type { FileAttachmentValue } from '../../types';
+import type { FileAttachmentValue, FormField } from '../../types';
+
+/** Default per-file upload cap (MB) when a `file` field sets no explicit limit. */
+export const DEFAULT_MAX_FILE_MB = 1024;
+
+/** Binary MB — 1 MB = 1024×1024 bytes (so 1024 MB = exactly 1 GiB). */
+const MB_IN_BYTES = 1024 * 1024;
+
+/**
+ * Effective upload byte cap for a `file` field.
+ * `validation.maxFileMb`: `undefined` → default cap; `0` → unlimited
+ * (`Infinity`); positive → that many MB. Enforced client-side only.
+ */
+export function resolveMaxFileBytes(field: FormField): number {
+  const mb = field.validation?.maxFileMb;
+  if (mb === 0) return Infinity;
+  if (typeof mb === 'number' && mb > 0) return mb * MB_IN_BYTES;
+  return DEFAULT_MAX_FILE_MB * MB_IN_BYTES;
+}
+
+/** Friendly cap label: `Infinity` → "unlimited", 1024 MB → "1 GB", else "N MB". */
+export function formatFileSizeCap(bytes: number): string {
+  if (!Number.isFinite(bytes)) return 'unlimited';
+  const mb = bytes / MB_IN_BYTES;
+  if (mb >= 1024 && mb % 1024 === 0) return `${mb / 1024} GB`;
+  return `${Math.round(mb)} MB`;
+}
 
 /**
  * Type-narrowing helper. New FileField submissions store a rich object;

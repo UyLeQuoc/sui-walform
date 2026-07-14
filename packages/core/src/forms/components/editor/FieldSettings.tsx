@@ -15,6 +15,7 @@ import { FieldTypeIcon } from '../FieldTypeIcon';
 import { CodeSettings } from './field-settings/CodeSettings';
 import { CommonFields } from './field-settings/CommonFields';
 import { DateSettings } from './field-settings/DateSettings';
+import { FileSettings } from './field-settings/FileSettings';
 import { LayoutContentSettings } from './field-settings/LayoutContentSettings';
 import { LinearScaleSettings } from './field-settings/LinearScaleSettings';
 import { NumberValidation } from './field-settings/NumberValidation';
@@ -221,6 +222,7 @@ export function FieldSettings({ className }: FieldSettingsProps) {
               )}
               {field.type === 'number' && <NumberValidation field={field} />}
               {field.type === 'code' && <CodeSettings field={field} />}
+              {field.type === 'file' && <FileSettings field={field} />}
 
               {actions}
             </>

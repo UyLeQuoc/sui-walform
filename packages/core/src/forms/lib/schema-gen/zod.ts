@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { formatFileSizeCap, resolveMaxFileBytes } from '../file-attachment';
 import type { FormField } from '../../../types';
 
 /**
@@ -169,7 +170,22 @@ function buildFieldSchema(field: FormField): z.ZodTypeAny {
           : z.custom<File>((v): v is File =>
               typeof v === 'object' && v !== null && 'name' in v && 'size' in v,
             );
-      const base = z.union([fileInstance, attachment, z.string()]);
+      const union = z.union([fileInstance, attachment, z.string()]);
+
+      // Enforce the per-field upload cap. Both the pending `File` and the
+      // uploaded attachment carry a byte `size`; strings (legacy/empty) have
+      // none, so they pass this refine and are handled by the presence check.
+      const maxBytes = resolveMaxFileBytes(field);
+      const withinSize = (v: unknown): boolean => {
+        if (!Number.isFinite(maxBytes)) return true;
+        if (typeof File !== 'undefined' && v instanceof File) return v.size <= maxBytes;
+        if (typeof v === 'object' && v !== null && typeof (v as { size?: unknown }).size === 'number')
+          return (v as { size: number }).size <= maxBytes;
+        return true;
+      };
+      const sizeMessage = `File exceeds the ${formatFileSizeCap(maxBytes)} limit`;
+      const base = union.refine(withinSize, sizeMessage);
+
       if (!field.required) return base.optional();
       return base.refine(
         (v): boolean => {

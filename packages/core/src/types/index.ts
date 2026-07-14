@@ -39,6 +39,12 @@ export interface FormFieldValidation {
   scaleFrom?: number;
   scaleTo?: number;
   scaleJump?: number;
+  /**
+   * Max upload size for a `file` field, in MB (1 MB = 1024×1024 bytes).
+   * `undefined` → default cap (DEFAULT_MAX_FILE_MB). `0` → no limit.
+   * Enforced client-side only — file bytes live in Walrus, off-chain.
+   */
+  maxFileMb?: number;
 }
 
 export interface FormField {
