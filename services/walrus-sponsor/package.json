@@ -1,0 +1,25 @@
+{
+  "name": "@walform/walrus-sponsor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Walrus file sponsor — platform-funded submission file uploads (pays WAL) for WalForm. Node service for Railway; the builder points NEXT_PUBLIC_WALRUS_SPONSOR_URL at it. See README.md.",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@mysten/sui": "^2.20.3",
+    "@mysten/walrus": "^1.2.5",
+    "hono": "^4.6.14",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

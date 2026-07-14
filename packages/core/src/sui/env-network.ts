@@ -160,6 +160,28 @@ export function getWalrusUploadRelayTipMaxMist(network: WalformNetwork): number 
   return network === 'mainnet' ? 50_000_000 : 1_000_000;
 }
 
+/**
+ * Base URL of the platform Walrus file-sponsor endpoint (Supabase Edge
+ * Function `walrus-file-sponsor`). When set, submission file uploads within
+ * the size cap are routed through it so the platform pays WAL; unset disables
+ * sponsorship and every upload is wallet-paid. Same endpoint for both networks
+ * (the client passes `network` in the request).
+ */
+export function getWalrusSponsorUrl(): string | null {
+  return process.env.NEXT_PUBLIC_WALRUS_SPONSOR_URL?.trim() || null;
+}
+
+/**
+ * Max total bytes eligible for sponsored upload. Above this the client falls
+ * back to wallet-paid upload. Must match (or stay below) the sponsor service's
+ * `SPONSOR_MAX_BYTES`. Default 100 MiB.
+ */
+export function getWalrusSponsorMaxBytes(): number {
+  const raw = process.env.NEXT_PUBLIC_WALRUS_SPONSOR_MAX_BYTES;
+  const parsed = raw ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100 * 1024 * 1024;
+}
+
 export function getWalrusSitePackageId(network: WalformNetwork): string | null {
   if (network === 'mainnet') {
     return process.env.NEXT_PUBLIC_WALRUS_SITE_PACKAGE_ID_MAINNET ?? null;
