@@ -1,8 +1,9 @@
 'use client';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useCurrentAccount } from '@mysten/dapp-kit';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { isCollabConfigured } from '../../hooks/use-collab-session';
 import { useFormOnChain } from '../../hooks/use-form-on-chain';
 import { useStoredForm } from '../../hooks/use-stored-form';
@@ -50,6 +51,15 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
 
   const joinMissing = draftMissing && collabEnabled;
 
+  const isOwner =
+    !!account &&
+    !!onChainForm &&
+    normalizeSuiAddress(account.address) === normalizeSuiAddress(onChainForm.owner);
+  // Owner + a decodable (plaintext) schema → edit the live form in place.
+  // Sealed schemas (schema === null) can't be re-edited yet, so they redirect.
+  const canEditOnChain = draftMissing && !!onChainForm && isOwner && onChainForm.schema !== null;
+  const [onChainHydrated, setOnChainHydrated] = useState(false);
+
   useEffect(() => {
     // Mount the empty shell only once we know the form isn't already on-chain.
     if (!joinMissing || chainLoading || onChainForm) return;
@@ -57,10 +67,20 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
   }, [joinMissing, chainLoading, onChainForm, id]);
 
   useEffect(() => {
-    if (!draftMissing || !onChainForm) return;
-    const isOwner = !!account && account.address === onChainForm.owner;
+    // Hydrate the editor store from the on-chain schema before entering edit mode.
+    if (!canEditOnChain || !onChainForm?.schema) return;
+    useFormBuilderStore
+      .getState()
+      .loadFromDb({ ...createEmptyStoredForm(id), schema: onChainForm.schema });
+    setOnChainHydrated(true);
+  }, [canEditOnChain, onChainForm, id]);
+
+  useEffect(() => {
+    // Redirect only when we're NOT editing in place: non-owner → submit,
+    // owner-of-sealed-form → results.
+    if (!draftMissing || !onChainForm || canEditOnChain) return;
     navigate(isOwner ? formsRoute.results(id) : formsRoute.submit(id), { replace: true });
-  }, [draftMissing, onChainForm, account, id, navigate]);
+  }, [draftMissing, onChainForm, canEditOnChain, isOwner, id, navigate]);
 
   if (state.status === 'loading') {
     return <div className="bg-muted/30 min-h-screen animate-pulse" />;
@@ -77,6 +97,26 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
           </p>
         </div>
       </div>
+    );
+  }
+
+  if (canEditOnChain && onChainForm) {
+    // Owner editing a published form in place. Wait for the store to hydrate
+    // from the on-chain schema so we never flash stale editor content.
+    if (!onChainHydrated) {
+      return <div className="bg-muted/30 min-h-screen animate-pulse" />;
+    }
+    return (
+      <FormBuilder
+        formId={id}
+        createdAt={0}
+        initialRev={0}
+        autoSave={false}
+        onChainEdit={{
+          formObjectId: onChainForm.formObjectId,
+          submissionCount: onChainForm.submissionCount,
+        }}
+      />
     );
   }
 

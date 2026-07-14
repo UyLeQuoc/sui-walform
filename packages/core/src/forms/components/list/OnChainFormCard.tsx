@@ -1,7 +1,16 @@
 'use client';
 
-import { Link } from 'react-router-dom';
-import { BarChart3, CalendarClock, ChevronRight, Coins, Globe, Lock, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  BarChart3,
+  CalendarClock,
+  ChevronRight,
+  Coins,
+  Globe,
+  Lock,
+  Pencil,
+  Users,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '../../../ui/badge';
@@ -37,7 +46,9 @@ const STRIPE_BY_STATUS: Record<FormStatus, string> = {
  * the status pill + chevron. Whole card is a link to /forms/results?formId=…
  */
 export function OnChainFormCard({ form }: OnChainFormCardProps) {
+  const navigate = useNavigate();
   const status = deriveOnChainStatus(form);
+  const openResults = () => navigate(formsRoute.results(form.formId));
   const capLabel = form.maxSubmissions === 0 ? '∞' : form.maxSubmissions;
   const access = ACCESS_META[form.accessMode] ?? { label: 'Unknown', icon: Globe };
   const AccessIcon = access.icon;
@@ -51,10 +62,18 @@ export function OnChainFormCard({ form }: OnChainFormCardProps) {
       : null;
 
   return (
-    <Link
-      to={formsRoute.results(form.formId)}
+    <div
+      onClick={openResults}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openResults();
+        }
+      }}
+      role="button"
+      tabIndex={0}
       aria-label={`Open analytics for ${form.title}`}
-      className="focus-visible:ring-ring group block rounded-4xl focus-visible:ring-2 focus-visible:outline-none"
+      className="focus-visible:ring-ring group block cursor-pointer rounded-4xl focus-visible:ring-2 focus-visible:outline-none"
     >
       <Card className="cursor-pointer pt-0 transition-shadow hover:shadow-lg">
         <div className="relative flex h-28 items-center justify-between overflow-hidden px-5">
@@ -118,10 +137,25 @@ export function OnChainFormCard({ form }: OnChainFormCardProps) {
           </div>
           <div className="flex items-center justify-between gap-2 pt-1">
             <FormStatusBadge status={status} />
-            <ChevronRight className="text-muted-foreground h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  navigate(formsRoute.edit(form.formId));
+                }}
+                aria-label={`Edit ${form.title}`}
+                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </button>
+              <ChevronRight className="text-muted-foreground h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </div>
           </div>
         </CardContent>
       </Card>
-    </Link>
+    </div>
   );
 }
