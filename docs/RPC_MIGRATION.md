@@ -122,10 +122,33 @@ riding the ZAN endpoint as a bridge — that is the remaining work before
    Mode B) + `set_reviewers_id`. Then the reviewers tracker is a direct field read
    — no event scan, no index. Needs a contract upgrade + a one-time migration for
    existing forms (fall back to the event scan for legacy ones).
-5. **Deploy tooling** (`site-builder`/`walrus` CLI) reads its RPC from
-   `~/.sui/sui_config/client.yaml` (NOT the walrus config). Point it at a
-   gRPC-capable fresh endpoint. Suiscan is JSON-RPC-fresh but its gRPC lacks
-   `listOwnedObjects` (525) — use ZAN/a paid provider.
+5. **Deploy tooling** — needs ONE host serving BOTH gRPC and fresh JSON-RPC.
+   Proven 2026-07-17 by running it three ways:
+
+   | `client.yaml` rpc | site-builder's own client (**gRPC**, `ListOwnedObjects`) | `walrus` subprocess (**JSON-RPC**, reads back after store) |
+   | --- | --- | --- |
+   | `fullnode.mainnet.sui.io` | ✅ works | ❌ 1h43 stale → `asked version N > latest M` → **WAL already spent** |
+   | ZAN | ❌ 404 → `invalid compression flag: 123` (`{` = a JSON body parsed as gRPC) | ✅ real-time |
+
+   Both take the URL from **`~/.sui/sui_config/client.yaml`**. `--rpc-url` and
+   sites-config `rpc_url` only steer site-builder's own client — the `walrus`
+   subprocess ignores them (its log: `using Sui wallet configuration from
+   '~/.sui/sui_config/client.yaml'`), which is why pointing only those at a
+   fresh endpoint still burns WAL on the read-back.
+
+   ZAN can't satisfy both: its gRPC lives on a different host
+   (`grpc.zan.top`) and needs `x-token`/`x-network` headers the CLI cannot
+   send. Options: a provider with both on one host and the key in the path
+   (QuickNode is on Mysten's list), a local proxy that injects the headers, or
+   simply wait for the official node to catch up (it was 109k checkpoints
+   behind, then 27k — it closes the gap at ~2.9 checkpoints/sec) and deploy
+   with the default config.
+
+   `walrus --context mainnet list-blobs` is the FREE pre-flight: it exercises
+   the same owned-objects path. Never test with `deploy` — a failed deploy
+   still spends WAL (the store tx lands, the read-back is what fails).
+   `deploy --dry-run` also costs nothing and prints the real estimate
+   (~0.048 WAL / 0.005 SUI for this site).
 
 ## Security
 
