@@ -4,6 +4,17 @@ import { useQuery } from '@tanstack/react-query';
 import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { useOriginalPackageId } from '../../sui/package-id';
+import { useActiveNetwork } from '../../sui/env-network';
+import { queryEventsGql, type EventsPage } from '../../sui/graphql/events';
+
+/** Payload of `events::TemplatePublished` (GraphQL `contents.json`). */
+interface TemplatePublishedEvent {
+  template_id?: string;
+  creator?: string;
+  title?: string;
+  category?: number | string;
+  created_at_ms?: number | string;
+}
 
 export interface MarketplaceTemplate {
   templateId: string;
@@ -53,14 +64,15 @@ export function useMarketplaceTemplates(): UseMarketplaceTemplatesResult {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
   const client = useSuiClient();
+  const activeNetwork = useActiveNetwork();
   const packageMissing = !originalPackageId;
 
   const query = useQuery<MarketplaceTemplate[]>({
     queryKey: [network, 'walform:marketplace-templates', originalPackageId],
-    enabled: !!originalPackageId,
+    enabled: !!originalPackageId && !!activeNetwork,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!originalPackageId) return [];
+      if (!originalPackageId || !activeNetwork) return [];
 
       // 1) Paginate the full TemplatePublished stream → ordered, de-duped ids
       //    + per-template event metadata.
@@ -69,24 +81,16 @@ export function useMarketplaceTemplates(): UseMarketplaceTemplatesResult {
         { creator: string; title: string; category: number; createdAtMs: number }
       >();
       const orderedIds: string[] = [];
-      let cursor: { txDigest: string; eventSeq: string } | null = null;
+      let cursor: string | null = null;
       for (let page = 0; page < 100; page++) {
-        const res = await client.queryEvents({
-          query: { MoveEventType: `${originalPackageId}::events::TemplatePublished` },
+        const res: EventsPage<TemplatePublishedEvent> = await queryEventsGql<TemplatePublishedEvent>({
+          network: activeNetwork,
+          eventType: `${originalPackageId}::events::TemplatePublished`,
           order: 'descending',
           limit: 50,
           cursor,
         });
-        for (const ev of res.data) {
-          const parsed = ev.parsedJson as
-            | {
-                template_id?: string;
-                creator?: string;
-                title?: string;
-                category?: number | string;
-                created_at_ms?: number | string;
-              }
-            | undefined;
+        for (const parsed of res.data) {
           if (!parsed?.template_id || eventByTemplateId.has(parsed.template_id)) continue;
           eventByTemplateId.set(parsed.template_id, {
             creator: parsed.creator ? normalizeSuiAddress(parsed.creator) : '',

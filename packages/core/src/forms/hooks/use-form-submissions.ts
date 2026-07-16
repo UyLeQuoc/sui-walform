@@ -4,6 +4,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { useOriginalPackageId } from '../../sui/package-id';
+import { useActiveNetwork } from '../../sui/env-network';
+import { queryEventsGql, type EventsPage } from '../../sui/graphql/events';
+
+/** Payload of `events::SubmissionCreated` (GraphQL `contents.json`). */
+interface SubmissionCreatedEvent {
+  form_id?: string;
+  submission_id?: string;
+}
 
 export interface SubmissionRow {
   submissionId: string;
@@ -39,31 +47,32 @@ export function useFormSubmissions(formObjectId: string | undefined): {
 } {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
+  const activeNetwork = useActiveNetwork();
   const client = useSuiClient();
 
   const query = useQuery<SubmissionRow[]>({
     // Network-prefixed key so `invalidateChain` (invalidates the [network]
     // prefix) refreshes this after on-chain mutations.
     queryKey: [network, 'walform:all-submissions', originalPackageId, formObjectId],
-    enabled: !!originalPackageId && !!formObjectId,
+    enabled: !!originalPackageId && !!formObjectId && !!activeNetwork,
     staleTime: 10_000,
     queryFn: async (): Promise<SubmissionRow[]> => {
-      if (!originalPackageId || !formObjectId) return [];
+      if (!originalPackageId || !formObjectId || !activeNetwork) return [];
       const target = normalizeSuiAddress(formObjectId);
 
       // 1) paginate the SubmissionCreated stream → ids for THIS form.
       const ids: string[] = [];
       const seen = new Set<string>();
-      let cursor: { txDigest: string; eventSeq: string } | null = null;
+      let cursor: string | null = null;
       for (let page = 0; page < 100; page++) {
-        const res = await client.queryEvents({
-          query: { MoveEventType: `${originalPackageId}::events::SubmissionCreated` },
+        const res: EventsPage<SubmissionCreatedEvent> = await queryEventsGql<SubmissionCreatedEvent>({
+          network: activeNetwork,
+          eventType: `${originalPackageId}::events::SubmissionCreated`,
           order: 'descending',
           limit: 50,
           cursor,
         });
-        for (const ev of res.data) {
-          const parsed = ev.parsedJson as { form_id?: string; submission_id?: string } | undefined;
+        for (const parsed of res.data) {
           if (!parsed?.form_id || !parsed.submission_id) continue;
           if (normalizeSuiAddress(parsed.form_id) !== target) continue;
           if (seen.has(parsed.submission_id)) continue;

@@ -1,9 +1,18 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
-import { useReviewersEventPackageId } from '../../sui/env-network';
+import { useActiveNetwork, useReviewersEventPackageId } from '../../sui/env-network';
+import { collectEventsGql } from '../../sui/graphql/events';
+
+/** Payload of `reviewers::ReviewerAdded` (GraphQL `contents.json`). */
+interface ReviewerAddedEvent {
+  form_id?: string;
+  reviewers_id?: string;
+  member?: string;
+}
 
 export interface ReviewingForm {
   formId: string;
@@ -42,28 +51,31 @@ export function useReviewingForms(): UseReviewingFormsResult {
   // querying the original id silently returns zero (empty "Reviewing" list).
   // See `useReviewersEventPackageId`.
   const reviewersPkg = useReviewersEventPackageId();
+  const activeNetwork = useActiveNetwork();
   const me = account?.address ? normalizeSuiAddress(account.address) : null;
 
-  const eventsQuery = useSuiClientQuery(
-    'queryEvents',
-    {
-      query: reviewersPkg
-        ? { MoveEventType: `${reviewersPkg}::reviewers::ReviewerAdded` }
-        : ({} as never),
-      order: 'descending',
-      limit: 200,
+  // Full paginated scan. The old `limit: 200` single call was silently capped
+  // at 50 by the RPC, so a reviewer added earlier than the 50 most recent adds
+  // never saw their form in "Reviewing".
+  const eventsQuery = useQuery<ReviewerAddedEvent[]>({
+    queryKey: [activeNetwork, 'walform:reviewer-added-events', reviewersPkg],
+    enabled: !!reviewersPkg && !!me && !!activeNetwork,
+    staleTime: 10_000,
+    queryFn: async () => {
+      if (!reviewersPkg || !activeNetwork) return [];
+      return collectEventsGql<ReviewerAddedEvent>({
+        network: activeNetwork,
+        eventType: `${reviewersPkg}::reviewers::ReviewerAdded`,
+        order: 'descending',
+      });
     },
-    { enabled: !!reviewersPkg && !!me },
-  );
+  });
 
   // Build candidate (formId → reviewersId) map from events where member == me.
   const candidates = useMemo(() => {
     const map = new Map<string, string>(); // formId → reviewersId
     if (!me) return map;
-    for (const ev of eventsQuery.data?.data ?? []) {
-      const parsed = ev.parsedJson as
-        | { form_id?: string; reviewers_id?: string; member?: string }
-        | undefined;
+    for (const parsed of eventsQuery.data ?? []) {
       if (!parsed?.form_id || !parsed.reviewers_id || !parsed.member) continue;
       if (normalizeSuiAddress(parsed.member) !== me) continue;
       const fid = normalizeSuiAddress(parsed.form_id);

@@ -6,7 +6,8 @@ import { useSuiClient, useSuiClientContext, useSuiClientQuery } from '@mysten/da
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { toast } from 'sonner';
 import { useActivePackageId } from '../../sui/package-id';
-import { useReviewersEventPackageId } from '../../sui/env-network';
+import { useActiveNetwork, useReviewersEventPackageId } from '../../sui/env-network';
+import { queryEventsGql, type EventsPage } from '../../sui/graphql/events';
 import {
   buildAddReviewerTx,
   buildInitReviewersTx,
@@ -14,6 +15,12 @@ import {
 } from '../../sui/tx/reviewers';
 import { useExecuteTransaction } from '../../sui/use-execute-transaction';
 import { useInvalidateChainQueries } from '../../sui/use-invalidate-chain';
+
+/** Payload of `reviewers::ReviewersCreated` (GraphQL `contents.json`). */
+interface ReviewersCreatedEvent {
+  form_id?: string;
+  reviewers_id?: string;
+}
 
 export interface FormReviewersState {
   /** Shared FormReviewers objectId; null if the form was published pre-reviewer-upgrade. */
@@ -64,6 +71,7 @@ export function useFormReviewers(formId: string | undefined): UseFormReviewersRe
   // fresh tracker). See `useReviewersEventPackageId`.
   const reviewersPkg = useReviewersEventPackageId();
   const { network } = useSuiClientContext();
+  const activeNetwork = useActiveNetwork();
   const client = useSuiClient();
   const { execute } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
@@ -78,21 +86,21 @@ export function useFormReviewers(formId: string | undefined): UseFormReviewersRe
   // `invalidateChain` refreshes it after enable/add/remove.
   const reviewersIdQuery = useQuery<string | null>({
     queryKey: [network, 'walform:reviewers-id', reviewersPkg, formId],
-    enabled: !!reviewersPkg && !!formId,
+    enabled: !!reviewersPkg && !!formId && !!activeNetwork,
     staleTime: 10_000,
     queryFn: async (): Promise<string | null> => {
-      if (!reviewersPkg || !formId) return null;
+      if (!reviewersPkg || !formId || !activeNetwork) return null;
       const target = normalizeSuiAddress(formId);
-      let cursor: { txDigest: string; eventSeq: string } | null = null;
+      let cursor: string | null = null;
       for (let page = 0; page < 100; page++) {
-        const res = await client.queryEvents({
-          query: { MoveEventType: `${reviewersPkg}::reviewers::ReviewersCreated` },
+        const res: EventsPage<ReviewersCreatedEvent> = await queryEventsGql<ReviewersCreatedEvent>({
+          network: activeNetwork,
+          eventType: `${reviewersPkg}::reviewers::ReviewersCreated`,
           order: 'descending',
           limit: 50,
           cursor,
         });
-        for (const ev of res.data) {
-          const parsed = ev.parsedJson as { form_id?: string; reviewers_id?: string } | undefined;
+        for (const parsed of res.data) {
           if (!parsed?.form_id || !parsed.reviewers_id) continue;
           if (normalizeSuiAddress(parsed.form_id) !== target) continue;
           // Descending → first match is the NEWEST tracker for this form. Newest

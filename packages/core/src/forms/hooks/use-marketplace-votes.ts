@@ -4,6 +4,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { useOriginalPackageId } from '../../sui/package-id';
+import { useActiveNetwork } from '../../sui/env-network';
+import { queryEventsGql, type EventsPage } from '../../sui/graphql/events';
+
+/** Payload of `voting::TemplateVotesInitialized` (GraphQL `contents.json`). */
+interface TemplateVotesInitializedEvent {
+  template_id?: string;
+  votes_id?: string;
+}
 
 export interface TemplateVoteCounts {
   votesId: string;
@@ -35,28 +43,30 @@ export interface UseMarketplaceVotesResult {
 export function useMarketplaceVotes(): UseMarketplaceVotesResult {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
+  const activeNetwork = useActiveNetwork();
   const client = useSuiClient();
 
   const query = useQuery<Map<string, TemplateVoteCounts>>({
     queryKey: [network, 'walform:marketplace-votes', originalPackageId],
-    enabled: !!originalPackageId,
+    enabled: !!originalPackageId && !!activeNetwork,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!originalPackageId) return new Map();
+      if (!originalPackageId || !activeNetwork) return new Map();
 
       // 1) Paginate the full TemplateVotesInitialized stream → newest tracker
       //    per template (descending scan = first-seen is newest).
       const votesByTemplate = new Map<string, string>();
-      let cursor: { txDigest: string; eventSeq: string } | null = null;
+      let cursor: string | null = null;
       for (let page = 0; page < 100; page++) {
-        const res = await client.queryEvents({
-          query: { MoveEventType: `${originalPackageId}::voting::TemplateVotesInitialized` },
-          order: 'descending',
-          limit: 50,
-          cursor,
-        });
-        for (const ev of res.data) {
-          const parsed = ev.parsedJson as { template_id?: string; votes_id?: string } | undefined;
+        const res: EventsPage<TemplateVotesInitializedEvent> =
+          await queryEventsGql<TemplateVotesInitializedEvent>({
+            network: activeNetwork,
+            eventType: `${originalPackageId}::voting::TemplateVotesInitialized`,
+            order: 'descending',
+            limit: 50,
+            cursor,
+          });
+        for (const parsed of res.data) {
           if (!parsed?.template_id || !parsed.votes_id) continue;
           const tid = normalizeSuiAddress(parsed.template_id);
           if (votesByTemplate.has(tid)) continue;

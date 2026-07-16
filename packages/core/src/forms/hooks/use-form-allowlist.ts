@@ -1,9 +1,20 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { useOriginalPackageId } from '../../sui/package-id';
+import { useActiveNetwork } from '../../sui/env-network';
+import { collectEventsGql } from '../../sui/graphql/events';
+
+/** Payload of `events::AllowlistCreated` (GraphQL `contents.json`). */
+interface AllowlistCreatedEvent {
+  allowlist_id?: string;
+  form_id?: string;
+  creator?: string;
+  created_at_ms?: string | number;
+}
 
 export interface FormAllowlist {
   allowlistId: string;
@@ -31,34 +42,28 @@ export function useFormAllowlist(formId: string | undefined): {
 } {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
+  const activeNetwork = useActiveNetwork();
 
-  const eventsQuery = useSuiClientQuery(
-    'queryEvents',
-    {
-      query: originalPackageId
-        ? {
-            MoveEventType: `${originalPackageId}::events::AllowlistCreated`,
-          }
-        : ({} as never),
-      order: 'descending',
-      limit: 200,
+  // Full paginated scan (descending → newest allowlist per form wins). The old
+  // `limit: 200` single call was silently truncated to 50 by the RPC.
+  const eventsQuery = useQuery<AllowlistCreatedEvent[]>({
+    queryKey: [network, 'walform:allowlist-events', originalPackageId],
+    enabled: !!originalPackageId && !!formId && !!activeNetwork,
+    staleTime: 10_000,
+    queryFn: async () => {
+      if (!originalPackageId || !activeNetwork) return [];
+      return collectEventsGql<AllowlistCreatedEvent>({
+        network: activeNetwork,
+        eventType: `${originalPackageId}::events::AllowlistCreated`,
+        order: 'descending',
+      });
     },
-    { enabled: !!originalPackageId && !!formId },
-  );
+  });
 
   const matched = useMemo(() => {
     if (!formId) return null;
     const target = normalizeSuiAddress(formId);
-    const events = eventsQuery.data?.data ?? [];
-    for (const ev of events) {
-      const parsed = ev.parsedJson as
-        | {
-            allowlist_id?: string;
-            form_id?: string;
-            creator?: string;
-            created_at_ms?: string | number;
-          }
-        | undefined;
+    for (const parsed of eventsQuery.data ?? []) {
       if (!parsed?.allowlist_id || !parsed.form_id) continue;
       if (normalizeSuiAddress(parsed.form_id) !== target) continue;
       return parsed;
