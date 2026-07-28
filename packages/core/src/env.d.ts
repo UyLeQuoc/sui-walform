@@ -64,6 +64,11 @@ declare const process: {
     // Seal — per-network
     NEXT_PUBLIC_SEAL_KEY_SERVERS_TESTNET?: string;
     NEXT_PUBLIC_SEAL_KEY_SERVERS_MAINNET?: string;
+    // Retired key servers, kept ONLY so ciphertexts encrypted under them still
+    // decrypt. A Seal ciphertext names its key servers, so removing one without
+    // listing it here breaks every ciphertext it produced ("Not enough shares").
+    NEXT_PUBLIC_SEAL_LEGACY_KEY_SERVERS_TESTNET?: string;
+    NEXT_PUBLIC_SEAL_LEGACY_KEY_SERVERS_MAINNET?: string;
     NEXT_PUBLIC_SEAL_AGGREGATOR_URL_TESTNET?: string;
     NEXT_PUBLIC_SEAL_AGGREGATOR_URL_MAINNET?: string;
     NEXT_PUBLIC_SEAL_API_KEY_NAME_TESTNET?: string;

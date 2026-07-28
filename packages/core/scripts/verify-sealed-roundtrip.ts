@@ -74,9 +74,10 @@ let pass = 0;
 let fail = 0;
 function check(name: string, actual: unknown, expected: unknown) {
   const ok = JSON.stringify(actual) === JSON.stringify(expected);
-  console.log(`${ok ? '  PASS' : '  FAIL'}  ${name}`);
-  if (!ok) console.log(`        got      ${JSON.stringify(actual)}\n        expected ${JSON.stringify(expected)}`);
-  ok ? pass++ : fail++;
+  console.info(`${ok ? '  PASS' : '  FAIL'}  ${name}`);
+  if (!ok) console.info(`        got      ${JSON.stringify(actual)}\n        expected ${JSON.stringify(expected)}`);
+  if (ok) pass++;
+  else fail++;
 }
 
 // A schema shaped like a real one, with a dropdown — the field type the issue
@@ -105,11 +106,11 @@ async function main() {
   if (!sealConfig) throw new Error(`Seal not configured for ${NETWORK}`);
   const seal = getSealClient(client, sealConfig);
 
-  console.log(`network   ${NETWORK}`);
-  console.log(`sender    ${sender}`);
-  console.log(`package   ${PACKAGE_ID}`);
-  console.log(`seal      ${sealConfig.keyServers}`);
-  console.log(`seal auth ${sealConfig.apiKeyName ? `${sealConfig.apiKeyName}: <set>` : '(none)'}`);
+  console.info(`network   ${NETWORK}`);
+  console.info(`sender    ${sender}`);
+  console.info(`package   ${PACKAGE_ID}`);
+  console.info(`seal      ${sealConfig.keyServers}`);
+  console.info(`seal auth ${sealConfig.apiKeyName ? `${sealConfig.apiKeyName}: <set>` : '(none)'}`);
 
   const exec = async (transaction: Parameters<typeof client.signAndExecuteTransaction>[0]['transaction'], label: string) => {
     const res = await client.signAndExecuteTransaction({
@@ -124,7 +125,7 @@ async function main() {
   };
 
   // ── 1. Publish a Private form with a placeholder schema ────────────────────
-  console.log('\n1. publish Private form (placeholder schema)');
+  console.info('\n1. publish Private form (placeholder schema)');
   const publishDigest = await exec(
     buildCreateFormTx({
       packageId: PACKAGE_ID,
@@ -141,11 +142,11 @@ async function main() {
   if (!ids.formObjectId || !ids.formOwnerCapId || !ids.allowlistId) {
     throw new Error(`missing ids from publish: ${JSON.stringify(ids)}`);
   }
-  console.log(`   form      ${ids.formObjectId}`);
-  console.log(`   allowlist ${ids.allowlistId}`);
+  console.info(`   form      ${ids.formObjectId}`);
+  console.info(`   allowlist ${ids.allowlistId}`);
 
   // ── 2. Seal the schema (publish flow's follow-up) ──────────────────────────
-  console.log('\n2. seal schema + update_schema');
+  console.info('\n2. seal schema + update_schema');
   const plaintextSchema = new TextEncoder().encode(JSON.stringify(SCHEMA));
   const { ciphertext: schemaCipher } = await sealEncryptSchema({
     seal,
@@ -162,10 +163,10 @@ async function main() {
     }),
     'update_schema',
   );
-  console.log(`   ciphertext ${schemaCipher.length} bytes`);
+  console.info(`   ciphertext ${schemaCipher.length} bytes`);
 
   // ── 3. Submit an encrypted response ────────────────────────────────────────
-  console.log('\n3. submit encrypted response');
+  console.info('\n3. submit encrypted response');
   const { ciphertext: bodyCipher, nonce } = await sealEncryptSubmission({
     seal,
     packageId: ORIGINAL_PACKAGE_ID,
@@ -183,13 +184,11 @@ async function main() {
     }),
     'submit',
   );
-  const submitIds = await extractPublishIds(client, submitDigest, ORIGINAL_PACKAGE_ID);
-  void submitIds;
   const submissionId = await findSubmissionId(client, submitDigest, ORIGINAL_PACKAGE_ID);
-  console.log(`   submission ${submissionId}`);
+  console.info(`   submission ${submissionId}`);
 
   // ── 4. Decrypt, headless ───────────────────────────────────────────────────
-  console.log('\n4. decrypt as creator (SessionKey signed by the keypair, no wallet)');
+  console.info('\n4. decrypt as creator (SessionKey signed by the keypair, no wallet)');
   const sessionKey = await SessionKey.create({
     address: sender,
     packageId: ORIGINAL_PACKAGE_ID,
@@ -222,7 +221,7 @@ async function main() {
   const decryptedAnswers = JSON.parse(new TextDecoder().decode(decryptedBodyBytes));
 
   // ── 5. Assert ──────────────────────────────────────────────────────────────
-  console.log('\n5. assertions');
+  console.info('\n5. assertions');
   check('schema round-trips byte-identical', decryptedSchema, SCHEMA);
   check('schema exposes the questions', decryptedSchema.fields.map((f: { label: string }) => f.label), [
     'Pick one',
@@ -240,7 +239,7 @@ async function main() {
   );
 
   // ── 6. Clean up ────────────────────────────────────────────────────────────
-  console.log('\n6. close the throwaway form');
+  console.info('\n6. close the throwaway form');
   await exec(
     buildCloseFormTx({
       packageId: PACKAGE_ID,
@@ -250,8 +249,8 @@ async function main() {
     'close_form',
   );
 
-  console.log(`\n${pass} passed, ${fail} failed`);
-  console.log(`form (closed): ${ids.formObjectId}`);
+  console.info(`\n${pass} passed, ${fail} failed`);
+  console.info(`form (closed): ${ids.formObjectId}`);
   if (fail > 0) process.exit(1);
 }
 

@@ -11,9 +11,11 @@ export {
 
 export {
   getSealClient,
+  getSealDecryptClient,
   parseKeyServerConfig,
   getSealThreshold,
   useSealClient,
+  useSealDecryptClient,
 } from './seal-client';
 
 export { createSealSessionKey } from './seal-session';

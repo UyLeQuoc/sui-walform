@@ -37,7 +37,9 @@ apps/contracts/Move.lock
 # tsconfig.tsbuildinfo
 **/tsconfig.tsbuildinfo
 
-/refrences/*
+references/
 
 # walform-builder-bundle
 apps/builder/public/walform-builder-bundle/*
+
+references/walrus-sites

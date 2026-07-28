@@ -217,6 +217,16 @@ const DEFAULT_SEAL_AGGREGATOR_TESTNET = 'https://seal-aggregator-testnet.mystenl
 
 export interface SealNetworkConfig {
   keyServers: string | null;
+  /**
+   * Key servers RETIRED from encryption but still needed for decryption.
+   *
+   * A Seal ciphertext names the servers it was encrypted under, and decryption
+   * fetches shares from exactly those — so dropping a server from
+   * `keyServers` makes every ciphertext it produced fail with "Not enough
+   * shares. Please fetch more keys." List the old objectId here and old data
+   * keeps opening. These entries get no aggregator URL and no API key.
+   */
+  legacyKeyServers: string | null;
   aggregatorUrl: string | null;
   /** HTTP header name for the API key (e.g. `x-api-key`). Permissioned
    * (independent) servers require this; decentralized usually do not. */
@@ -242,6 +252,7 @@ export function getSealConfig(network: WalformNetwork): SealNetworkConfig | null
     if (!keyServers || keyServers.trim() === '') return null;
     return {
       keyServers,
+      legacyKeyServers: process.env.NEXT_PUBLIC_SEAL_LEGACY_KEY_SERVERS_MAINNET ?? null,
       aggregatorUrl: process.env.NEXT_PUBLIC_SEAL_AGGREGATOR_URL_MAINNET ?? null,
       apiKeyName: process.env.NEXT_PUBLIC_SEAL_API_KEY_NAME_MAINNET ?? null,
       apiKey: process.env.NEXT_PUBLIC_SEAL_API_KEY_MAINNET ?? null,
@@ -255,6 +266,7 @@ export function getSealConfig(network: WalformNetwork): SealNetworkConfig | null
   if (testnetKeyServers && testnetKeyServers.trim() !== '') {
     return {
       keyServers: testnetKeyServers,
+      legacyKeyServers: process.env.NEXT_PUBLIC_SEAL_LEGACY_KEY_SERVERS_TESTNET ?? null,
       aggregatorUrl: process.env.NEXT_PUBLIC_SEAL_AGGREGATOR_URL_TESTNET ?? null,
       apiKeyName: process.env.NEXT_PUBLIC_SEAL_API_KEY_NAME_TESTNET ?? null,
       apiKey: process.env.NEXT_PUBLIC_SEAL_API_KEY_TESTNET ?? null,
@@ -262,6 +274,7 @@ export function getSealConfig(network: WalformNetwork): SealNetworkConfig | null
   }
   return {
     keyServers: DEFAULT_SEAL_COMMITTEE_TESTNET,
+    legacyKeyServers: process.env.NEXT_PUBLIC_SEAL_LEGACY_KEY_SERVERS_TESTNET ?? null,
     aggregatorUrl: DEFAULT_SEAL_AGGREGATOR_TESTNET,
     apiKeyName: null,
     apiKey: null,
