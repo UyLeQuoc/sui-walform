@@ -22,6 +22,8 @@ interface EditorUpdateButtonProps {
   formObjectId: string;
   /** On-chain submission count — a non-zero count warns before overwriting. */
   submissionCount: number;
+  /** Form was published with a Seal-encrypted schema — re-encrypt before writing. */
+  schemaSealed?: boolean;
 }
 
 /**
@@ -30,9 +32,13 @@ interface EditorUpdateButtonProps {
  * already has responses, a confirm dialog warns that removing/retyping existing
  * fields can orphan response data in Results (adding new fields is safe).
  */
-export function EditorUpdateButton({ formObjectId, submissionCount }: EditorUpdateButtonProps) {
+export function EditorUpdateButton({
+  formObjectId,
+  submissionCount,
+  schemaSealed,
+}: EditorUpdateButtonProps) {
   const navigate = useNavigate();
-  const { isSubmitting, update, isReady } = useUpdateForm({ formObjectId });
+  const { isSubmitting, update, isReady } = useUpdateForm({ formObjectId, schemaSealed });
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const doUpdate = async () => {

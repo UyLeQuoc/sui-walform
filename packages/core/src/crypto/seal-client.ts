@@ -2,22 +2,31 @@
 
 import { useMemo } from 'react';
 import { SealClient, type KeyServerConfig } from '@mysten/seal';
-import { useSuiClient } from '@mysten/dapp-kit';
-import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import type { ClientWithCoreApi } from '@mysten/sui/client';
+import { useSuiGrpcClient } from '../sui/grpc/use-grpc-client';
 import { useActiveSealConfig, type SealNetworkConfig } from '../sui/env-network';
 
 /**
- * Seal client factory. The default for testnet is Mysten's decentralized
- * committee key server exposed through a hosted aggregator — the committee
- * itself handles 2-of-N MPC server-side, so we pass a single serverConfigs
- * entry with `threshold: 1`. Override per-network via
- * `NEXT_PUBLIC_SEAL_KEY_SERVERS_{TESTNET,MAINNET}` (comma-separated objectIds)
- * and bump `NEXT_PUBLIC_SEAL_THRESHOLD=2`.
+ * Seal client factory.
  *
- * Permissioned (independent) servers like Ruby Nodes free tier require an
- * API key — pass `apiKeyName` (header name, typically `x-api-key`) + `apiKey`
- * through the per-network env vars. The Seal SDK rejects a half-set pair, so
- * provide both or neither.
+ * Both networks are pointed at Mysten's decentralized **committee** key server
+ * behind a hosted aggregator (testnet 3-of-5, mainnet 5-of-8). The committee
+ * runs the MPC server-side, so the SDK sees ONE `serverConfigs` entry and
+ * `threshold: 1` — that 1 is "one aggregator response", not the committee's
+ * own N-of-M. Only bump `NEXT_PUBLIC_SEAL_THRESHOLD` if you list several
+ * INDEPENDENT servers in `NEXT_PUBLIC_SEAL_KEY_SERVERS_*`.
+ *
+ * **Mainnet requires credentials**: the committee aggregator rejects
+ * unauthenticated calls. The key comes from the Enoki dashboard (request Seal
+ * key server access) and the header name is always `X-API-Key` — set both
+ * `NEXT_PUBLIC_SEAL_API_KEY_NAME_MAINNET` and `NEXT_PUBLIC_SEAL_API_KEY_MAINNET`.
+ * The SDK rejects a half-set pair, so provide both or neither. Independent
+ * permissioned servers (Ruby Nodes, Studio Mirai, …) use the same two vars with
+ * whatever header that provider specifies.
+ *
+ * Note the URL is NOT configured anywhere for independent servers: the on-chain
+ * KeyServer object is the source of truth and holds the current URL. Only the
+ * committee needs `aggregatorUrl`.
  */
 const DEFAULT_TESTNET_COMMITTEE_OBJECT_ID =
   '0xb012378c9f3799fb5b1a7083da74a4069e3c3f1c93de0b27212a5799ce1e1e98';
@@ -60,7 +69,7 @@ export function getSealThreshold(): number {
 }
 
 export function getSealClient(
-  suiClient: SuiJsonRpcClient,
+  suiClient: ClientWithCoreApi,
   config: SealNetworkConfig,
 ): SealClient {
   const servers = parseKeyServerConfig(
@@ -83,10 +92,10 @@ export function getSealClient(
  * this rather than throwing.
  */
 export function useSealClient(): SealClient | null {
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const config = useActiveSealConfig();
   return useMemo(() => {
     if (!config) return null;
-    return getSealClient(suiClient as SuiJsonRpcClient, config);
+    return getSealClient(suiClient, config);
   }, [suiClient, config?.keyServers, config?.aggregatorUrl, config?.apiKeyName, config?.apiKey]);
 }

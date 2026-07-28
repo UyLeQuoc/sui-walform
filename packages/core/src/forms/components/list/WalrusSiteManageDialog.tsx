@@ -8,6 +8,7 @@ import {
   useSignAndExecuteTransaction,
   useSuiClientContext,
 } from '@mysten/dapp-kit';
+import { useCoreTransactionExecutor } from '../../../sui/use-core-executor';
 import {
   Dialog,
   DialogContent,
@@ -44,7 +45,10 @@ export function WalrusSiteManageDialog({
 }: WalrusSiteManageDialogProps) {
   const account = useCurrentAccount();
   const { network } = useSuiClientContext();
-  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const broadcast = useCoreTransactionExecutor();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction({
+    execute: broadcast,
+  });
   const invalidateChain = useInvalidateChainQueries();
   const { site, isLoading } = useFormSite(siteObjectId);
   const sitePackageId = useActiveWalrusSitePackageId();

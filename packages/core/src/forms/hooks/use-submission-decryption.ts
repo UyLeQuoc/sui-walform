@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import {
   buildSealApproveBatch,
   getSealThreshold,
@@ -23,8 +24,8 @@ export type DecryptedRow = Record<string, unknown>;
  * all" at once stampedes the public Sui fullnode, which rate-limits with HTTP
  * 429 — and a 429 response carries no CORS headers, so the browser reports it
  * as a misleading "blocked by CORS policy" error. Capping the fan-out keeps us
- * under the limit. (Point `NEXT_PUBLIC_SUI_RPC_{TESTNET,MAINNET}` at a
- * higher-limit RPC to raise the ceiling.)
+ * under the limit. (Point `NEXT_PUBLIC_SUI_GRPC_{TESTNET,MAINNET}` at a
+ * higher-limit endpoint to raise the ceiling.)
  */
 const DECRYPT_CONCURRENCY = 4;
 
@@ -89,7 +90,7 @@ export function useSubmissionDecryption(
 ): UseSubmissionDecryptionResult {
   const { formId } = input;
   const sealSession = useSealSession();
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const seal = useSealClient();
   const { network } = useSuiClientContext();
   // Seal namespace stays on the original packageId (encryption identity),

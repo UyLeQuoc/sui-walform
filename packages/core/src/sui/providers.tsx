@@ -9,28 +9,45 @@ import {
   useSuiClientContext,
 } from '@mysten/dapp-kit';
 import { registerEnokiWallets, isEnokiNetwork } from '@mysten/enoki';
-import { getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
+import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import { getSuiGrpcClient, getSuiGrpcUrl } from './grpc/client';
 import '@mysten/dapp-kit/dist/index.css';
 
 export type WalFormNetwork = 'testnet' | 'mainnet';
 
-// The public fullnodes (`getJsonRpcFullnodeUrl`) are heavily rate-limited —
-// busy pages (e.g. "Decrypt all" over 100 submissions) can trip HTTP 429.
-// Point these at a dedicated / paid RPC to raise the ceiling. `||` (not `??`)
-// because the build inlines an unset var as `undefined`, but an env file with
-// an empty value inlines `""`, which we also want to fall back from.
+// `url` is inert — `createClient` below ignores it and builds a gRPC client
+// instead. It stays populated because `createNetworkConfig` requires the field
+// and because seeing the real endpoint here beats seeing a dead JSON-RPC URL.
 const { networkConfig } = createNetworkConfig({
   testnet: {
-    url: process.env.NEXT_PUBLIC_SUI_RPC_TESTNET || getJsonRpcFullnodeUrl('testnet'),
+    url: getSuiGrpcUrl('testnet'),
     network: 'testnet',
     variables: { network: 'testnet' as const },
   },
   mainnet: {
-    url: process.env.NEXT_PUBLIC_SUI_RPC_MAINNET || getJsonRpcFullnodeUrl('mainnet'),
+    url: getSuiGrpcUrl('mainnet'),
     network: 'mainnet',
     variables: { network: 'mainnet' as const },
   },
 });
+
+/**
+ * Every read in the app goes through gRPC, not JSON-RPC — Sui decommissioned
+ * public JSON-RPC (testnet already 404s, mainnet off 2026-07-31). See
+ * `./grpc/client.ts`.
+ *
+ * The cast is a types-only concession: dApp Kit 1.1.5 declares its context
+ * client as `SuiJsonRpcClient`, but nothing in this app calls a JSON-RPC-only
+ * method on it. What it IS used for — `SessionKey.create`, `SealClient`,
+ * `WalrusClient`, and `Transaction.build`/`toJSON` — all consume the shared
+ * `core` API, which `SuiGrpcClient` implements. The one place dApp Kit itself
+ * would reach for a JSON-RPC name is `useSignAndExecuteTransaction`'s default
+ * executor (`client.executeTransactionBlock`); `useExecuteTransaction`
+ * overrides that with a core-API executor.
+ */
+function createClient(network: string): SuiJsonRpcClient {
+  return getSuiGrpcClient(network) as unknown as SuiJsonRpcClient;
+}
 
 export const NETWORK_STORAGE_KEY = 'walform:network';
 
@@ -127,6 +144,7 @@ export function SuiProviders({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <SuiClientProvider
         networks={networkConfig}
+        createClient={(name) => createClient(String(name))}
         defaultNetwork={defaultNetwork}
         onNetworkChange={(net) => {
           if (typeof window !== 'undefined') {

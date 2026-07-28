@@ -1,9 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import type { FormSchema } from '../../types';
+import { Form } from '../../sui/gen/walform/form';
+import { getMoveObject, type ParsedMoveObject } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useOriginalPackageId } from '../../sui/package-id';
 
 export interface FormOnChainDetail {
@@ -12,6 +16,18 @@ export interface FormOnChainDetail {
   title: string;
   schema: FormSchema | null;
   schemaRaw: Uint8Array;
+  /**
+   * True when `schemaRaw` holds a Seal ciphertext rather than plaintext JSON —
+   * i.e. the form was published with `NEXT_PUBLIC_ENABLE_SEALED_SCHEMA=true`
+   * (Private/allowlist forms only). Consumers must decrypt via
+   * `useSealedSchemaDecrypt` before they have any fields to render.
+   *
+   * A 1-byte body is the publish-time placeholder, not a ciphertext: the
+   * sealed flow writes `[0]` first and overwrites it with the real ciphertext
+   * in a follow-up `update_schema`. If that follow-up never landed the form is
+   * broken rather than sealed, so it stays out of this flag.
+   */
+  schemaSealed: boolean;
   themeRaw: Uint8Array;
   closed: boolean;
   accessMode: 0 | 1 | 2 | 3;
@@ -27,6 +43,8 @@ export interface FormOnChainDetail {
   type: string;
 }
 
+type ParsedForm = ParsedMoveObject<ReturnType<typeof Form.parse>>;
+
 /**
  * Fetch a `Form` object by id directly from chain. The submit page (`/f?formId=…`)
  * uses this to decide what UI to render: form schema, gating UI for private
@@ -39,61 +57,26 @@ export function useFormOnChain(formId: string | undefined): {
 } {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
+  const client = useSuiGrpcClient();
 
-  const objectQuery = useSuiClientQuery(
-    'getObject',
-    {
-      id: formId ?? '',
-      options: { showContent: true, showType: true, showOwner: true },
-    },
-    { enabled: !!formId },
-  );
+  const objectQuery = useQuery<ParsedForm | null>({
+    // `[network, …]` prefix is load-bearing: `useInvalidateChainQueries`
+    // invalidates the whole network subtree after every mutation.
+    queryKey: [network, 'walform:form', formId ?? null],
+    enabled: !!formId,
+    queryFn: ({ signal }) => getMoveObject(client, Form, formId!, signal),
+  });
 
   const form = useMemo<FormOnChainDetail | null>(() => {
-    if (!formId) return null;
-    const data = objectQuery.data?.data;
-    if (!data?.content) return null;
-    const content = data.content as unknown as
-      | {
-          dataType: 'moveObject';
-          type: string;
-          fields: {
-            owner?: string;
-            title?: string;
-            schema?: number[];
-            theme?: number[];
-            closed?: boolean;
-            settings?: {
-              fields?: {
-                access_mode?: number | string;
-                allowlist_id?: string | null | { Some?: string; vec?: string[] };
-                closes_at_ms?: string | number;
-                max_submissions?: string | number;
-                submission_fee_mist?: string | number;
-                required_token_type?: number[] | string;
-                required_token_amount?: string | number;
-              };
-            };
-            stats?: {
-              fields?: {
-                submission_count?: string | number;
-              };
-            };
-          };
-        }
-        | undefined;
-    if (!content?.fields) return null;
-    if (!isWalformFormType(content.type, originalPackageId)) return null;
-    const fields = content.fields;
-    const settings = fields.settings?.fields ?? {};
-    const stats = fields.stats?.fields ?? {};
-    const schemaArr = fields.schema ?? [];
-    const themeArr = fields.theme ?? [];
-    const schemaRaw = new Uint8Array(schemaArr);
-    const themeRaw = new Uint8Array(themeArr);
+    const obj = objectQuery.data;
+    if (!obj) return null;
+    if (!isWalformFormType(obj.type, originalPackageId)) return null;
+    const f = obj.fields;
+    const schemaRaw = new Uint8Array(f.schema);
+    const themeRaw = new Uint8Array(f.theme);
 
     let parsedSchema: FormSchema | null = null;
-    if (schemaArr.length > 0) {
+    if (schemaRaw.length > 0) {
       try {
         parsedSchema = JSON.parse(new TextDecoder().decode(schemaRaw)) as FormSchema;
       } catch {
@@ -101,52 +84,40 @@ export function useFormOnChain(formId: string | undefined): {
       }
     }
 
-    // allowlist_id is Option<address>; serialised as the address directly when
-    // Some, null when None.
-    let allowlistId: string | null = null;
-    const rawAllowlist = settings.allowlist_id;
-    if (typeof rawAllowlist === 'string') {
-      allowlistId = normalizeSuiAddress(rawAllowlist);
-    } else if (rawAllowlist && typeof rawAllowlist === 'object') {
-      const maybe =
-        ('Some' in rawAllowlist ? rawAllowlist.Some : undefined) ??
-        ('vec' in rawAllowlist ? rawAllowlist.vec?.[0] : undefined);
-      if (maybe) allowlistId = normalizeSuiAddress(maybe);
-    }
-
-    const accessMode = (Number(settings.access_mode ?? 0) || 0) as 0 | 1 | 2 | 3;
     let requiredTokenType = '';
-    const rawTokenType = settings.required_token_type;
-    if (Array.isArray(rawTokenType) && rawTokenType.length > 0) {
+    if (f.settings.required_token_type.length > 0) {
       try {
-        requiredTokenType = new TextDecoder().decode(new Uint8Array(rawTokenType));
+        requiredTokenType = new TextDecoder().decode(
+          new Uint8Array(f.settings.required_token_type),
+        );
       } catch {
         requiredTokenType = '';
       }
-    } else if (typeof rawTokenType === 'string') {
-      requiredTokenType = rawTokenType;
     }
+
     return {
-      formObjectId: data.objectId,
-      owner: fields.owner ? normalizeSuiAddress(fields.owner) : '',
-      title: fields.title ?? 'Untitled form',
+      formObjectId: obj.objectId,
+      owner: normalizeSuiAddress(f.owner),
+      title: f.title || 'Untitled form',
       schema: parsedSchema,
       schemaRaw,
+      schemaSealed: parsedSchema === null && schemaRaw.length > 1,
       themeRaw,
-      closed: Boolean(fields.closed),
-      accessMode,
-      allowlistId,
-      maxSubmissions: Number(settings.max_submissions ?? 0),
-      closesAtMs: Number(settings.closes_at_ms ?? 0),
-      submissionFeeMist: BigInt(settings.submission_fee_mist ?? 0),
+      closed: f.closed,
+      accessMode: (Number(f.settings.access_mode) || 0) as 0 | 1 | 2 | 3,
+      // BCS decodes `Option<address>` to the address or null — no
+      // `{Some}`/`{vec}` wrapper shapes to unpick like JSON-RPC had.
+      allowlistId: f.settings.allowlist_id ? normalizeSuiAddress(f.settings.allowlist_id) : null,
+      maxSubmissions: Number(f.settings.max_submissions),
+      closesAtMs: Number(f.settings.closes_at_ms),
+      submissionFeeMist: BigInt(f.settings.submission_fee_mist),
       requiredTokenType,
-      requiredTokenAmount: BigInt(settings.required_token_amount ?? 0),
-      submissionCount: Number(stats.submission_count ?? 0),
-      type: content.type,
+      requiredTokenAmount: BigInt(f.settings.required_token_amount),
+      submissionCount: Number(f.stats.submission_count),
+      type: obj.type,
     };
-  }, [formId, objectQuery.data, originalPackageId]);
+  }, [objectQuery.data, originalPackageId]);
 
-  void network;
   return {
     form,
     isLoading: !!formId && objectQuery.isPending,

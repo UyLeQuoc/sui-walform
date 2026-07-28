@@ -4,10 +4,11 @@ import { useCallback, useRef } from 'react';
 import {
   useCurrentAccount,
   useSignAndExecuteTransaction,
-  useSuiClient,
   useSuiClientContext,
 } from '@mysten/dapp-kit';
 import type { WalrusClient } from '@mysten/walrus';
+import { useSuiGrpcClient } from '../sui/grpc/use-grpc-client';
+import { useCoreTransactionExecutor } from '../sui/use-core-executor';
 import { WalrusWalletSigner } from '../sui/wallet-signer';
 import {
   getWalrusAggregatorUrl,
@@ -77,9 +78,12 @@ export interface UseWalrusWalletUploadResult {
  */
 export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
   const account = useCurrentAccount();
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const { network } = useSuiClientContext();
-  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const broadcast = useCoreTransactionExecutor();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction({
+    execute: broadcast,
+  });
   // Cache the WalrusClient + signer across calls: WalrusClient construction
   // pulls in the WASM bundle, and we want one signer per account so polling
   // state inside it can warm up. Both refs key on (network, address) — when

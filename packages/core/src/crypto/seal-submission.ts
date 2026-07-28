@@ -2,7 +2,7 @@
 
 import { Transaction } from '@mysten/sui/transactions';
 import { EncryptedObject, type SealClient, type SessionKey } from '@mysten/seal';
-import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import type { ClientWithCoreApi } from '@mysten/sui/client';
 import { sealApproveReadSubmission } from '../sui/gen/walform/seal_policies';
 import { buildSubmissionIdentity, generateSubmissionNonce, identityToHex } from './seal-identity';
 import { getSealThreshold } from './seal-client';
@@ -91,7 +91,7 @@ export interface SealApproveBatchItem {
 }
 
 export interface BuildSealApproveBatchInput {
-  client: SuiJsonRpcClient;
+  client: ClientWithCoreApi;
   packageId: string;
   formObjectId: string;
   items: SealApproveBatchItem[];
@@ -141,7 +141,7 @@ export async function buildSealApproveBatch(
 export interface SealDecryptSubmissionInput {
   seal: SealClient;
   sessionKey: SessionKey;
-  client: SuiJsonRpcClient;
+  client: ClientWithCoreApi;
   packageId: string;
   formObjectId: string;
   submissionObjectId: string;

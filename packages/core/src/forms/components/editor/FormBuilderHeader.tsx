@@ -37,7 +37,7 @@ interface FormBuilderHeaderProps {
   onToggleCollab: () => void;
   onOpenAiGenerate: () => void;
   /** Present when editing an already-published form — swaps Publish for Update. */
-  onChainEdit?: { formObjectId: string; submissionCount: number };
+  onChainEdit?: { formObjectId: string; submissionCount: number; schemaSealed?: boolean };
 }
 
 export function FormBuilderHeader({
@@ -232,6 +232,7 @@ export function FormBuilderHeader({
               <EditorUpdateButton
                 formObjectId={onChainEdit.formObjectId}
                 submissionCount={onChainEdit.submissionCount}
+                schemaSealed={onChainEdit.schemaSealed}
               />
             ) : (
               <EditorPublishButton formId={formId} />

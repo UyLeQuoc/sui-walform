@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
 
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
+import { GrpcWebFetchTransport, SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction, UpgradePolicy } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
@@ -41,9 +41,14 @@ async function main() {
 
   const keypair = loadDeployerKeypair();
   const address = keypair.toSuiAddress();
-  const client = new SuiJsonRpcClient({
-    url: process.env.SUI_RPC_URL ?? getJsonRpcFullnodeUrl(NETWORK),
+  // gRPC, not JSON-RPC: Sui decommissioned public JSON-RPC (testnet's endpoint
+  // already answers 404, mainnet's switches off 2026-07-31). `SUI_GRPC_URL`
+  // overrides the official fullnode.
+  const client = new SuiGrpcClient({
     network: NETWORK,
+    transport: new GrpcWebFetchTransport({
+      baseUrl: process.env.SUI_GRPC_URL ?? `https://fullnode.${NETWORK}.sui.io`,
+    }),
   });
 
   console.log(`Deployer:             ${address}`);
@@ -85,30 +90,32 @@ async function main() {
   tx.setSender(address);
 
   // 3. Execute.
-  const result = await client.signAndExecuteTransaction({
+  const executed = await client.signAndExecuteTransaction({
     transaction: tx,
     signer: keypair,
-    options: { showEffects: true, showObjectChanges: true },
+    include: { effects: true },
   });
+  const result = executed.Transaction ?? executed.FailedTransaction;
 
-  if (result.effects?.status?.status !== "success") {
-    console.error("Upgrade failed:", result.effects?.status);
+  if (!result?.status.success) {
+    console.error("Upgrade failed:", result?.status.error);
     process.exit(1);
   }
 
-  // 4. Extract new packageId.
-  const changes = result.objectChanges ?? [];
-  const packageChange = changes.find((c) => c.type === "published") as
-    | { packageId: string }
-    | undefined;
-  if (!packageChange) {
-    console.error("No new package id in objectChanges — aborting.");
+  // 4. Extract the new packageId. Over gRPC a published package shows up in
+  // effects as a created `PackageWrite` — the gRPC counterpart of JSON-RPC's
+  // `objectChanges` entry with `type: "published"`.
+  const newPackageId = (result.effects?.changedObjects ?? []).find(
+    (c) => c.idOperation === "Created" && c.outputState === "PackageWrite",
+  )?.objectId;
+  if (!newPackageId) {
+    console.error("No new package id among the tx's created objects — aborting.");
     process.exit(1);
   }
 
   const updated = {
     ...deployed,
-    packageId: packageChange.packageId,
+    packageId: newPackageId,
     // originalPackageId is preserved verbatim from the existing file.
     previousPackageId: deployed.packageId,
     lastUpgradeAt: new Date().toISOString(),
@@ -116,7 +123,7 @@ async function main() {
   };
 
   writeFileSync(DEPLOYED_JSON, JSON.stringify(updated, null, 2) + "\n");
-  console.log(`\nUpgraded. New packageId: ${packageChange.packageId}`);
+  console.log(`\nUpgraded. New packageId: ${newPackageId}`);
   console.log(`Original (stable):       ${deployed.originalPackageId}`);
   console.log(`Wrote ${DEPLOYED_JSON}`);
 
@@ -125,7 +132,7 @@ async function main() {
   // — only the bumped packageId is written here.
   const envPath = resolve(import.meta.dir, "../../../apps/builder/.env.local");
   const envKey = `NEXT_PUBLIC_PACKAGE_ID_${NETWORK.toUpperCase()}`;
-  const wrote = upsertEnvVar(envPath, envKey, packageChange.packageId);
+  const wrote = upsertEnvVar(envPath, envKey, newPackageId);
   console.log(`Wrote env:               ${envPath} :: ${envKey} (${wrote})`);
 }
 

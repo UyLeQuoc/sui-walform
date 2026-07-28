@@ -1,6 +1,9 @@
 'use client';
 
-import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useCurrentAccount, useSuiClientContext } from '@mysten/dapp-kit';
+import { listOwnedObjectIds } from './grpc/objects';
+import { useSuiGrpcClient } from './grpc/use-grpc-client';
 import { useOriginalPackageId } from './package-id';
 
 export interface UseIsPlatformAdminResult {
@@ -23,23 +26,21 @@ export function useIsPlatformAdmin(): UseIsPlatformAdminResult {
   const account = useCurrentAccount();
   const sender = account?.address ?? null;
   const originalPackageId = useOriginalPackageId();
+  const { network } = useSuiClientContext();
+  const client = useSuiGrpcClient();
 
-  const capQuery = useSuiClientQuery(
-    'getOwnedObjects',
-    {
-      owner: sender ?? '',
-      filter: originalPackageId
-        ? { StructType: `${originalPackageId}::template::PlatformAdminCap` }
-        : ({} as never),
-      options: { showType: true },
-    },
-    { enabled: !!sender && !!originalPackageId },
-  );
+  const capQuery = useQuery({
+    queryKey: [network, 'walform:platform-admin-caps', sender, originalPackageId],
+    enabled: !!sender && !!originalPackageId,
+    queryFn: ({ signal }) =>
+      listOwnedObjectIds(client, {
+        owner: sender!,
+        type: `${originalPackageId!}::template::PlatformAdminCap`,
+        signal,
+      }),
+  });
 
-  const adminCapId =
-    (capQuery.data?.data ?? [])
-      .map((entry) => entry.data?.objectId)
-      .find((id): id is string => !!id) ?? null;
+  const adminCapId = capQuery.data?.[0] ?? null;
 
   return {
     isAdmin: !!adminCapId,

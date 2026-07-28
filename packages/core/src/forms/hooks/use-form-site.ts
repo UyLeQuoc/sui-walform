@@ -1,7 +1,10 @@
 'use client';
 
-import { useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
+import { getJsonObject } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 
 export interface WalrusSiteMetadata {
   link: string | null;
@@ -31,48 +34,34 @@ export function useFormSite(siteObjectId: string | null | undefined): {
   error: Error | null;
 } {
   const { network } = useSuiClientContext();
-  void network;
+  const client = useSuiGrpcClient();
 
-  const objectQuery = useSuiClientQuery(
-    'getObject',
-    {
-      id: siteObjectId ?? '',
-      options: { showContent: true, showType: true },
-    },
-    { enabled: !!siteObjectId },
-  );
+  // `site::Site` belongs to the Walrus Sites package, so there's no generated
+  // BCS struct for it here — read the gRPC `json` rendering instead. Every
+  // field consumed below is a `String`/`Option<String>`, which JSON renders
+  // unambiguously (the base64-vs-string trap only bites `vector<u8>`).
+  const objectQuery = useQuery({
+    queryKey: [network, 'walform:walrus-site', siteObjectId ?? null],
+    enabled: !!siteObjectId,
+    queryFn: ({ signal }) => getJsonObject(client, siteObjectId!, signal),
+  });
 
   let site: WalrusSiteOnChain | null = null;
-  if (siteObjectId && objectQuery.data?.data) {
-    const data = objectQuery.data.data;
-    const content = data.content as unknown as
-      | {
-          dataType: 'moveObject';
-          fields: {
-            name?: string;
-            metadata?: {
-              fields?: {
-                link?: string | null | OptionField;
-                image_url?: string | null | OptionField;
-                description?: string | null | OptionField;
-                project_url?: string | null | OptionField;
-                creator?: string | null | OptionField;
-              };
-            };
-          };
-        }
-      | undefined;
-    const fields = content?.fields;
-    const metaFields = fields?.metadata?.fields ?? {};
+  if (siteObjectId && objectQuery.data) {
+    const json = objectQuery.data.json as {
+      name?: string;
+      metadata?: Record<string, OptionField>;
+    };
+    const meta = json.metadata ?? {};
     site = {
-      siteId: normalizeSuiAddress(data.objectId),
-      name: fields?.name ?? '',
+      siteId: normalizeSuiAddress(objectQuery.data.objectId),
+      name: json.name ?? '',
       metadata: {
-        link: pickOption(metaFields.link),
-        imageUrl: pickOption(metaFields.image_url),
-        description: pickOption(metaFields.description),
-        projectUrl: pickOption(metaFields.project_url),
-        creator: pickOption(metaFields.creator),
+        link: pickOption(meta['link']),
+        imageUrl: pickOption(meta['image_url']),
+        description: pickOption(meta['description']),
+        projectUrl: pickOption(meta['project_url']),
+        creator: pickOption(meta['creator']),
       },
     };
   }

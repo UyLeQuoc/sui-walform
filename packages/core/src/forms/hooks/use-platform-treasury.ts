@@ -1,8 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useSuiClientContext } from '@mysten/dapp-kit';
 import { toast } from 'sonner';
+import { PlatformTreasury } from '../../sui/gen/walform/template';
+import { getMoveObject } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useActivePackageId } from '../../sui/package-id';
 import { useActivePlatformTreasuryId } from '../../sui/env-network';
 import { useIsPlatformAdmin } from '../../sui/use-platform-admin';
@@ -51,17 +55,16 @@ export function usePlatformTreasury(): UsePlatformTreasuryResult {
   const { isAdmin, adminCapId, isLoading: isCapLoading } = useIsPlatformAdmin();
 
   const treasuryId = useActivePlatformTreasuryId();
+  const { network } = useSuiClientContext();
+  const client = useSuiGrpcClient();
 
-  const treasuryQuery = useSuiClientQuery(
-    'getObject',
-    {
-      id: treasuryId ?? '',
-      options: { showContent: true, showType: true },
-    },
-    { enabled: !!treasuryId },
-  );
+  const treasuryQuery = useQuery({
+    queryKey: [network, 'walform:platform-treasury', treasuryId],
+    enabled: !!treasuryId,
+    queryFn: ({ signal }) => getMoveObject(client, PlatformTreasury, treasuryId!, signal),
+  });
 
-  const balanceMist = readBalance(treasuryQuery.data);
+  const balanceMist = treasuryQuery.data ? BigInt(treasuryQuery.data.fields.balance.value) : 0n;
 
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
@@ -110,19 +113,4 @@ export function usePlatformTreasury(): UsePlatformTreasuryResult {
     withdrawAll: (recipient) => runWithdraw(balanceMist, recipient),
     isWithdrawing,
   };
-}
-
-type GetObjectData = ReturnType<typeof useSuiClientQuery<'getObject'>>['data'];
-
-function readBalance(data: GetObjectData): bigint {
-  const obj = data?.data;
-  if (!obj) return 0n;
-  const content = obj.content as unknown as
-    | {
-        dataType: 'moveObject';
-        fields: { balance?: string | number };
-      }
-    | undefined;
-  const raw = content?.fields?.balance;
-  return raw != null ? BigInt(raw) : 0n;
 }

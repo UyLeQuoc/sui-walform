@@ -1,8 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
+import { TemplateVotes } from '../../sui/gen/walform/voting';
+import { getMoveObjects } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useOriginalPackageId } from '../../sui/package-id';
 import { useActiveNetwork } from '../../sui/env-network';
 import { queryEventsGql, type EventsPage } from '../../sui/graphql/events';
@@ -44,7 +47,7 @@ export function useMarketplaceVotes(): UseMarketplaceVotesResult {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
   const activeNetwork = useActiveNetwork();
-  const client = useSuiClient();
+  const client = useSuiGrpcClient();
 
   const query = useQuery<Map<string, TemplateVoteCounts>>({
     queryKey: [network, 'walform:marketplace-votes', originalPackageId],
@@ -79,36 +82,16 @@ export function useMarketplaceVotes(): UseMarketplaceVotesResult {
       const votesIds = [...votesByTemplate.values()];
       if (votesIds.length === 0) return new Map();
 
-      // 2) Fetch the TemplateVotes objects in batches of 50 (RPC cap).
+      // 2) Fetch + BCS-decode the TemplateVotes objects (batched internally).
       const out = new Map<string, TemplateVoteCounts>();
-      for (let i = 0; i < votesIds.length; i += 50) {
-        const part = await client.multiGetObjects({
-          ids: votesIds.slice(i, i + 50),
-          options: { showContent: true, showType: true },
+      for (const obj of await getMoveObjects(client, TemplateVotes, votesIds)) {
+        const tid = normalizeSuiAddress(obj.fields.template_id);
+        out.set(tid, {
+          votesId: obj.objectId,
+          templateId: tid,
+          upvotes: Number(obj.fields.upvotes),
+          downvotes: Number(obj.fields.downvotes),
         });
-        for (const entry of part) {
-          const obj = entry.data;
-          if (!obj?.objectId) continue;
-          const content = obj.content as unknown as
-            | {
-                dataType: 'moveObject';
-                fields: {
-                  template_id?: string;
-                  upvotes?: string | number;
-                  downvotes?: string | number;
-                };
-              }
-            | undefined;
-          const fields = content?.fields;
-          if (!fields?.template_id) continue;
-          const tid = normalizeSuiAddress(fields.template_id);
-          out.set(tid, {
-            votesId: obj.objectId,
-            templateId: tid,
-            upvotes: Number(fields.upvotes ?? 0),
-            downvotes: Number(fields.downvotes ?? 0),
-          });
-        }
       }
       return out;
     },

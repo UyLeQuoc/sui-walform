@@ -29,7 +29,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { WalrusClient, WalrusFile } from '@mysten/walrus';
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
+import { GrpcWebFetchTransport, SuiGrpcClient } from '@mysten/sui/grpc';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 
 type Network = 'testnet' | 'mainnet';
@@ -129,7 +129,16 @@ app.post('/', async (c) => {
 
   try {
     const keypair = Ed25519Keypair.fromSecretKey(SPONSOR_KEY);
-    const suiClient = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl(network), network });
+    // gRPC, not JSON-RPC: Sui decommissioned public JSON-RPC (testnet's
+    // endpoint answers 404 already, mainnet's switches off 2026-07-31). The
+    // Walrus SDK only needs the shared `core` API, which SuiGrpcClient
+    // implements. Override the endpoint per-deploy with SUI_GRPC_URL.
+    const suiClient = new SuiGrpcClient({
+      network,
+      transport: new GrpcWebFetchTransport({
+        baseUrl: process.env.SUI_GRPC_URL ?? `https://fullnode.${network}.sui.io`,
+      }),
+    });
     const walrus = new WalrusClient({
       network,
       suiClient,

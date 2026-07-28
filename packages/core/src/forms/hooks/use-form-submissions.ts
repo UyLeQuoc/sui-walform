@@ -1,8 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
+import { Submission } from '../../sui/gen/walform/submission';
+import { getMoveObjects } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useOriginalPackageId } from '../../sui/package-id';
 import { useActiveNetwork } from '../../sui/env-network';
 import { queryEventsGql, type EventsPage } from '../../sui/graphql/events';
@@ -28,14 +31,15 @@ export interface SubmissionRow {
 
 /**
  * List every Submission for a given form, sourced from chain. We use the
- * SubmissionCreated event stream as the index, then `multiGetObjects` to pull
- * the inline ciphertext + nonce off each Submission shared object.
+ * SubmissionCreated event stream (GraphQL — gRPC has no event query) as the
+ * index, then batch object reads over gRPC to pull the inline ciphertext +
+ * nonce off each Submission shared object.
  *
- * Both RPCs cap at 50 items per call, so we PAGINATE the event query (cursor
- * loop) and BATCH multiGetObjects in chunks of 50 — otherwise a form with >50
+ * Both sides cap at 50 items per call, so we PAGINATE the event query (cursor
+ * loop) and `getMoveObjects` batches internally — otherwise a form with >50
  * responses would only ever surface the first page. Discovery is still a
  * full SubmissionCreated scan filtered client-side by form_id (no per-field
- * RPC filter); fine at hackathon scale, an indexer is the production answer.
+ * server filter); fine at hackathon scale, an indexer is the production answer.
  *
  * Decryption is lazy — call `sealDecryptSubmission` per row when the user
  * expands it (the Seal session-key + key-server fetch is the expensive part).
@@ -48,7 +52,7 @@ export function useFormSubmissions(formObjectId: string | undefined): {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
   const activeNetwork = useActiveNetwork();
-  const client = useSuiClient();
+  const client = useSuiGrpcClient();
 
   const query = useQuery<SubmissionRow[]>({
     // Network-prefixed key so `invalidateChain` (invalidates the [network]
@@ -83,48 +87,25 @@ export function useFormSubmissions(formObjectId: string | undefined): {
         cursor = res.nextCursor;
       }
 
-      // 2) fetch the Submission objects in batches of 50 (RPC cap).
-      const objects: Awaited<ReturnType<typeof client.multiGetObjects>> = [];
-      for (let i = 0; i < ids.length; i += 50) {
-        const part = await client.multiGetObjects({
-          ids: ids.slice(i, i + 50),
-          options: { showContent: true, showType: true },
-        });
-        objects.push(...part);
-      }
+      // 2) fetch + BCS-decode the Submission objects (batched internally).
+      const objects = await getMoveObjects(client, Submission, ids);
 
-      // 3) decode inline ciphertext + nonce off each object.
+      // 3) map to rows.
       const out: SubmissionRow[] = [];
-      for (const entry of objects) {
-        const obj = entry.data;
-        if (!obj?.objectId) continue;
-        const content = obj.content as unknown as
-          | {
-              dataType: 'moveObject';
-              fields: {
-                form_id?: string;
-                submitter?: string;
-                encrypted_body?: number[];
-                file_blob_ids?: number[][];
-                nonce?: number[];
-                submitted_at_ms?: string | number;
-              };
-            }
-          | undefined;
-        const fields = content?.fields;
-        if (!fields) continue;
+      for (const obj of objects) {
+        const f = obj.fields;
         // Skip malformed rows where ciphertext or nonce is missing — Seal
         // decrypt would throw, and a non-decryptable "Encrypted" row is just
         // confusing.
-        if (!fields.encrypted_body?.length || !fields.nonce?.length) continue;
+        if (!f.encrypted_body.length || !f.nonce.length) continue;
         out.push({
           submissionId: obj.objectId,
-          formId: fields.form_id ? normalizeSuiAddress(fields.form_id) : '',
-          submitter: fields.submitter ? normalizeSuiAddress(fields.submitter) : '',
-          ciphertext: new Uint8Array(fields.encrypted_body),
-          nonce: new Uint8Array(fields.nonce),
-          fileBlobIds: (fields.file_blob_ids ?? []).map((b) => new Uint8Array(b)),
-          submittedAtMs: Number(fields.submitted_at_ms ?? 0),
+          formId: normalizeSuiAddress(f.form_id),
+          submitter: normalizeSuiAddress(f.submitter),
+          ciphertext: new Uint8Array(f.encrypted_body),
+          nonce: new Uint8Array(f.nonce),
+          fileBlobIds: f.file_blob_ids.map((b) => new Uint8Array(b)),
+          submittedAtMs: Number(f.submitted_at_ms),
         });
       }
       out.sort((a, b) => b.submittedAtMs - a.submittedAtMs);

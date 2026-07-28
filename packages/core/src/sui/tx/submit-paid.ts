@@ -1,13 +1,13 @@
 import { Transaction } from '@mysten/sui/transactions';
-import type { CoinStruct } from '@mysten/sui/jsonRpc';
+import type { SuiClientTypes } from '@mysten/sui/client';
 import { submitPaidAndShare } from '../gen/walform/submission';
 
 export interface BuildPaidSubmitTxInput {
   packageId: string;
   formObjectId: string;
   treasuryId: string;
-  /** SUI coins owned by the submitter, sorted server-side by `getCoins`. */
-  coins: CoinStruct[];
+  /** SUI coins owned by the submitter, as returned by `client.core.listCoins`. */
+  coins: SuiClientTypes.Coin[];
   feeMist: bigint;
   encryptedBody: Uint8Array;
   nonce: Uint8Array;
@@ -47,17 +47,17 @@ export function buildPaidSubmitTx(input: BuildPaidSubmitTxInput): BuildPaidSubmi
   // mergeCoins is a no-op when only one coin is held.
   if (BigInt(chosen.balance) < feeMist) {
     const dust = coins
-      .filter((c) => c.coinObjectId !== chosen.coinObjectId)
-      .map((c) => c.coinObjectId)
+      .filter((c) => c.objectId !== chosen.objectId)
+      .map((c) => c.objectId)
       .slice(0, 5);
     if (dust.length > 0) {
       tx.mergeCoins(
-        tx.object(chosen.coinObjectId),
+        tx.object(chosen.objectId),
         dust.map((id) => tx.object(id)),
       );
     }
   }
-  const [feeCoin] = tx.splitCoins(tx.object(chosen.coinObjectId), [tx.pure.u64(feeMist)]);
+  const [feeCoin] = tx.splitCoins(tx.object(chosen.objectId), [tx.pure.u64(feeMist)]);
   tx.add(
     submitPaidAndShare({
       package: packageId,

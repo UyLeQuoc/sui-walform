@@ -27,7 +27,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
+import { GrpcWebFetchTransport, SuiGrpcClient } from "@mysten/sui/grpc";
 import { WalrusClient, WalrusFile, blobIdToInt } from "@mysten/walrus";
 
 /**
@@ -163,9 +163,13 @@ async function main(): Promise<void> {
   const admin = Ed25519Keypair.fromSecretKey(secretKey);
   console.info(`[publish-to-walrus] signer = ${admin.toSuiAddress()}`);
 
-  const suiClient = new SuiJsonRpcClient({
-    url: getJsonRpcFullnodeUrl(NETWORK),
+  // gRPC, not JSON-RPC: Sui decommissioned public JSON-RPC (testnet's endpoint
+  // already answers 404, mainnet's switches off 2026-07-31).
+  const suiClient = new SuiGrpcClient({
     network: NETWORK,
+    transport: new GrpcWebFetchTransport({
+      baseUrl: process.env.SUI_GRPC_URL ?? `https://fullnode.${NETWORK}.sui.io`,
+    }),
   });
   const walrus = new WalrusClient({ network: NETWORK, suiClient });
 

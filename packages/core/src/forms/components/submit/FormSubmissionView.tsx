@@ -81,8 +81,10 @@ export function FormSubmissionView({ formId }: FormSubmissionViewProps) {
     );
   }
   if (!form.schema) {
-    // Private form + non-empty schemaRaw + parse failed = ciphertext (Seal v2).
-    if (form.accessMode === 1 && form.schemaRaw.length > 1) {
+    // Seal v2 ciphertext — use the shared `schemaSealed` flag rather than
+    // re-deriving it here, so this page and Results/editor can't drift apart on
+    // what counts as "sealed".
+    if (form.schemaSealed) {
       return <SealedSchemaGate form={form} />;
     }
     return (

@@ -22,7 +22,7 @@ import { resolve } from 'node:path';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { config as loadEnv } from 'dotenv';
 
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
+import { GrpcWebFetchTransport, SuiGrpcClient } from '@mysten/sui/grpc';
 import { Transaction, type TransactionObjectArgument } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
@@ -44,9 +44,13 @@ async function main() {
   };
   const packageId = deployed.packageId;
 
-  const client = new SuiJsonRpcClient({
-    url: getJsonRpcFullnodeUrl(NETWORK),
+  // gRPC, not JSON-RPC: Sui decommissioned public JSON-RPC (testnet's endpoint
+  // already answers 404, mainnet's switches off 2026-07-31).
+  const client = new SuiGrpcClient({
     network: NETWORK,
+    transport: new GrpcWebFetchTransport({
+      baseUrl: process.env.SUI_GRPC_URL ?? `https://fullnode.${NETWORK}.sui.io`,
+    }),
   });
 
   console.log(`Admin:    ${adminAddress}`);
@@ -96,29 +100,28 @@ async function main() {
   });
   tx.transferObjects([capArg], adminAddress);
 
-  const result = await client.signAndExecuteTransaction({
+  const executed = await client.signAndExecuteTransaction({
     transaction: tx,
     signer: admin,
-    options: { showObjectChanges: true, showEffects: true },
+    include: { effects: true, objectTypes: true },
   });
+  const result = executed.Transaction ?? executed.FailedTransaction;
 
-  if (result.effects?.status?.status !== 'success') {
-    console.error('Tx failed:', result.effects?.status);
+  if (!result?.status.success) {
+    console.error('Tx failed:', result?.status.error);
     process.exit(1);
   }
 
-  // RPC reports object types under `originalPackageId` regardless of which
+  // Object types are reported under `originalPackageId` regardless of which
   // package version performed the create — match by `::allowlist::Allowlist`
   // suffix so this works post-upgrade without re-keying on packageId.
-  const created_objs = (result.objectChanges ?? []) as Array<{
-    type?: string;
-    objectType?: string;
-    objectId?: string;
-  }>;
-  const allowlist = created_objs.find(
-    (c) => c.type === 'created' && c.objectType?.endsWith('::allowlist::Allowlist'),
-  );
-  if (!allowlist?.objectId) {
+  const objectTypes = result.objectTypes ?? {};
+  const allowlistId = (result.effects?.changedObjects ?? []).find(
+    (c) =>
+      c.idOperation === 'Created' &&
+      objectTypes[c.objectId]?.endsWith('::allowlist::Allowlist'),
+  )?.objectId;
+  if (!allowlistId) {
     console.error('No Allowlist created in tx');
     process.exit(1);
   }
@@ -126,11 +129,11 @@ async function main() {
   console.log('');
   console.log(`✅ Public throwaway Allowlist created`);
   console.log(`   Tx digest:   ${result.digest}`);
-  console.log(`   Allowlist:   ${allowlist.objectId}`);
+  console.log(`   Allowlist:   ${allowlistId}`);
 
   const envPath = resolve(import.meta.dir, '../../../apps/builder/.env.local');
   const envKey = `NEXT_PUBLIC_PUBLIC_SUBMIT_ALLOWLIST_ID_${NETWORK.toUpperCase()}`;
-  const wrote = upsertEnvVar(envPath, envKey, allowlist.objectId);
+  const wrote = upsertEnvVar(envPath, envKey, allowlistId);
   console.log(`   Wrote env:   ${envPath} :: ${envKey} (${wrote})`);
 }
 

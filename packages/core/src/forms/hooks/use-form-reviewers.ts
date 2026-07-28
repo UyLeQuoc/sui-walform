@@ -2,9 +2,13 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSuiClient, useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
+import type { SuiGrpcClient } from '@mysten/sui/grpc';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { toast } from 'sonner';
+import { FormReviewers } from '../../sui/gen/walform/reviewers';
+import { getMoveObject } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useActivePackageId } from '../../sui/package-id';
 import { useActiveNetwork, useReviewersEventPackageId } from '../../sui/env-network';
 import { queryEventsGql, type EventsPage } from '../../sui/graphql/events';
@@ -72,7 +76,7 @@ export function useFormReviewers(formId: string | undefined): UseFormReviewersRe
   const reviewersPkg = useReviewersEventPackageId();
   const { network } = useSuiClientContext();
   const activeNetwork = useActiveNetwork();
-  const client = useSuiClient();
+  const client = useSuiGrpcClient();
   const { execute } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
   const [isMutating, setIsMutating] = useState(false);
@@ -120,16 +124,16 @@ export function useFormReviewers(formId: string | undefined): UseFormReviewersRe
   const localId = created && created.formId === formId ? created.id : null;
   const reviewersId = reviewersIdQuery.data ?? localId ?? null;
 
-  const objectQuery = useSuiClientQuery(
-    'getObject',
-    {
-      id: reviewersId ?? '',
-      options: { showContent: true, showType: true },
-    },
-    { enabled: !!reviewersId },
-  );
+  const objectQuery = useQuery({
+    queryKey: [network, 'walform:reviewers', reviewersId],
+    enabled: !!reviewersId,
+    queryFn: ({ signal }) => getMoveObject(client, FormReviewers, reviewersId!, signal),
+  });
 
-  const { members, owner } = parseReviewers(objectQuery.data);
+  const tracker = objectQuery.data;
+  const owner = tracker ? normalizeSuiAddress(tracker.fields.owner) : null;
+  // `members` is a VecSet<address> → `{contents: address[]}` after BCS decode.
+  const members = (tracker?.fields.members.contents ?? []).map((m) => normalizeSuiAddress(m));
 
   const addReviewer = async (address: string, explicitReviewersId?: string) => {
     const targetReviewersId = explicitReviewersId ?? reviewersId;
@@ -233,53 +237,33 @@ export function useFormReviewers(formId: string | undefined): UseFormReviewersRe
 }
 
 /**
- * Pull the created `FormReviewers` object id out of a `create_and_share` tx's
- * objectChanges. Waits for the tx to be available, then reads the `created`
- * change whose type ends in `::reviewers::FormReviewers`. Returns null on any
- * failure — the caller falls back to the event-index lookup.
+ * Pull the created `FormReviewers` object id out of a `create_and_share` tx.
+ * Waits for the tx to settle, then finds the created object whose type ends in
+ * `::reviewers::FormReviewers`. Returns null on any failure — the caller falls
+ * back to the event-index lookup.
+ *
+ * `objectTypes` is the gRPC stand-in for JSON-RPC's `objectChanges`: effects
+ * name which objects the tx created, and the map names their types.
  */
 async function resolveCreatedReviewersId(
-  client: ReturnType<typeof useSuiClient>,
+  client: SuiGrpcClient,
   digest: string,
 ): Promise<string | null> {
   try {
-    await client.waitForTransaction({ digest });
-    const res = await client.getTransactionBlock({
+    const res = await client.core.waitForTransaction({
       digest,
-      options: { showObjectChanges: true },
+      include: { effects: true, objectTypes: true },
     });
-    for (const change of res.objectChanges ?? []) {
-      if (change.type === 'created' && change.objectType.endsWith('::reviewers::FormReviewers')) {
-        return normalizeSuiAddress(change.objectId);
+    const tx = res.Transaction ?? res.FailedTransaction;
+    const types = tx?.objectTypes ?? {};
+    for (const changed of tx?.effects?.changedObjects ?? []) {
+      if (changed.idOperation !== 'Created') continue;
+      if (types[changed.objectId]?.endsWith('::reviewers::FormReviewers')) {
+        return normalizeSuiAddress(changed.objectId);
       }
     }
   } catch {
     // Fall through — the event-index refetch will resolve it shortly.
   }
   return null;
-}
-
-type GetObjectData = ReturnType<typeof useSuiClientQuery<'getObject'>>['data'];
-
-function parseReviewers(data: GetObjectData): { members: string[]; owner: string | null } {
-  const obj = data?.data;
-  if (!obj) return { members: [], owner: null };
-  const content = obj.content as unknown as
-    | {
-        dataType: 'moveObject';
-        fields: {
-          owner?: string;
-          members?: { fields?: { contents?: string[] } } | string[];
-        };
-      }
-    | undefined;
-  const fields = content?.fields;
-  if (!fields) return { members: [], owner: null };
-  const owner = fields.owner ? normalizeSuiAddress(fields.owner) : null;
-  // VecSet<address> serializes as { contents: address[] } via Sui RPC.
-  const rawContents = Array.isArray(fields.members)
-    ? fields.members
-    : (fields.members?.fields?.contents ?? []);
-  const members = rawContents.map((m) => normalizeSuiAddress(m));
-  return { members, owner };
 }

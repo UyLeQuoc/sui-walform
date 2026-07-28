@@ -6,9 +6,10 @@ import { toast } from 'sonner';
 import {
   useCurrentAccount,
   useSignAndExecuteTransaction,
-  useSuiClient,
   useSuiClientContext,
 } from '@mysten/dapp-kit';
+import { useSuiGrpcClient } from '../../../sui/grpc/use-grpc-client';
+import { useCoreTransactionExecutor } from '../../../sui/use-core-executor';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { WalrusClient, WalrusFile, blobIdToInt } from '@mysten/walrus';
 import { Button } from '../../../ui/button';
@@ -40,9 +41,12 @@ import { WalrusSiteManageDialog } from './WalrusSiteManageDialog';
 export function DeployToWalrusSiteButton({ form }: { form: OnChainForm }) {
   const account = useCurrentAccount();
   const packageId = useActivePackageId();
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const { network } = useSuiClientContext();
-  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const broadcast = useCoreTransactionExecutor();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction({
+    execute: broadcast,
+  });
   const invalidateChain = useInvalidateChainQueries();
   const [stage, setStage] = useState<
     'idle' | 'loading-bundle' | 'uploading-walrus' | 'deploying' | 'done' | 'error'

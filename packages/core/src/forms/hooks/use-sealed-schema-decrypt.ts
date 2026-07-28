@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useSuiClient } from '@mysten/dapp-kit';
 import { toast } from 'sonner';
 import { sealDecryptFormSchema, useSealClient } from '../../crypto';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useActivePackageId } from '../../sui/package-id';
 import type { FormSchema } from '../../types';
 import { useFormAllowlist } from './use-form-allowlist';
@@ -34,7 +34,7 @@ export function useSealedSchemaDecrypt(
   input: UseSealedSchemaDecryptInput,
 ): UseSealedSchemaDecryptResult {
   const { formObjectId, ciphertext } = input;
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const seal = useSealClient();
   const packageId = useActivePackageId();
   const allowlistQuery = useFormAllowlist(formObjectId);

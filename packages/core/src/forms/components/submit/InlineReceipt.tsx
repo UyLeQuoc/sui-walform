@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Lock } from 'lucide-react';
-import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiGrpcClient } from '../../../sui/grpc/use-grpc-client';
 import { Button } from '../../../ui/button';
 import { Card, CardContent } from '../../../ui/card';
 import { Spinner } from '../../../ui/spinner';
@@ -30,7 +31,7 @@ interface InlineReceiptProps {
  */
 export function InlineReceipt({ formId, row, fields }: InlineReceiptProps) {
   const sealSession = useSealSession();
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const seal = useSealClient();
   const { network } = useSuiClientContext();
   const net = network === 'mainnet' || network === 'devnet' ? network : 'testnet';

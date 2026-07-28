@@ -2,16 +2,13 @@
 
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-import {
-  useCurrentAccount,
-  useCurrentWallet,
-  useSuiClient,
-  useSuiClientContext,
-  useSuiClientQuery,
-} from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useCurrentAccount, useCurrentWallet, useSuiClientContext } from '@mysten/dapp-kit';
+import type { SuiGrpcClient } from '@mysten/sui/grpc';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import type { FieldValues } from 'react-hook-form';
 import { sealEncryptSubmission, useSealClient } from '../../crypto';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
 import { useActivePublicAllowlistId } from '../../sui/env-network';
 import { buildSubmitTx } from '../../sui/tx/submit';
@@ -97,23 +94,21 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
   const packageId = useActivePackageId();
   const originalPackageId = useOriginalPackageId();
   const publicAllowlistId = useActivePublicAllowlistId();
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const seal = useSealClient();
   const allowlistQuery = useFormAllowlist(form.formObjectId);
   const treasuryQuery = useFormTreasury(form.accessMode === 3 ? form.formObjectId : undefined);
-  const tokenBalanceQuery = useSuiClientQuery(
-    'getBalance',
-    {
-      owner: account?.address ?? '',
-      coinType: form.requiredTokenType,
-    },
-    {
-      enabled: form.accessMode === 2 && !!account?.address && !!form.requiredTokenType,
-    },
-  );
-  const tokenHeld = tokenBalanceQuery.data?.totalBalance
-    ? BigInt(tokenBalanceQuery.data.totalBalance)
-    : 0n;
+  const tokenBalanceQuery = useQuery({
+    queryKey: [network, 'walform:token-balance', account?.address ?? null, form.requiredTokenType],
+    enabled: form.accessMode === 2 && !!account?.address && !!form.requiredTokenType,
+    queryFn: ({ signal }) =>
+      suiClient.core.getBalance({
+        owner: account!.address,
+        coinType: form.requiredTokenType,
+        signal,
+      }),
+  });
+  const tokenHeld = tokenBalanceQuery.data ? BigInt(tokenBalanceQuery.data.balance.balance) : 0n;
   const meetsTokenGate = form.accessMode !== 2 || tokenHeld >= form.requiredTokenAmount;
 
   const { execute } = useExecuteTransaction();
@@ -151,11 +146,11 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       // submit tx, not the wallet-signed body upload), so a zero-SUI wallet is
       // blocked here with a friendly message instead of the low-level
       // "No valid gas coins found" error.
-      const suiBalance = await suiClient.getBalance({
+      const suiBalance = await suiClient.core.getBalance({
         owner: account.address,
         coinType: '0x2::sui::SUI',
       });
-      if (BigInt(suiBalance.totalBalance) === 0n) {
+      if (BigInt(suiBalance.balance.balance) === 0n) {
         toast.error(
           network === 'testnet'
             ? 'Your wallet has no SUI to pay gas. Fund it from the testnet faucet and try again.'
@@ -481,12 +476,12 @@ interface BuildPaidInput {
   ciphertext: Uint8Array;
   nonce: Uint8Array;
   ownerAddress: string;
-  suiClient: ReturnType<typeof useSuiClient>;
+  suiClient: SuiGrpcClient;
 }
 
 async function buildPaid(input: BuildPaidInput) {
   const { packageId, form, treasuryId, ciphertext, nonce, ownerAddress, suiClient } = input;
-  const coins = await suiClient.getCoins({
+  const coins = await suiClient.core.listCoins({
     owner: ownerAddress,
     coinType: '0x2::sui::SUI',
     limit: 50,
@@ -495,7 +490,7 @@ async function buildPaid(input: BuildPaidInput) {
     packageId,
     formObjectId: form.formObjectId,
     treasuryId,
-    coins: coins.data,
+    coins: coins.objects,
     feeMist: form.submissionFeeMist,
     encryptedBody: ciphertext,
     nonce,

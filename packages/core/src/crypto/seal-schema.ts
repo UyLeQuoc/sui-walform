@@ -2,7 +2,7 @@
 
 import { Transaction } from '@mysten/sui/transactions';
 import type { SealClient, SessionKey } from '@mysten/seal';
-import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import type { ClientWithCoreApi } from '@mysten/sui/client';
 import { addressToBytes32, bytesToHex } from './seal-identity';
 import { getSealThreshold } from './seal-client';
 
@@ -46,7 +46,7 @@ export async function sealEncryptSchema(
 export interface SealDecryptFormSchemaInput {
   seal: SealClient;
   sessionKey: SessionKey;
-  client: SuiJsonRpcClient;
+  client: ClientWithCoreApi;
   packageId: string;
   formObjectId: string;
   allowlistObjectId: string;
@@ -77,7 +77,7 @@ export async function sealDecryptFormSchema(
 export interface SealDecryptTemplateSchemaInput {
   seal: SealClient;
   sessionKey: SessionKey;
-  client: SuiJsonRpcClient;
+  client: ClientWithCoreApi;
   packageId: string;
   templateObjectId: string;
   ciphertext: Uint8Array;

@@ -42,7 +42,7 @@ interface FormBuilderProps {
    * Publish button for an Update button (writes via `update_schema`) and shows a
    * banner. Auto-save is off in this mode — chain is the source of truth.
    */
-  onChainEdit?: { formObjectId: string; submissionCount: number };
+  onChainEdit?: { formObjectId: string; submissionCount: number; schemaSealed?: boolean };
 }
 
 export function FormBuilder({

@@ -1,6 +1,9 @@
 'use client';
 
-import { useCurrentAccount, useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useCurrentAccount, useSuiClientContext } from '@mysten/dapp-kit';
+import { getJsonObjects, listOwnedObjectIds } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 
 /**
  * SuiNS V1 packageIds — the `SuinsRegistration` NFT struct is defined here.
@@ -43,49 +46,46 @@ interface SuinsRegistrationFields {
  * network. Used by `LinkSuinsPanel` to let the user pick a name to link to a
  * freshly deployed Walrus Site.
  *
- * Does not paginate — most users hold ≤10 names; if a power-user with 50+
- * names ever shows up we can plumb pagination then.
+ * `SuinsRegistration` is a foreign type with no generated struct here, so this
+ * reads gRPC's `json` rendering. Every field used below is a String/u64, which
+ * JSON renders unambiguously.
  */
 export function useOwnedSuinsNames(): UseOwnedSuinsNamesResult {
   const account = useCurrentAccount();
   const { network } = useSuiClientContext();
+  const client = useSuiGrpcClient();
   const net = network === 'testnet' || network === 'mainnet' ? network : null;
   const structType = net ? SUINS_REGISTRATION_TYPE[net] : null;
+  const owner = account?.address;
 
-  const query = useSuiClientQuery(
-    'getOwnedObjects',
-    {
-      owner: account?.address ?? '',
-      filter: structType ? { StructType: structType } : undefined,
-      options: { showContent: true, showType: true },
-      limit: 50,
+  const query = useQuery({
+    queryKey: [network, 'walform:owned-suins', owner ?? null, structType],
+    enabled: !!owner && !!structType,
+    queryFn: async ({ signal }) => {
+      const ids = await listOwnedObjectIds(client, {
+        owner: owner!,
+        type: structType!,
+        signal,
+      });
+      return getJsonObjects(client, ids, signal);
     },
-    { enabled: !!account?.address && !!structType },
-  );
+  });
 
-  const names: OwnedSuinsName[] = (() => {
-    const items = query.data?.data ?? [];
-    return items
-      .map((item) => {
-        const obj = item.data;
-        if (!obj) return null;
-        const content = obj.content as
-          | { dataType: 'moveObject'; fields?: SuinsRegistrationFields }
-          | undefined;
-        const fields = content?.fields;
-        if (!fields?.domain_name) return null;
-        return {
-          nftId: obj.objectId,
-          domainName: fields.domain_name,
-          expirationTimestampMs: fields.expiration_timestamp_ms
-            ? Number(fields.expiration_timestamp_ms)
-            : 0,
-          imageUrl: fields.image_url ?? null,
-        } satisfies OwnedSuinsName;
-      })
-      .filter((x): x is OwnedSuinsName => x !== null)
-      .sort((a, b) => a.domainName.localeCompare(b.domainName));
-  })();
+  const names: OwnedSuinsName[] = (query.data ?? [])
+    .map((obj) => {
+      const fields = obj.json as SuinsRegistrationFields;
+      if (!fields.domain_name) return null;
+      return {
+        nftId: obj.objectId,
+        domainName: fields.domain_name,
+        expirationTimestampMs: fields.expiration_timestamp_ms
+          ? Number(fields.expiration_timestamp_ms)
+          : 0,
+        imageUrl: fields.image_url ?? null,
+      } satisfies OwnedSuinsName;
+    })
+    .filter((x): x is OwnedSuinsName => x !== null)
+    .sort((a, b) => a.domainName.localeCompare(b.domainName));
 
   return {
     names,

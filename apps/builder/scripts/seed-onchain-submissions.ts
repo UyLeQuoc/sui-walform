@@ -25,7 +25,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
+import { GrpcWebFetchTransport, SuiGrpcClient } from '@mysten/sui/grpc';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { SealClient } from '@mysten/seal';
 import { buildCreateFormTx } from '@walform/core/sui/tx/create-form';
@@ -114,11 +114,18 @@ function keyFromContractsEnv(): string | undefined {
   return undefined;
 }
 
-function findCreated(changes: unknown[], suffix: string): string | undefined {
-  for (const c of changes as Array<{ type?: string; objectType?: string; objectId?: string }>) {
-    if (c?.type === 'created' && c.objectType?.endsWith(suffix)) return c.objectId;
-  }
-  return undefined;
+/**
+ * Find a created object by type suffix in a gRPC tx result. `effects` says
+ * which objects the tx created; the `objectTypes` map says what they are.
+ */
+function findCreated(
+  created: { objectId: string; idOperation: string }[],
+  objectTypes: Record<string, string>,
+  suffix: string,
+): string | undefined {
+  return created.find(
+    (c) => c.idOperation === 'Created' && objectTypes[c.objectId]?.endsWith(suffix),
+  )?.objectId;
 }
 
 async function main() {
@@ -133,7 +140,13 @@ async function main() {
   const { secretKey } = decodeSuiPrivateKey(pk);
   const keypair = Ed25519Keypair.fromSecretKey(secretKey);
   const sender = keypair.toSuiAddress();
-  const client = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl('testnet'), network: 'testnet' });
+  // gRPC — testnet's public JSON-RPC endpoint answers 404 as of 2026-07.
+  const client = new SuiGrpcClient({
+    network: 'testnet',
+    transport: new GrpcWebFetchTransport({
+      baseUrl: process.env.SUI_GRPC_URL ?? 'https://fullnode.testnet.sui.io',
+    }),
+  });
 
   console.info(`Signer (testnet): ${sender}`);
 
@@ -156,13 +169,14 @@ async function main() {
       settings: { accessMode: 0 },
       allowlistMembers: [],
     });
-    const created = await client.signAndExecuteTransaction({
+    const executed = await client.signAndExecuteTransaction({
       transaction: createTx,
       signer: keypair,
-      options: { showObjectChanges: true, showEffects: true },
+      include: { effects: true, objectTypes: true },
     });
-    if (created.effects?.status?.status !== 'success') {
-      throw new Error(`create_form failed: ${JSON.stringify(created.effects?.status)}`);
+    const created = executed.Transaction ?? executed.FailedTransaction;
+    if (!created?.status.success) {
+      throw new Error(`create_form failed: ${JSON.stringify(created?.status.error)}`);
     }
     // Let the fullnode index the new gas-coin version before the first submit.
     try {
@@ -170,9 +184,10 @@ async function main() {
     } catch {
       /* best-effort */
     }
-    const changes = created.objectChanges ?? [];
-    formObjectId = findCreated(changes, '::form::Form');
-    allowlistId = findCreated(changes, '::allowlist::Allowlist');
+    const changed = created.effects?.changedObjects ?? [];
+    const objectTypes = created.objectTypes ?? {};
+    formObjectId = findCreated(changed, objectTypes, '::form::Form');
+    allowlistId = findCreated(changed, objectTypes, '::allowlist::Allowlist');
     if (!formObjectId || !allowlistId) {
       throw new Error('Could not resolve created Form / Allowlist from objectChanges.');
     }
@@ -236,13 +251,14 @@ async function main() {
           nonce,
           share: true,
         });
-        const res = await client.signAndExecuteTransaction({
+        const executed = await client.signAndExecuteTransaction({
           transaction: submitTx,
           signer: keypair,
-          options: { showEffects: true },
+          include: { effects: true },
         });
-        if (res.effects?.status?.status !== 'success') {
-          throw new Error(JSON.stringify(res.effects?.status));
+        const res = executed.Transaction ?? executed.FailedTransaction;
+        if (!res?.status.success) {
+          throw new Error(JSON.stringify(res?.status.error));
         }
         landed = true;
         ok++;

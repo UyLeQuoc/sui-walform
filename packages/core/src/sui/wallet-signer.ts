@@ -3,6 +3,7 @@
 import { Signer } from '@mysten/sui/cryptography';
 import type { Transaction } from '@mysten/sui/transactions';
 import type { ClientWithCoreApi } from '@mysten/sui/client';
+import { getOfficialSuiGrpcClient } from './grpc/client';
 
 /**
  * Adapter so the Walrus SDK (which expects a `Signer` from `@mysten/sui`)
@@ -162,21 +163,17 @@ async function pollUntilFound<T>(
   );
 }
 
+/**
+ * Ask Mysten's public fullnode whether it has indexed `digest` yet, over gRPC.
+ *
+ * This used to POST `sui_getTransactionBlock` to the same host. That endpoint
+ * is gone — testnet answers HTTP 404 to every JSON-RPC call and mainnet's
+ * switches off 2026-07-31 — and a 404 body isn't JSON, so the old version blew
+ * up on `res.json()` with an error `pollUntilFound` treats as fatal. That would
+ * have failed every Walrus upload, not just delayed it.
+ */
 async function verifyOnPublicRpc(digest: string, network: 'testnet' | 'mainnet'): Promise<void> {
-  const res = await fetch(`https://fullnode.${network}.sui.io`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'sui_getTransactionBlock',
-      params: [digest, { showEffects: false }],
-    }),
-  });
-  const j = (await res.json()) as { error?: { message?: string }; result?: unknown };
-  if (j.error) {
-    // Surface the full message so the retry filter in pollUntilFound matches.
-    throw new Error(j.error.message ?? 'public RPC error');
-  }
-  if (!j.result) throw new Error('not found on public RPC');
+  const res = await getOfficialSuiGrpcClient(network).core.getTransaction({ digest });
+  const tx = res.Transaction ?? res.FailedTransaction;
+  if (!tx) throw new Error('not found on public RPC');
 }

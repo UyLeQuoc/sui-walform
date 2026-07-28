@@ -1,28 +1,54 @@
-# JSON-RPC → GraphQL/gRPC migration (deadline 2026-07-31)
+# JSON-RPC → GraphQL/gRPC migration — **DONE** (2026-07-28)
 
-Every fact below was **verified empirically** against mainnet on 2026-07-16. Don't
+Every fact below was **verified empirically** against mainnet. Don't
 re-litigate them — re-run the probes only if something looks wrong.
+
+## Status
+
+**The app no longer speaks JSON-RPC anywhere.**
+
+| Read | Transport | Where |
+| --- | --- | --- |
+| Objects, balances, coins, transactions, execution | **gRPC** (official fullnode) | `packages/core/src/sui/grpc/{client,objects,use-grpc-client}.ts` |
+| Events | **GraphQL** (full-history indexer) | `packages/core/src/sui/graphql/events.ts` |
+| "Which txs called this Move function" | **GraphQL** (full-history indexer) | `packages/core/src/sui/graphql/transactions.ts` |
+
+The single remaining `SuiJsonRpcClient` mention is a **type-only cast** in
+`providers.tsx` — dApp Kit 1.1.5 declares its context client as
+`SuiJsonRpcClient` while accepting any client at runtime. Nothing calls a
+JSON-RPC method on it.
+
+Verified against live mainnet 2026-07-28: **14/14 parity checks** between the
+new gRPC/GraphQL paths and the JSON-RPC answers they replace — form fields,
+schema bytes, owned caps, submission ciphertext/nonce/submitter, template
+listing ids and prices.
 
 ## Why (urgent)
 
-Sui is shutting JSON-RPC down:
+Sui shut JSON-RPC down:
 
-- Testnet public JSON-RPC: **week of 2026-07-06** (already happening)
-- Mainnet public JSON-RPC: **week of 2026-07-20**
-- Full protocol-level deactivation: **2026-07-31**
+- Testnet public JSON-RPC: **already dead**. `fullnode.testnet.sui.io` answers
+  **HTTP 404** to every `sui_*` call (verified 2026-07-27 — the node itself is
+  healthy, still serving `x-sui-checkpoint-height` headers; it just no longer
+  speaks JSON-RPC).
+- Mainnet public JSON-RPC: still answering as of 2026-07-27, off **2026-07-31**.
 
-This is **already biting us**: `fullnode.mainnet.sui.io` returns a tx as executed
-while its object store still reports the pre-tx version — so freshly-added
-reviewers were invisible and `site-builder` deploys failed with
-`asked version N is higher than the latest M`. It is **not** transient lag.
+Before that it also served **stale** object state: `fullnode.mainnet.sui.io`
+returned a tx as executed while its object store still reported the pre-tx
+version — so freshly-added reviewers were invisible and `site-builder` deploys
+failed with `asked version N is higher than the latest M`. The gRPC surface on
+the same host does not have this problem (re-verified fresh 2026-07-27).
 
 ## Verified facts
 
 | Claim | Evidence |
 | --- | --- |
-| Official mainnet endpoint is **stale over BOTH protocols** | JSON-RPC + gRPC both return object `0x661d2a50…` at v883961553; suiscan/ZAN return v939333850. 5/5 calls stale — not an LB fluke. |
+| Testnet JSON-RPC is **gone** | `POST fullnode.testnet.sui.io:443` with `sui_getChainIdentifier` → **HTTP 404**, while the same response carries `x-sui-checkpoint-height: 365070648`. The node is up; the protocol is off. (2026-07-27) |
+| Official gRPC is **fresh + CORS-open** | `getObject(0x6)` returns the current clock; the preflight answers `access-control-allow-origin: *` and `access-control-allow-headers: *`, so gRPC-web works from the browser with no proxy and no key. (2026-07-27) |
 | gRPC does **NOT** have an event query | `.core` exposes `getObjects`/`listOwnedObjects`/`listCoins`/`getTransaction`/`listDynamicFields` — no `queryEvents` equivalent. Events must go **GraphQL**. |
-| gRPC returns **raw BCS** for object content | `getObject({include:{content:true}})` → `content: {"0":102,"1":29,…}` (bytes), not parsed `fields`. Decoding needs the Move struct layout. |
+| gRPC does **NOT** have a transaction query | Only `GetTransaction` **by digest**. "Which txs called this Move function" (needed for `TemplateListing` + `FormTreasury` discovery) must go **GraphQL** → `transactions(filter: { function: "pkg::mod::fn" })`. |
+| gRPC returns **raw BCS** for object content… | `getObject({include:{content:true}})` → bytes, not parsed `fields`. Decoding needs the Move struct layout. |
+| …which is why reads use the **checked-in codegen** | `packages/core/src/sui/gen/walform/*` MoveStructs `.parse(content)` exactly. Preferred over the `json` include (added in SDK 2.20) because JSON renders `vector<u8>` as base64 — indistinguishable from a Move `String`, so a sealed schema blob and a form title would arrive as the same type. Foreign types with no codegen (`site::Site`, SuiNS) use `json` via `getJsonObject`. |
 | **GraphQL returns parsed JSON** | `object(address:…){ asMoveObject { contents { json } } }` → `{form_id, owner, members:{contents:[…]}}`. Browser-native (plain HTTP). |
 | GraphQL **can** replace `queryEvents` | `events(filter:{ type:"…::reviewers::ReviewersCreated" }, first:N){ pageInfo{hasNextPage} nodes{ contents{ json } } }` → same payload as `parsedJson`. NOTE: the filter field is **`type`**, not `eventType`. |
 | gRPC has **no** event query — proven by reflection | `grpcurl … list` → LedgerService (GetObject/BatchGetObjects/GetTransaction/GetCheckpoint/GetEpoch), StateService (GetBalance/ListBalances/GetCoinInfo/ListOwnedObjects/ListDynamicFields), SubscriptionService (SubscribeCheckpoints only), TransactionExecution/MovePackage/NameService/SignatureVerification. **Zero event-query methods.** |
@@ -52,28 +78,46 @@ native gRPC (Node/CLI): grpc.zan.top:443  -H "x-token: …" -H "x-network: sui-m
 ZAN is the only provider on Mysten's list with **GraphQL on both testnet AND
 mainnet** (everyone else is mainnet-only) — WalForm needs both networks.
 
-## Plan
+## What shipped
 
-**Target GraphQL for the frontend, not gRPC** — gRPC's raw-BCS content would force
-us to decode Move layouts client-side, while GraphQL already returns the parsed
-shape the app's parsers want. And gRPC simply cannot do events at all, so GraphQL
-is mandatory regardless.
+The split is **gRPC for point reads, GraphQL only for the two things gRPC
+cannot do** (events, and tx-by-Move-function). An earlier draft of this plan
+proposed a JSON-RPC-shaped compat adapter over GraphQL; that was dropped —
+decoding BCS with the checked-in codegen is both simpler and *more* precise
+than the JSON-RPC shape it would have emulated (see the `vector<u8>` vs
+`String` ambiguity in the table above).
 
-Status: **events ✅ migrated** (step 3). **Object/tx reads ❌ still JSON-RPC**,
-riding the ZAN endpoint as a bridge — that is the remaining work before
-2026-07-31 (steps 1, 2, 5 below, plus `queryTransactionBlocks` in
-`use-template-listing` / `use-form-treasury`).
+1. **Client + read helpers — ✅ DONE (2026-07-28).**
+   `sui/grpc/client.ts` (per-network `SuiGrpcClient` over `GrpcWebFetchTransport`,
+   env-overridable via `NEXT_PUBLIC_SUI_GRPC_{TESTNET,MAINNET}`),
+   `sui/grpc/objects.ts` (`getMoveObject(s)` / `listOwnedMoveObjects` — BCS via
+   codegen, batched, drops unresolvable ids instead of throwing; `getJsonObject(s)`
+   for foreign types; `listOwnedObjectIds` for cap lookups), and
+   `sui/grpc/use-grpc-client.ts`. Injected through `SuiClientProvider`'s
+   `createClient`, so Seal / Walrus / SuiNS / `tx.build` all get it too.
+2. **Call sites — ✅ DONE (2026-07-28).** Every `useSuiClientQuery(...)` is gone;
+   hooks now use `useQuery` with a `[network, 'walform:…', …]` key so
+   `useInvalidateChainQueries` still catches them. Migrated:
+   `use-form-on-chain`, `use-on-chain-forms`, `use-form-allowlist`,
+   `use-form-submissions`, `use-form-reviewers`, `use-reviewing-forms`,
+   `use-marketplace-templates`, `use-marketplace-votes`, `use-template-listing`,
+   `use-form-treasury`, `use-platform-treasury`, `use-platform-admin`,
+   `use-form-site`, `use-template-schema`, `use-owned-suins-names`,
+   `use-form-submission`, plus `extract-form-ids` / `extract-walrus-site-id`
+   (JSON-RPC `objectChanges` → `effects.changedObjects` + the `objectTypes` map).
 
-1. **Adapter** (`packages/core/src/sui/graphql-compat-client.ts`): expose the
-   JSON-RPC method names the app calls, backed by ZAN GraphQL, mapping responses
-   back to the shapes the existing parsers expect. Inject via
-   `SuiClientProvider createClient`. Methods actually used by the app:
-   `getObject`, `multiGetObjects`, `getOwnedObjects`, `queryEvents`, `getBalance`,
-   `getCoins`, `getTransactionBlock`, `queryTransactionBlocks`, `waitForTransaction`.
-2. **Shape gap to close**: JSON-RPC nests Move structs as `X.fields.Y`; GraphQL's
-   `contents.json` does not (`members.contents`, not `members.fields.contents`).
-   Either normalize inside the adapter or update the parsers
-   (`parseReviewers`, `use-form-on-chain`, `use-on-chain-forms`, …).
+   ⚠️ **Every `useSignAndExecuteTransaction` call site must pass
+   `execute: useCoreTransactionExecutor()`** (`sui/use-core-executor.ts`). dApp
+   Kit's default executor calls `client.executeTransactionBlock`, which the gRPC
+   client does not have — and it fails at *signing time*, not build time. Four
+   call sites use it: `use-execute-transaction`, `walrus/wallet-upload`,
+   `DeployToWalrusSiteButton`, `WalrusSiteManageDialog`.
+
+   Also fixed here: `WalrusWalletSigner` was POSTing `sui_getTransactionBlock`
+   to `fullnode.<net>.sui.io` to confirm a tip payment before handing an upload
+   to a Walrus relay. That endpoint 404s, and a 404 body isn't JSON, so the
+   `res.json()` threw an error the retry filter treated as fatal — it would have
+   failed **every** Walrus upload. Now `getOfficialSuiGrpcClient(network).core.getTransaction`.
 3. **Event call sites (6) — ✅ DONE (2026-07-17).** All six now go through
    `packages/core/src/sui/graphql/events.ts` (`queryEventsGql` for cursor loops,
    `collectEventsGql` for full scans), backed by
@@ -117,6 +161,29 @@ riding the ZAN endpoint as a bridge — that is the remaining work before
 
    Other filters available: `sender`, `module` (cannot combine with `type`),
    `atCheckpoint` / `afterCheckpoint` / `beforeCheckpoint`.
+3b. **Transaction-history call sites (2) — ✅ DONE (2026-07-28).**
+   `use-template-listing` (`TemplateListing`) and `use-form-treasury`
+   (`FormTreasury`) discover their objects by scanning which txs called a Move
+   function — a query gRPC does not have. Both now go through
+   `packages/core/src/sui/graphql/transactions.ts :: collectCreatedObjectsGql`:
+
+   ```graphql
+   transactions(filter: { function: "pkg::module::fn" }, last: 50, before: $cursor) {
+     pageInfo { hasPreviousPage startCursor }
+     nodes { effects { objectChanges(last: 50) {
+       nodes { address idCreated outputState { asMoveObject { contents { type { repr } } } } }
+     } } }
+   }
+   ```
+
+   Mapping: `filter.MoveFunction.{package,module,function}` → one
+   fully-qualified `function` string; `order: 'descending'` → backward
+   pagination (`last`/`before`), same as events; `objectChanges[].type === 'created'`
+   → `idCreated`; `objectChanges[].objectType` → `outputState.asMoveObject.contents.type.repr`.
+
+   `use-form-treasury` also picked up a fix in passing: it used to be keyed per
+   form and fetch a fixed first page of 50 txs. It now paginates fully and
+   caches one shared scan across cards, like `use-template-listing`.
 4. **Bonus, kills an event scan**: add `reviewers_id: Option<address>` to `Form`
    (mirror the existing `site_object_id` pattern in `form.move`, already used by
    Mode B) + `set_reviewers_id`. Then the reviewers tracker is a direct field read
@@ -150,10 +217,27 @@ riding the ZAN endpoint as a bridge — that is the remaining work before
    `deploy --dry-run` also costs nothing and prints the real estimate
    (~0.048 WAL / 0.005 SUI for this site).
 
+6. **Node scripts — ✅ DONE (2026-07-28), UNVERIFIED AGAINST A LIVE RUN.**
+   `contracts/scripts/{publish,upgrade,setup-public-allowlist}.ts`,
+   `apps/builder/scripts/seed-onchain-submissions.ts` and
+   `packages/walform-site/scripts/publish-to-walrus.ts` all built a
+   `SuiJsonRpcClient`, so `contracts:upgrade --network testnet` was already
+   broken. They now build a `SuiGrpcClient` (override with `SUI_GRPC_URL`) and
+   read effects the gRPC way. Their `objectChanges` reads became
+   `effects.changedObjects` + `objectTypes`, and — the one non-obvious bit — a
+   **published package is a created object with `outputState: 'PackageWrite'`**
+   and no `objectTypes` entry, which is how the new packageId is identified.
+
+   These typecheck but were **not executed**: a real publish/upgrade spends SUI
+   and mutates the on-chain package. Do a testnet `contracts:upgrade` before
+   trusting them on mainnet.
+
 ## Security
 
-The ZAN key ships in the public JS bundle (any `NEXT_PUBLIC_*` does). **Restrict it
-by origin/referrer in the ZAN dashboard** to `walform.wal.app`.
+The indexer key ships in the public JS bundle (any `NEXT_PUBLIC_*` does).
+**Restrict it by origin/referrer in the provider's dashboard** to
+`walform.wal.app`. The gRPC side needs no key at all — the official fullnode is
+open and CORS-permissive — so the only secret in the bundle is the GraphQL one.
 
 ## Cost lesson
 

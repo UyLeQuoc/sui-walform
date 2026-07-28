@@ -4,12 +4,13 @@ import {
   useCurrentAccount,
   useSignAndExecuteTransaction,
   useSignTransaction,
-  useSuiClient,
   useSuiClientContext,
 } from '@mysten/dapp-kit';
 import { useCallback } from 'react';
 import { Transaction } from '@mysten/sui/transactions';
 import { toBase64 } from '@mysten/sui/utils';
+import { useSuiGrpcClient } from './grpc/use-grpc-client';
+import { useCoreTransactionExecutor } from './use-core-executor';
 
 export type SuiNetwork = 'testnet' | 'mainnet' | 'devnet';
 
@@ -53,9 +54,14 @@ export function isGasSponsored(network: string): boolean {
  */
 export function useExecuteTransaction(): UseExecuteTransactionResult {
   const account = useCurrentAccount();
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const { network } = useSuiClientContext();
-  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  // dApp Kit's default executor calls `client.executeTransactionBlock`, which
+  // the gRPC client doesn't have — see `useCoreTransactionExecutor`.
+  const broadcast = useCoreTransactionExecutor();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction({
+    execute: broadcast,
+  });
   const { mutateAsync: signTransaction } = useSignTransaction();
 
   const execute = useCallback(

@@ -2,8 +2,11 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
+import { Allowlist } from '../../sui/gen/walform/allowlist';
+import { getMoveObject } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useOriginalPackageId } from '../../sui/package-id';
 import { useActiveNetwork } from '../../sui/env-network';
 import { collectEventsGql } from '../../sui/graphql/events';
@@ -43,6 +46,7 @@ export function useFormAllowlist(formId: string | undefined): {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
   const activeNetwork = useActiveNetwork();
+  const client = useSuiGrpcClient();
 
   // Full paginated scan (descending → newest allowlist per form wins). The old
   // `limit: 200` single call was silently truncated to 50 by the RPC.
@@ -71,39 +75,17 @@ export function useFormAllowlist(formId: string | undefined): {
     return null;
   }, [eventsQuery.data, formId]);
 
-  const allowlistObjQuery = useSuiClientQuery(
-    'getObject',
-    {
-      id: matched?.allowlist_id ?? '',
-      options: { showContent: true, showType: true },
-    },
-    { enabled: !!matched?.allowlist_id },
-  );
+  const allowlistObjQuery = useQuery({
+    queryKey: [network, 'walform:allowlist', matched?.allowlist_id ?? null],
+    enabled: !!matched?.allowlist_id,
+    queryFn: ({ signal }) => getMoveObject(client, Allowlist, matched!.allowlist_id!, signal),
+  });
 
   const allowlist = useMemo<FormAllowlist | null>(() => {
     if (!matched) return null;
-    const data = allowlistObjQuery.data?.data;
-    let members: string[] = [];
-    if (data?.content) {
-      const content = data.content as unknown as
-        | {
-            dataType: 'moveObject';
-            fields: {
-              members?: { fields?: { contents?: string[] } } | { contents?: string[] } | string[];
-            };
-          }
-        | undefined;
-      const rawMembers = content?.fields?.members;
-      if (Array.isArray(rawMembers)) {
-        members = rawMembers as string[];
-      } else if (rawMembers && typeof rawMembers === 'object') {
-        const obj = rawMembers as { fields?: { contents?: string[] } } | { contents?: string[] };
-        const inner =
-          ('fields' in obj ? obj.fields?.contents : undefined) ??
-          ('contents' in obj ? obj.contents : undefined);
-        if (Array.isArray(inner)) members = inner as string[];
-      }
-    }
+    // `members` is a `VecSet<address>`; BCS decodes it to `{contents: [...]}`
+    // with no JSON-RPC `fields` wrapper to unwrap.
+    const members = allowlistObjQuery.data?.fields.members.contents ?? [];
     return {
       allowlistId: normalizeSuiAddress(matched.allowlist_id!),
       formId: normalizeSuiAddress(matched.form_id!),
@@ -113,7 +95,6 @@ export function useFormAllowlist(formId: string | undefined): {
     };
   }, [matched, allowlistObjQuery.data]);
 
-  void network;
   return {
     allowlist,
     isLoading:
