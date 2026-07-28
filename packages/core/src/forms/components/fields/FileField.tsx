@@ -5,7 +5,12 @@ import { Paperclip, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Controller, type Control, type FieldValues } from 'react-hook-form';
 import { Button } from '../../../ui/button';
-import { coerceFileAttachment, formatBytes } from '../../lib/file-attachment';
+import {
+  coerceFileAttachment,
+  formatBytes,
+  formatFileSizeCap,
+  resolveMaxFileBytes,
+} from '../../lib/file-attachment';
 import { PreviewField } from '../preview/PreviewField';
 import type { FormField } from '../../../types';
 
@@ -13,9 +18,6 @@ interface FileFieldProps {
   field: FormField;
   control: Control<FieldValues>;
 }
-
-/** Hard cap to keep a single Walrus blob within sane testnet bounds. */
-const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
 /**
  * File picker that *defers* the Walrus upload until form submit. The picked
@@ -46,9 +48,12 @@ export function FileField({ field, control }: FileFieldProps) {
 
         const handlePick = () => inputRef.current?.click();
 
+        const maxBytes = resolveMaxFileBytes(field);
+        const maxLabel = Number.isFinite(maxBytes) ? formatFileSizeCap(maxBytes) : null;
+
         const handleSelect = (file: File) => {
-          if (file.size > MAX_FILE_BYTES) {
-            toast.error(`File too large — max ${formatMiB(MAX_FILE_BYTES)} MiB.`);
+          if (file.size > maxBytes) {
+            toast.error(`File too large — max ${maxLabel}.`);
             return;
           }
           rhf.onChange(file);
@@ -97,7 +102,8 @@ export function FileField({ field, control }: FileFieldProps) {
                 className="w-full justify-start"
               >
                 <Upload className="mr-1.5 h-3.5 w-3.5" />
-                {field.placeholder ?? `Choose any file (max ${formatMiB(MAX_FILE_BYTES)} MiB)`}
+                {field.placeholder ??
+                  (maxLabel ? `Choose any file (max ${maxLabel})` : 'Choose any file')}
               </Button>
             )}
           </PreviewField>
@@ -144,8 +150,4 @@ function FilePill({
       </Button>
     </div>
   );
-}
-
-function formatMiB(bytes: number): number {
-  return Math.round(bytes / 1024 / 1024);
 }

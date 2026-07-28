@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { Ban, CalendarX, FileQuestion, FileWarning, Lock, TriangleAlert } from 'lucide-react';
+import { Button } from '../../../ui/button';
 import { useDocumentTitle } from '../../hooks/use-document-title';
 import { useFormOnChain } from '../../hooks/use-form-on-chain';
 import { CenteredMessage } from './CenteredMessage';
@@ -30,13 +32,24 @@ export function FormSubmissionView({ formId }: FormSubmissionViewProps) {
     return <div className="bg-secondary/40 min-h-screen animate-pulse" />;
   }
   if (error) {
-    return <CenteredMessage title="Failed to load form" description={error.message} />;
+    return (
+      <CenteredMessage
+        title="Failed to load form"
+        description={error.message}
+        icon={TriangleAlert}
+        tone="error"
+        action={
+          <Button onClick={() => window.location.reload()}>Try again</Button>
+        }
+      />
+    );
   }
   if (!form) {
     return (
       <CenteredMessage
         title="Form not found"
-        description="The form id is invalid or hasn't been published yet. Please check your network(testnet or mainnet)"
+        description="The form id is invalid or hasn't been published yet. If it lives on a different network, switch testnet ↔ mainnet from the header above."
+        icon={FileQuestion}
       />
     );
   }
@@ -45,6 +58,7 @@ export function FormSubmissionView({ formId }: FormSubmissionViewProps) {
       <CenteredMessage
         title="Form closed"
         description="The creator has closed this form. New submissions are no longer accepted."
+        icon={Lock}
       />
     );
   }
@@ -53,6 +67,7 @@ export function FormSubmissionView({ formId }: FormSubmissionViewProps) {
       <CenteredMessage
         title="Submission window ended"
         description={`This form stopped accepting responses at ${new Date(form.closesAtMs).toLocaleString()}.`}
+        icon={CalendarX}
       />
     );
   }
@@ -61,18 +76,23 @@ export function FormSubmissionView({ formId }: FormSubmissionViewProps) {
       <CenteredMessage
         title="Submission limit reached"
         description={`This form is capped at ${form.maxSubmissions} responses.`}
+        icon={Ban}
       />
     );
   }
   if (!form.schema) {
-    // Private form + non-empty schemaRaw + parse failed = ciphertext (Seal v2).
-    if (form.accessMode === 1 && form.schemaRaw.length > 1) {
+    // Seal v2 ciphertext — use the shared `schemaSealed` flag rather than
+    // re-deriving it here, so this page and Results/editor can't drift apart on
+    // what counts as "sealed".
+    if (form.schemaSealed) {
       return <SealedSchemaGate form={form} />;
     }
     return (
       <CenteredMessage
         title="Form schema unavailable"
         description="The form's schema is empty or couldn't be parsed. The creator may need to re-publish."
+        icon={FileWarning}
+        tone="error"
       />
     );
   }

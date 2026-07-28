@@ -2,22 +2,26 @@
 
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-import {
-  useCurrentAccount,
-  useCurrentWallet,
-  useSuiClient,
-  useSuiClientQuery,
-} from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useCurrentAccount, useCurrentWallet, useSuiClientContext } from '@mysten/dapp-kit';
+import type { SuiGrpcClient } from '@mysten/sui/grpc';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import type { FieldValues } from 'react-hook-form';
 import { sealEncryptSubmission, useSealClient } from '../../crypto';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
 import { useActivePublicAllowlistId } from '../../sui/env-network';
 import { buildSubmitTx } from '../../sui/tx/submit';
 import { buildPaidSubmitTx, InsufficientSuiError } from '../../sui/tx/submit-paid';
 import { useExecuteTransaction } from '../../sui/use-execute-transaction';
 import { useInvalidateChainQueries } from '../../sui/use-invalidate-chain';
-import { encodeBodyPointer, useWalrusWalletUpload } from '../../walrus';
+import {
+  canSponsorUpload,
+  encodeBodyPointer,
+  sponsoredQuiltUpload,
+  useWalrusWalletUpload,
+  type QuiltUploadResult,
+} from '../../walrus';
 import { formatSui } from '../lib/sui-amount';
 import { useFormAllowlist } from './use-form-allowlist';
 import { useFormTreasury } from './use-form-treasury';
@@ -86,26 +90,25 @@ export interface UseFormSubmissionResult {
 export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionResult {
   const { isConnected } = useCurrentWallet();
   const account = useCurrentAccount();
+  const { network } = useSuiClientContext();
   const packageId = useActivePackageId();
   const originalPackageId = useOriginalPackageId();
   const publicAllowlistId = useActivePublicAllowlistId();
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const seal = useSealClient();
   const allowlistQuery = useFormAllowlist(form.formObjectId);
   const treasuryQuery = useFormTreasury(form.accessMode === 3 ? form.formObjectId : undefined);
-  const tokenBalanceQuery = useSuiClientQuery(
-    'getBalance',
-    {
-      owner: account?.address ?? '',
-      coinType: form.requiredTokenType,
-    },
-    {
-      enabled: form.accessMode === 2 && !!account?.address && !!form.requiredTokenType,
-    },
-  );
-  const tokenHeld = tokenBalanceQuery.data?.totalBalance
-    ? BigInt(tokenBalanceQuery.data.totalBalance)
-    : 0n;
+  const tokenBalanceQuery = useQuery({
+    queryKey: [network, 'walform:token-balance', account?.address ?? null, form.requiredTokenType],
+    enabled: form.accessMode === 2 && !!account?.address && !!form.requiredTokenType,
+    queryFn: ({ signal }) =>
+      suiClient.core.getBalance({
+        owner: account!.address,
+        coinType: form.requiredTokenType,
+        signal,
+      }),
+  });
+  const tokenHeld = tokenBalanceQuery.data ? BigInt(tokenBalanceQuery.data.balance.balance) : 0n;
   const meetsTokenGate = form.accessMode !== 2 || tokenHeld >= form.requiredTokenAmount;
 
   const { execute } = useExecuteTransaction();
@@ -138,17 +141,20 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         return false;
       }
 
-      // Pre-flight gas check. WalForm doesn't sponsor any transactions — the
-      // submitter signs and pays SUI gas. A wallet with zero SUI on this
-      // network would otherwise surface as the unfriendly low-level
-      // "No valid gas coins found for the transaction" error.
-      const suiBalance = await suiClient.getBalance({
+      // Pre-flight gas check. The submitter still signs + pays SUI gas for the
+      // body Walrus upload + the submit tx (the gas sponsor only covers the
+      // submit tx, not the wallet-signed body upload), so a zero-SUI wallet is
+      // blocked here with a friendly message instead of the low-level
+      // "No valid gas coins found" error.
+      const suiBalance = await suiClient.core.getBalance({
         owner: account.address,
         coinType: '0x2::sui::SUI',
       });
-      if (BigInt(suiBalance.totalBalance) === 0n) {
+      if (BigInt(suiBalance.balance.balance) === 0n) {
         toast.error(
-          'Your wallet has no SUI to pay gas. Fund it from the testnet faucet and try again.',
+          network === 'testnet'
+            ? 'Your wallet has no SUI to pay gas. Fund it from the testnet faucet and try again.'
+            : 'Your wallet has no SUI to pay gas. Add some SUI to this wallet and try again.',
         );
         return false;
       }
@@ -218,24 +224,44 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         //    file. Each file's resulting aggregator URL slots back into
         //    `values` as a `FileAttachmentValue` before encrypt.
         if (pendingFiles.length > 0) {
-          steps.advance(
-            'files',
-            pendingFiles.length === 1
-              ? 'Wallet will prompt to sign one Walrus storage tx.'
-              : `Wallet will prompt to sign ONE Walrus storage tx for all ${pendingFiles.length} files.`,
-          );
           const fileBytes = await Promise.all(
             pendingFiles.map((p) => p.file.arrayBuffer().then((b) => new Uint8Array(b))),
           );
-          const quilt = await uploadQuilt(
-            pendingFiles.map(({ fieldId, file }, i) => ({
-              // Identifier must be unique within the Quilt — prefix with
-              // index so two attachments named `photo.jpg` don't collide.
-              identifier: `/${i}-${fieldId}-${file.name}`,
-              bytes: fileBytes[i]!,
-            })),
-            { epochs: 10 },
+          const quiltInputs = pendingFiles.map(({ fieldId, file }, i) => ({
+            // Identifier must be unique within the Quilt — prefix with
+            // index so two attachments named `photo.jpg` don't collide.
+            identifier: `/${i}-${fieldId}-${file.name}`,
+            bytes: fileBytes[i]!,
+          }));
+          const totalBytes = quiltInputs.reduce((n, f) => n + f.bytes.length, 0);
+          const sponsorNet = network === 'testnet' || network === 'mainnet' ? network : null;
+          // Prefer the platform sponsor (WAL paid by us, no wallet prompt) when
+          // configured + within the size cap; otherwise the wallet pays.
+          const willSponsor = !!sponsorNet && !!account && canSponsorUpload(totalBytes);
+          steps.advance(
+            'files',
+            willSponsor
+              ? 'Uploading attachments to Walrus (sponsored — no wallet prompt).'
+              : pendingFiles.length === 1
+                ? 'Wallet will prompt to sign one Walrus storage tx.'
+                : `Wallet will prompt to sign ONE Walrus storage tx for all ${pendingFiles.length} files.`,
           );
+          let quilt: QuiltUploadResult;
+          if (willSponsor && sponsorNet && account) {
+            try {
+              quilt = await sponsoredQuiltUpload(quiltInputs, {
+                network: sponsorNet,
+                sender: account.address,
+              });
+            } catch (e) {
+              // Sponsor down / over quota → fall back to wallet-paid upload.
+              console.warn('Sponsored upload failed — falling back to wallet-paid.', e);
+              steps.advance('files', 'Sponsor unavailable — wallet will sign the Walrus tx.');
+              quilt = await uploadQuilt(quiltInputs, { epochs: 10 });
+            }
+          } else {
+            quilt = await uploadQuilt(quiltInputs, { epochs: 10 });
+          }
           quilt.files.forEach((result, i) => {
             const { fieldId, file } = pendingFiles[i]!;
             const next: FileAttachmentValue = {
@@ -450,12 +476,12 @@ interface BuildPaidInput {
   ciphertext: Uint8Array;
   nonce: Uint8Array;
   ownerAddress: string;
-  suiClient: ReturnType<typeof useSuiClient>;
+  suiClient: SuiGrpcClient;
 }
 
 async function buildPaid(input: BuildPaidInput) {
   const { packageId, form, treasuryId, ciphertext, nonce, ownerAddress, suiClient } = input;
-  const coins = await suiClient.getCoins({
+  const coins = await suiClient.core.listCoins({
     owner: ownerAddress,
     coinType: '0x2::sui::SUI',
     limit: 50,
@@ -464,7 +490,7 @@ async function buildPaid(input: BuildPaidInput) {
     packageId,
     formObjectId: form.formObjectId,
     treasuryId,
-    coins: coins.data,
+    coins: coins.objects,
     feeMist: form.submissionFeeMist,
     encryptedBody: ciphertext,
     nonce,

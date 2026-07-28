@@ -1,8 +1,14 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useCurrentAccount, useSuiClientContext, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useCurrentAccount, useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
+import { Form } from '../../sui/gen/walform/form';
+import { FormOwnerCap } from '../../sui/gen/walform/form_owner_cap';
+import { FormTemplate } from '../../sui/gen/walform/template';
+import { getMoveObjects, listOwnedMoveObjects } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useOriginalPackageId } from '../../sui/package-id';
 
 export interface OnChainForm {
@@ -52,14 +58,15 @@ export interface UseOnChainFormsResult {
  * they survive browser/device changes.
  *
  * Flow:
- *   1. getOwnedObjects filter StructType=FormOwnerCap → extract (capId, formId).
- *   2. multiGetObjects(formIds) → read settings/stats/closed fields.
- *   3. getOwnedObjects filter StructType=FormTemplate → extract template metadata.
+ *   1. listOwnedObjects type=FormOwnerCap → extract (capId, formId).
+ *   2. getObjects(formIds) → read settings/stats/closed fields.
+ *   3. listOwnedObjects type=FormTemplate → extract template metadata.
  */
 export function useOnChainForms(): UseOnChainFormsResult {
   const account = useCurrentAccount();
   const { network } = useSuiClientContext();
   const originalPackageId = useOriginalPackageId();
+  const client = useSuiGrpcClient();
 
   const owner = account?.address;
   const packageMissing = !originalPackageId;
@@ -68,107 +75,69 @@ export function useOnChainForms(): UseOnChainFormsResult {
   // query data change anyway.
   const [nowMs] = useState(() => Date.now());
 
-  const capsQuery = useSuiClientQuery(
-    'getOwnedObjects',
-    {
-      owner: owner ?? '',
-      filter: originalPackageId
-        ? { StructType: `${originalPackageId}::form_owner_cap::FormOwnerCap` }
-        : undefined,
-      options: { showType: true, showContent: true },
-    },
-    { enabled: !!owner && !!originalPackageId },
+  const capsQuery = useQuery({
+    queryKey: [network, 'walform:owned-form-caps', owner ?? null, originalPackageId],
+    enabled: !!owner && !!originalPackageId,
+    queryFn: ({ signal }) =>
+      listOwnedMoveObjects(client, FormOwnerCap, {
+        owner: owner!,
+        type: `${originalPackageId!}::form_owner_cap::FormOwnerCap`,
+        signal,
+      }),
+  });
+
+  const capEntries = useMemo(
+    () =>
+      (capsQuery.data ?? []).map((cap) => ({
+        capId: cap.objectId,
+        formId: normalizeSuiAddress(cap.fields.form_id),
+      })),
+    [capsQuery.data],
   );
 
-  const capEntries = useMemo(() => {
-    const pages = capsQuery.data?.data ?? [];
-    const out: Array<{ capId: string; formId: string }> = [];
-    for (const entry of pages) {
-      const obj = entry.data;
-      if (!obj?.objectId) continue;
-      const content = obj.content as unknown as
-        | { dataType: 'moveObject'; fields: { form_id?: string } }
-        | undefined;
-      const formId = content?.fields?.form_id;
-      if (!formId) continue;
-      out.push({ capId: obj.objectId, formId });
-    }
-    return out;
-  }, [capsQuery.data]);
+  const formIds = useMemo(() => capEntries.map((e) => e.formId), [capEntries]);
 
-  const formsQuery = useSuiClientQuery(
-    'multiGetObjects',
-    {
-      ids: capEntries.map((e) => e.formId),
-      options: { showContent: true, showType: true },
-    },
-    { enabled: capEntries.length > 0 },
-  );
+  const formsQuery = useQuery({
+    queryKey: [network, 'walform:forms-by-id', formIds],
+    enabled: formIds.length > 0,
+    queryFn: ({ signal }) => getMoveObjects(client, Form, formIds, signal),
+  });
 
-  const templatesQuery = useSuiClientQuery(
-    'getOwnedObjects',
-    {
-      owner: owner ?? '',
-      filter: originalPackageId
-        ? { StructType: `${originalPackageId}::template::FormTemplate` }
-        : undefined,
-      options: { showType: true, showContent: true },
-    },
-    { enabled: !!owner && !!originalPackageId },
-  );
+  const templatesQuery = useQuery({
+    queryKey: [network, 'walform:owned-templates', owner ?? null, originalPackageId],
+    enabled: !!owner && !!originalPackageId,
+    queryFn: ({ signal }) =>
+      listOwnedMoveObjects(client, FormTemplate, {
+        owner: owner!,
+        type: `${originalPackageId!}::template::FormTemplate`,
+        signal,
+      }),
+  });
 
   const { running, ended } = useMemo(() => {
     const now = nowMs;
+    // Key by formId rather than pairing by array index: a form whose object no
+    // longer resolves is dropped from the batch, which would shift every
+    // subsequent cap onto the wrong form under index pairing.
+    const capByFormId = new Map(capEntries.map((e) => [e.formId, e.capId]));
     const rows: OnChainForm[] = [];
-    const results = formsQuery.data ?? [];
-    for (let i = 0; i < results.length; i++) {
-      const entry = results[i];
-      const cap = capEntries[i];
-      if (!entry || !cap || !entry.data?.content) continue;
-      const content = entry.data.content as unknown as {
-        dataType: 'moveObject';
-        fields: {
-          title?: string;
-          closed?: boolean;
-          schema?: number[];
-          site_object_id?: string | null | { Some?: string; vec?: string[] };
-          settings?: {
-            fields?: {
-              access_mode?: number | string;
-              closes_at_ms?: string | number;
-              max_submissions?: string | number;
-            };
-          };
-          stats?: { fields?: { submission_count?: string | number } };
-        };
-      };
-      const fields = content.fields;
-      const settings = fields.settings?.fields ?? {};
-      const stats = fields.stats?.fields ?? {};
-      const coverImage = extractCoverImage(fields.schema);
-      // Form.site_object_id is Option<address>: serialised as the address
-      // directly when Some, null when None.
-      let siteObjectId: string | null = null;
-      const rawSite = fields.site_object_id;
-      if (typeof rawSite === 'string') {
-        siteObjectId = normalizeSuiAddress(rawSite);
-      } else if (rawSite && typeof rawSite === 'object') {
-        const maybe =
-          ('Some' in rawSite ? rawSite.Some : undefined) ??
-          ('vec' in rawSite ? rawSite.vec?.[0] : undefined);
-        if (maybe) siteObjectId = normalizeSuiAddress(maybe);
-      }
+    for (const obj of formsQuery.data ?? []) {
+      const formId = normalizeSuiAddress(obj.objectId);
+      const capId = capByFormId.get(formId);
+      if (!capId) continue;
+      const f = obj.fields;
       rows.push({
-        capId: cap.capId,
-        formId: cap.formId,
-        title: fields.title ?? 'Untitled',
-        closesAtMs: Number(settings.closes_at_ms ?? 0),
-        maxSubmissions: Number(settings.max_submissions ?? 0),
-        submissionCount: Number(stats.submission_count ?? 0),
-        accessMode: Number(settings.access_mode ?? 0),
-        closed: Boolean(fields.closed),
-        siteObjectId,
-        coverImage,
+        capId,
+        formId,
+        title: f.title || 'Untitled',
+        closesAtMs: Number(f.settings.closes_at_ms),
+        maxSubmissions: Number(f.settings.max_submissions),
+        submissionCount: Number(f.stats.submission_count),
+        accessMode: Number(f.settings.access_mode),
+        closed: f.closed,
+        // BCS gives `Option<address>` as the address or null outright.
+        siteObjectId: f.site_object_id ? normalizeSuiAddress(f.site_object_id) : null,
+        coverImage: extractCoverImage(f.schema),
       });
     }
     const running: OnChainForm[] = [];
@@ -180,38 +149,19 @@ export function useOnChainForms(): UseOnChainFormsResult {
     return { running, ended };
   }, [formsQuery.data, capEntries, nowMs]);
 
-  const templates = useMemo<OnChainTemplate[]>(() => {
-    const pages = templatesQuery.data?.data ?? [];
-    const out: OnChainTemplate[] = [];
-    for (const entry of pages) {
-      const obj = entry.data;
-      if (!obj?.objectId) continue;
-      const content = obj.content as unknown as
-        | {
-            dataType: 'moveObject';
-            fields: {
-              title?: string;
-              description?: string;
-              category?: number | string;
-              clone_count?: number | string;
-              creator?: string;
-              tags?: string[];
-            };
-          }
-        | undefined;
-      if (!content?.fields) continue;
-      out.push({
+  const templates = useMemo<OnChainTemplate[]>(
+    () =>
+      (templatesQuery.data ?? []).map((obj) => ({
         templateId: obj.objectId,
-        title: content.fields.title ?? 'Untitled template',
-        description: content.fields.description ?? '',
-        category: Number(content.fields.category ?? 0),
-        cloneCount: Number(content.fields.clone_count ?? 0),
-        creator: content.fields.creator ? normalizeSuiAddress(content.fields.creator) : '',
-        tags: content.fields.tags ?? [],
-      });
-    }
-    return out;
-  }, [templatesQuery.data]);
+        title: obj.fields.title || 'Untitled template',
+        description: obj.fields.description,
+        category: Number(obj.fields.category),
+        cloneCount: Number(obj.fields.clone_count),
+        creator: normalizeSuiAddress(obj.fields.creator),
+        tags: obj.fields.tags,
+      })),
+    [templatesQuery.data],
+  );
 
   const isLoading =
     (!!owner && capsQuery.isPending) ||
@@ -223,7 +173,6 @@ export function useOnChainForms(): UseOnChainFormsResult {
     (templatesQuery.error as Error | null) ??
     null;
 
-  void network;
   return { running, ended, templates, isLoading, error, packageMissing };
 }
 
@@ -232,7 +181,7 @@ export function useOnChainForms(): UseOnChainFormsResult {
  * Sealed-schema forms (encrypted bytes) and any malformed/missing input
  * return null silently — the caller falls back to the status-tinted banner.
  */
-function extractCoverImage(schema: number[] | undefined): string | null {
+function extractCoverImage(schema: number[] | Uint8Array | undefined): string | null {
   if (!schema || schema.length === 0) return null;
   try {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(schema));

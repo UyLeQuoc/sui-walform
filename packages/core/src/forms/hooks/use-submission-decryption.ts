@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import {
   buildSealApproveBatch,
   getSealThreshold,
   sealDecryptSubmission,
-  useSealClient,
+  useSealDecryptClient,
 } from '../../crypto';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
 import { decodeBodyPointer, fetchWalrusBlob } from '../../walrus';
@@ -23,8 +24,8 @@ export type DecryptedRow = Record<string, unknown>;
  * all" at once stampedes the public Sui fullnode, which rate-limits with HTTP
  * 429 — and a 429 response carries no CORS headers, so the browser reports it
  * as a misleading "blocked by CORS policy" error. Capping the fan-out keeps us
- * under the limit. (Point `NEXT_PUBLIC_SUI_RPC_{TESTNET,MAINNET}` at a
- * higher-limit RPC to raise the ceiling.)
+ * under the limit. (Point `NEXT_PUBLIC_SUI_GRPC_{TESTNET,MAINNET}` at a
+ * higher-limit endpoint to raise the ceiling.)
  */
 const DECRYPT_CONCURRENCY = 4;
 
@@ -89,8 +90,8 @@ export function useSubmissionDecryption(
 ): UseSubmissionDecryptionResult {
   const { formId } = input;
   const sealSession = useSealSession();
-  const suiClient = useSuiClient();
-  const seal = useSealClient();
+  const suiClient = useSuiGrpcClient();
+  const sealFor = useSealDecryptClient();
   const { network } = useSuiClientContext();
   // Seal namespace stays on the original packageId (encryption identity),
   // but the moveCall target needs the CURRENT packageId — Sui upgrade
@@ -126,7 +127,7 @@ export function useSubmissionDecryption(
   // skipped and the key is already cached, so this runs with no extra RPC.
   const decryptRow = useCallback(
     async (row: SubmissionRow, prebuiltTxBytes?: Uint8Array) => {
-      if (!originalPackageId || !activePackageId || !seal) return;
+      if (!originalPackageId || !activePackageId) return;
       if (network !== 'testnet' && network !== 'mainnet') return;
       addPending(row.submissionId);
       setErrorById((prev) => {
@@ -142,6 +143,11 @@ export function useSubmissionDecryption(
         // ciphertexts skip this step.
         const blobId = decodeBodyPointer(row.ciphertext);
         const ciphertext = blobId ? await fetchWalrusBlob(blobId, network) : row.ciphertext;
+        // Resolve the client from the REAL ciphertext (after the Walrus hop):
+        // responses submitted before the key-server migration name the old
+        // server and can only be opened by a client configured for it.
+        const seal = sealFor(ciphertext);
+        if (!seal) throw new Error('Seal is not configured for this network.');
         // Retry once on the very first decrypt — the Seal SDK lazily loads
         // key-server metadata on the first `seal.decrypt`, and a slow warmup
         // otherwise looks like "spinner stopped and nothing happened until I
@@ -187,7 +193,7 @@ export function useSubmissionDecryption(
     [
       originalPackageId,
       activePackageId,
-      seal,
+      sealFor,
       network,
       sealSession,
       suiClient,
@@ -204,7 +210,7 @@ export function useSubmissionDecryption(
 
   const decryptAll = useCallback(
     async (rows: SubmissionRow[]) => {
-      if (!originalPackageId || !activePackageId || !seal) return;
+      if (!originalPackageId || !activePackageId) return;
       if (network !== 'testnet' && network !== 'mainnet') return;
       // Pre-warm the Seal session FIRST so the wallet only pops one signature
       // prompt for the whole batch. ensureSession sets its own error state on
@@ -235,6 +241,15 @@ export function useSubmissionDecryption(
         if (!batchSessionKey) return;
         let batchTxBytes: Uint8Array | undefined;
         try {
+          // The prefetch has to pick ONE client for the whole batch, so read it
+          // off the first row. A Walrus-pointer body can't be inspected without
+          // fetching it, and `decodeBodyPointer` returning non-null says it is
+          // one — in that case skip the prefetch and let each row resolve its
+          // own client below. Correctness over a saved round trip.
+          const first = batch[0];
+          const inline = first && !decodeBodyPointer(first.ciphertext) ? first.ciphertext : null;
+          const batchSeal = inline ? sealFor(inline) : null;
+          if (!batchSeal) throw new Error('batch client unresolved — decrypt per row');
           const approve = await buildSealApproveBatch({
             client: suiClient,
             packageId: activePackageId,
@@ -242,7 +257,7 @@ export function useSubmissionDecryption(
             reviewersObjectId,
             items: batch.map((r) => ({ submissionObjectId: r.submissionId, nonce: r.nonce })),
           });
-          await seal.fetchKeys({
+          await batchSeal.fetchKeys({
             ids: approve.ids,
             txBytes: approve.txBytes,
             sessionKey: batchSessionKey,
@@ -268,7 +283,7 @@ export function useSubmissionDecryption(
     [
       originalPackageId,
       activePackageId,
-      seal,
+      sealFor,
       network,
       sealSession,
       suiClient,

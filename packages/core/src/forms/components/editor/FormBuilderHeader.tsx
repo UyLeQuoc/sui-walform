@@ -19,6 +19,7 @@ import { peerLabel } from '../../lib/collab-identity';
 import { useCollab } from './CollabProvider';
 import { PeerAvatar } from './PeerAvatar';
 import { EditorPublishButton } from './EditorPublishButton';
+import { EditorUpdateButton } from './EditorUpdateButton';
 import { ExportButton } from './ExportButton';
 import { SaveStatusBadge } from './SaveStatusBadge';
 import { ThemeToggle } from './ThemeToggle';
@@ -35,6 +36,8 @@ interface FormBuilderHeaderProps {
   onToggleSettings: () => void;
   onToggleCollab: () => void;
   onOpenAiGenerate: () => void;
+  /** Present when editing an already-published form — swaps Publish for Update. */
+  onChainEdit?: { formObjectId: string; submissionCount: number; schemaSealed?: boolean };
 }
 
 export function FormBuilderHeader({
@@ -49,6 +52,7 @@ export function FormBuilderHeader({
   onToggleSettings,
   onToggleCollab,
   onOpenAiGenerate,
+  onChainEdit,
 }: FormBuilderHeaderProps) {
   const title = useFormBuilderStore((s) => s.schema.title);
   const collabActive = useFormBuilderStore((s) => s.collabActive);
@@ -186,20 +190,23 @@ export function FormBuilderHeader({
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Form settings</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={rightMode === 'collaboration' ? 'default' : 'outline'}
-                    size="icon"
-                    aria-label="Collaborate"
-                    aria-pressed={rightMode === 'collaboration'}
-                    onClick={onToggleCollab}
-                  >
-                    <Users className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Collaborate</TooltipContent>
-              </Tooltip>
+              {/* Collaborator hidden for now (not needed yet) — flip to true to restore. */}
+              {false && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={rightMode === 'collaboration' ? 'default' : 'outline'}
+                      size="icon"
+                      aria-label="Collaborate"
+                      aria-pressed={rightMode === 'collaboration'}
+                      onClick={onToggleCollab}
+                    >
+                      <Users className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Collaborate</TooltipContent>
+                </Tooltip>
+              )}
             </ButtonGroup>
 
             <Separator orientation="vertical" className="mx-1 !h-5" />
@@ -221,7 +228,15 @@ export function FormBuilderHeader({
               </Link>
             </Button>
 
-            <EditorPublishButton formId={formId} />
+            {onChainEdit ? (
+              <EditorUpdateButton
+                formObjectId={onChainEdit.formObjectId}
+                submissionCount={onChainEdit.submissionCount}
+                schemaSealed={onChainEdit.schemaSealed}
+              />
+            ) : (
+              <EditorPublishButton formId={formId} />
+            )}
             <NetworkBadge />
             <WalletButton />
           </div>

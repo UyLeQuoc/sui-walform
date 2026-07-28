@@ -1,11 +1,16 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useCallback, useMemo, useState, type BaseSyntheticEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type BaseSyntheticEvent } from 'react';
 import { useForm, type FieldValues, type UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 import { normalizeSchema, DEFAULT_NAVIGATION } from '../lib/pages';
 import { generateDefaultValues, generateZodSchema } from '../lib/schema-gen/zod';
+import {
+  clearSubmissionProgress,
+  readSubmissionProgress,
+  saveSubmissionProgress,
+} from '../lib/submission-progress';
 import type { FormPage, FormSchema, NavigationSettings } from '../../types';
 
 interface UseFormPreviewParams {
@@ -25,6 +30,14 @@ interface UseFormPreviewParams {
    *  navigation skips validation so a viewer can flip through every page
    *  without filling required fields, and Back is always allowed. */
   preview?: boolean;
+  /**
+   * When set, the respondent's in-progress answers are auto-saved to
+   * localStorage under this key and restored on mount — so a refresh, a
+   * wallet-connect redirect, or an error doesn't wipe what they typed. Cleared
+   * on a successful submit. Omit for the builder preview / marketplace browse
+   * (no persistence there).
+   */
+  persistKey?: string;
 }
 
 export interface UseFormPreviewResult {
@@ -62,21 +75,41 @@ export function useFormPreview({
   onSubmit,
   prefill,
   preview = false,
+  persistKey,
 }: UseFormPreviewParams): UseFormPreviewResult {
   const { pages, fieldsByPage, navigation } = useMemo(() => normalizeSchema(schema), [schema]);
 
   // Build a single all-fields Zod schema for `defaultValues` seeding only.
   // Per-page validation runs through targeted sub-schemas inside goNext.
   const allFieldsSchema = useMemo(() => generateZodSchema(schema.fields), [schema.fields]);
+  // Restore saved answers once at mount (respondent progress persistence).
+  const [restored] = useState(() => readSubmissionProgress(persistKey));
   const defaultValues = useMemo(
-    () => ({ ...generateDefaultValues(schema.fields), ...(prefill ?? {}) }),
-    [schema.fields, prefill],
+    // Precedence: schema defaults < prefill handoff < the respondent's own
+    // saved-in-progress answers (their latest work wins).
+    () => ({ ...generateDefaultValues(schema.fields), ...(prefill ?? {}), ...(restored ?? {}) }),
+    [schema.fields, prefill, restored],
   );
 
   const form = useForm<FieldValues>({
     resolver: zodResolver(allFieldsSchema),
     defaultValues,
   });
+
+  // Auto-save on every change (debounced) so a refresh / wallet-connect /
+  // error never loses typed answers. Files are stripped (not serializable).
+  useEffect(() => {
+    if (!persistKey) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sub = form.watch((values) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => saveSubmissionProgress(persistKey, values), 300);
+    });
+    return () => {
+      clearTimeout(timer);
+      sub.unsubscribe();
+    };
+  }, [persistKey, form]);
 
   const [pageHistory, setPageHistory] = useState<number[]>([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
@@ -166,11 +199,12 @@ export function useFormPreview({
         toast.success(schema.settings.successMessage);
       }
       form.reset();
+      clearSubmissionProgress(persistKey);
       setCurrentPageIndex(0);
       setPageHistory([]);
       setPageError(null);
     },
-    [form, schema, pages, onSubmit],
+    [form, schema, pages, onSubmit, persistKey],
   );
 
   return {

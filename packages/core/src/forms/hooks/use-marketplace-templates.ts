@@ -1,9 +1,23 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
+import { FormTemplate } from '../../sui/gen/walform/template';
+import { getMoveObjects } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useOriginalPackageId } from '../../sui/package-id';
+import { useActiveNetwork } from '../../sui/env-network';
+import { queryEventsGql, type EventsPage } from '../../sui/graphql/events';
+
+/** Payload of `events::TemplatePublished` (GraphQL `contents.json`). */
+interface TemplatePublishedEvent {
+  template_id?: string;
+  creator?: string;
+  title?: string;
+  category?: number | string;
+  created_at_ms?: number | string;
+}
 
 export interface MarketplaceTemplate {
   templateId: string;
@@ -52,15 +66,16 @@ export interface UseMarketplaceTemplatesResult {
 export function useMarketplaceTemplates(): UseMarketplaceTemplatesResult {
   const originalPackageId = useOriginalPackageId();
   const { network } = useSuiClientContext();
-  const client = useSuiClient();
+  const client = useSuiGrpcClient();
+  const activeNetwork = useActiveNetwork();
   const packageMissing = !originalPackageId;
 
   const query = useQuery<MarketplaceTemplate[]>({
     queryKey: [network, 'walform:marketplace-templates', originalPackageId],
-    enabled: !!originalPackageId,
+    enabled: !!originalPackageId && !!activeNetwork,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!originalPackageId) return [];
+      if (!originalPackageId || !activeNetwork) return [];
 
       // 1) Paginate the full TemplatePublished stream → ordered, de-duped ids
       //    + per-template event metadata.
@@ -69,24 +84,16 @@ export function useMarketplaceTemplates(): UseMarketplaceTemplatesResult {
         { creator: string; title: string; category: number; createdAtMs: number }
       >();
       const orderedIds: string[] = [];
-      let cursor: { txDigest: string; eventSeq: string } | null = null;
+      let cursor: string | null = null;
       for (let page = 0; page < 100; page++) {
-        const res = await client.queryEvents({
-          query: { MoveEventType: `${originalPackageId}::events::TemplatePublished` },
+        const res: EventsPage<TemplatePublishedEvent> = await queryEventsGql<TemplatePublishedEvent>({
+          network: activeNetwork,
+          eventType: `${originalPackageId}::events::TemplatePublished`,
           order: 'descending',
           limit: 50,
           cursor,
         });
-        for (const ev of res.data) {
-          const parsed = ev.parsedJson as
-            | {
-                template_id?: string;
-                creator?: string;
-                title?: string;
-                category?: number | string;
-                created_at_ms?: number | string;
-              }
-            | undefined;
+        for (const parsed of res.data) {
           if (!parsed?.template_id || eventByTemplateId.has(parsed.template_id)) continue;
           eventByTemplateId.set(parsed.template_id, {
             creator: parsed.creator ? normalizeSuiAddress(parsed.creator) : '',
@@ -102,64 +109,35 @@ export function useMarketplaceTemplates(): UseMarketplaceTemplatesResult {
 
       if (orderedIds.length === 0) return [];
 
-      // 2) Fetch the FormTemplate objects in batches of 50 (RPC cap).
+      // 2) Fetch + BCS-decode the FormTemplate objects (batched internally).
       const out: MarketplaceTemplate[] = [];
-      for (let i = 0; i < orderedIds.length; i += 50) {
-        const part = await client.multiGetObjects({
-          ids: orderedIds.slice(i, i + 50),
-          options: { showContent: true, showType: true, showOwner: true },
-        });
-        for (const entry of part) {
-          const obj = entry.data;
-          if (!obj?.objectId) continue;
-          const meta = eventByTemplateId.get(obj.objectId);
-          const content = obj.content as unknown as
-            | {
-                dataType: 'moveObject';
-                fields: {
-                  title?: string;
-                  description?: string;
-                  category?: number | string;
-                  clone_count?: number | string;
-                  creator?: string;
-                  tags?: string[];
-                };
-              }
-            | undefined;
-          const fields = content?.fields;
-          const owner = obj.owner as
-            | 'Immutable'
-            | { Shared: { initial_shared_version: string } }
-            | { AddressOwner: string }
-            | { ObjectOwner: string }
-            | undefined;
+      for (const obj of await getMoveObjects(client, FormTemplate, orderedIds)) {
+        const meta = eventByTemplateId.get(obj.objectId);
+        const f = obj.fields;
 
-          let status: MarketplaceTemplate['status'] = 'unknown';
-          let ownerAddress: string | undefined;
-          if (owner && typeof owner === 'object') {
-            if ('Shared' in owner) {
-              // Default to `free` — MarketplaceCard runs useTemplateListing and
-              // upgrades the row to `paid` when it finds a matching listing.
-              status = 'free';
-            } else if ('AddressOwner' in owner) {
-              status = 'owned';
-              ownerAddress = normalizeSuiAddress(owner.AddressOwner);
-            }
-          }
-
-          out.push({
-            templateId: obj.objectId,
-            creator: meta?.creator ?? (fields?.creator ? normalizeSuiAddress(fields.creator) : ''),
-            title: fields?.title ?? meta?.title ?? 'Untitled',
-            description: fields?.description ?? '',
-            category: Number(fields?.category ?? meta?.category ?? 0),
-            cloneCount: Number(fields?.clone_count ?? 0),
-            tags: fields?.tags ?? [],
-            createdAtMs: meta?.createdAtMs ?? 0,
-            status,
-            ownerAddress,
-          });
+        let status: MarketplaceTemplate['status'] = 'unknown';
+        let ownerAddress: string | undefined;
+        if (obj.owner.$kind === 'Shared' || obj.owner.$kind === 'ConsensusAddressOwner') {
+          // Default to `free` — MarketplaceCard runs useTemplateListing and
+          // upgrades the row to `paid` when it finds a matching listing.
+          status = 'free';
+        } else if (obj.owner.$kind === 'AddressOwner') {
+          status = 'owned';
+          ownerAddress = normalizeSuiAddress(obj.owner.AddressOwner);
         }
+
+        out.push({
+          templateId: obj.objectId,
+          creator: meta?.creator ?? normalizeSuiAddress(f.creator),
+          title: f.title || (meta?.title ?? 'Untitled'),
+          description: f.description,
+          category: Number(f.category),
+          cloneCount: Number(f.clone_count),
+          tags: f.tags,
+          createdAtMs: meta?.createdAtMs ?? 0,
+          status,
+          ownerAddress,
+        });
       }
       out.sort((a, b) => b.createdAtMs - a.createdAtMs);
       return out;

@@ -1,12 +1,13 @@
 'use client';
 
 import { SessionKey } from '@mysten/seal';
-import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import type { ClientWithCoreApi } from '@mysten/sui/client';
 
 export interface CreateSealSessionKeyInput {
   address: string;
   packageId: string;
-  suiClient: SuiJsonRpcClient;
+  /** Any client exposing the shared `core` API — this app injects gRPC. */
+  suiClient: ClientWithCoreApi;
   ttlMin: number;
   signPersonalMessage: (bytes: Uint8Array) => Promise<string>;
 }

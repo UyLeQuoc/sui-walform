@@ -1,10 +1,15 @@
 'use client';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCurrentAccount } from '@mysten/dapp-kit';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
+import { Lock, Unlock } from 'lucide-react';
+import { Button } from '../../../ui/button';
+import { Spinner } from '../../../ui/spinner';
 import { isCollabConfigured } from '../../hooks/use-collab-session';
 import { useFormOnChain } from '../../hooks/use-form-on-chain';
+import { useSealedSchemaDecrypt } from '../../hooks/use-sealed-schema-decrypt';
 import { useStoredForm } from '../../hooks/use-stored-form';
 import { formsRoute } from '../../lib/routes';
 import { SCHEMA_VERSION } from '../../lib/schema-version';
@@ -16,6 +21,9 @@ import { FormBuilder } from './FormBuilder';
 interface FormEditorClientProps {
   id: string;
 }
+
+/** Stable placeholder so the sealed-schema hook input doesn't churn per render. */
+const EMPTY_CIPHERTEXT = new Uint8Array();
 
 /**
  * Editor entry point. Paths:
@@ -50,6 +58,33 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
 
   const joinMissing = draftMissing && collabEnabled;
 
+  const isOwner =
+    !!account &&
+    !!onChainForm &&
+    normalizeSuiAddress(account.address) === normalizeSuiAddress(onChainForm.owner);
+
+  // Private forms store the schema as a Seal ciphertext. The owner can still
+  // edit them — it just takes a decrypt first, which is why this hook runs
+  // before `canEditOnChain` is decided rather than the form being redirected
+  // away to /results.
+  const sealedCiphertext = useMemo(
+    () => (onChainForm?.schemaSealed ? onChainForm.schemaRaw : EMPTY_CIPHERTEXT),
+    [onChainForm?.schemaSealed, onChainForm?.schemaRaw],
+  );
+  const sealedSchema = useSealedSchemaDecrypt({
+    formObjectId: onChainForm?.formObjectId ?? id,
+    ciphertext: sealedCiphertext,
+  });
+  const onChainSchema = onChainForm?.schema ?? sealedSchema.decrypted;
+  // Owner + a schema we can actually read (plaintext, or sealed-then-decrypted)
+  // → edit the live form in place.
+  const canEditOnChain = draftMissing && !!onChainForm && isOwner && !!onChainSchema;
+  // Owner staring at a sealed form that hasn't been unlocked yet — render the
+  // gate instead of redirecting.
+  const needsSchemaUnlock =
+    draftMissing && !!onChainForm && isOwner && !!onChainForm.schemaSealed && !onChainSchema;
+  const [onChainHydrated, setOnChainHydrated] = useState(false);
+
   useEffect(() => {
     // Mount the empty shell only once we know the form isn't already on-chain.
     if (!joinMissing || chainLoading || onChainForm) return;
@@ -57,10 +92,20 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
   }, [joinMissing, chainLoading, onChainForm, id]);
 
   useEffect(() => {
-    if (!draftMissing || !onChainForm) return;
-    const isOwner = !!account && account.address === onChainForm.owner;
+    // Hydrate the editor store from the on-chain schema before entering edit mode.
+    if (!canEditOnChain || !onChainSchema) return;
+    useFormBuilderStore
+      .getState()
+      .loadFromDb({ ...createEmptyStoredForm(id), schema: onChainSchema });
+    setOnChainHydrated(true);
+  }, [canEditOnChain, onChainSchema, id]);
+
+  useEffect(() => {
+    // Redirect only when we're NOT editing in place and there's nothing to
+    // unlock: non-owner → submit, owner of an undecodable form → results.
+    if (!draftMissing || !onChainForm || canEditOnChain || needsSchemaUnlock) return;
     navigate(isOwner ? formsRoute.results(id) : formsRoute.submit(id), { replace: true });
-  }, [draftMissing, onChainForm, account, id, navigate]);
+  }, [draftMissing, onChainForm, canEditOnChain, needsSchemaUnlock, isOwner, id, navigate]);
 
   if (state.status === 'loading') {
     return <div className="bg-muted/30 min-h-screen animate-pulse" />;
@@ -77,6 +122,37 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
           </p>
         </div>
       </div>
+    );
+  }
+
+  if (needsSchemaUnlock) {
+    return (
+      <SchemaUnlockGate
+        pending={sealedSchema.pending}
+        error={sealedSchema.error}
+        onUnlock={() => void sealedSchema.decrypt()}
+      />
+    );
+  }
+
+  if (canEditOnChain && onChainForm) {
+    // Owner editing a published form in place. Wait for the store to hydrate
+    // from the on-chain schema so we never flash stale editor content.
+    if (!onChainHydrated) {
+      return <div className="bg-muted/30 min-h-screen animate-pulse" />;
+    }
+    return (
+      <FormBuilder
+        formId={id}
+        createdAt={0}
+        initialRev={0}
+        autoSave={false}
+        onChainEdit={{
+          formObjectId: onChainForm.formObjectId,
+          submissionCount: onChainForm.submissionCount,
+          schemaSealed: onChainForm.schemaSealed,
+        }}
+      />
     );
   }
 
@@ -105,5 +181,40 @@ export function FormEditorClient({ id }: FormEditorClientProps) {
         autoSave={mode === 'host'}
       />
     </CollabProvider>
+  );
+}
+
+interface SchemaUnlockGateProps {
+  pending: boolean;
+  error: string | null;
+  onUnlock: () => void;
+}
+
+/**
+ * Owner-facing gate for a Private form whose schema is Seal-encrypted. One
+ * personal-message signature decrypts it into the editor store; saving
+ * re-encrypts, so the form stays sealed.
+ */
+function SchemaUnlockGate({ pending, error, onUnlock }: SchemaUnlockGateProps) {
+  return (
+    <div className="bg-muted/30 flex min-h-screen items-center justify-center px-6">
+      <div className="bg-card w-full max-w-md rounded-xl border p-6 text-center shadow-lg">
+        <Lock className="text-muted-foreground mx-auto h-6 w-6" />
+        <p className="mt-3 text-base font-semibold">This form&apos;s questions are encrypted</p>
+        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+          It was published as a Private form, so the schema is sealed to its allowlist. Unlock it to
+          edit — your changes are re-encrypted when you save, so it stays private.
+        </p>
+        {error && <p className="text-destructive mt-3 text-xs">{error}</p>}
+        <Button className="mt-4" onClick={onUnlock} disabled={pending}>
+          {pending ? (
+            <Spinner className="mr-1.5 size-3.5" />
+          ) : (
+            <Unlock className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          Unlock and edit
+        </Button>
+      </div>
+    </div>
   );
 }

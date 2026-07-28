@@ -10,7 +10,7 @@ import { buildRecordFreeCloneTx } from '../../sui/tx/purchase-template-only';
 import { buildUpdateSchemaTx } from '../../sui/tx/update-schema';
 import { useExecuteTransaction } from '../../sui/use-execute-transaction';
 import { useInvalidateChainQueries } from '../../sui/use-invalidate-chain';
-import { useSuiClient } from '@mysten/dapp-kit';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useWalrusWalletUpload } from '../../walrus';
 import { buildPublishTx } from '../lib/build-publish-tx';
 import { uploadCoverImageIfNeeded } from '../lib/upload-cover-on-publish';
@@ -58,7 +58,7 @@ export interface UsePublishFormResult {
 export function usePublishForm({ formId }: UsePublishFormInput): UsePublishFormResult {
   const packageId = useActivePackageId();
   const originalPackageId = useOriginalPackageId();
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const seal = useSealClient();
   const { execute, sender } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();

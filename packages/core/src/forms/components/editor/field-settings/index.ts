@@ -2,6 +2,7 @@ export * from './CodeSettings';
 export * from './CommonFields';
 export * from './DateSettings';
 export * from './DescriptionSettings';
+export * from './FileSettings';
 export * from './HeadingSettings';
 export * from './LayoutContentSettings';
 export * from './LinearScaleSettings';

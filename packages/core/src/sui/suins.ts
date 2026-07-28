@@ -1,9 +1,9 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
 import { SuinsClient } from '@mysten/suins';
-import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import { useSuiGrpcClient } from './grpc/use-grpc-client';
 
 /**
  * SuiNS metadata key the Walrus Sites portal reads when resolving
@@ -22,14 +22,11 @@ export const SUINS_WALRUS_SITE_KEY = 'walrus_site_id';
  * that take `SuinsTransaction` directly.
  */
 export function useSuinsClient(): SuinsClient | null {
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const { network } = useSuiClientContext();
 
   return useMemo(() => {
     if (network !== 'testnet' && network !== 'mainnet') return null;
-    return new SuinsClient({
-      client: suiClient as unknown as SuiJsonRpcClient,
-      network,
-    });
+    return new SuinsClient({ client: suiClient, network });
   }, [suiClient, network]);
 }

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useSuiClient } from '@mysten/dapp-kit';
 import { toast } from 'sonner';
-import { sealDecryptFormSchema, useSealClient } from '../../crypto';
+import { sealDecryptFormSchema, useSealDecryptClient } from '../../crypto';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useActivePackageId } from '../../sui/package-id';
 import type { FormSchema } from '../../types';
 import { useFormAllowlist } from './use-form-allowlist';
@@ -34,8 +34,8 @@ export function useSealedSchemaDecrypt(
   input: UseSealedSchemaDecryptInput,
 ): UseSealedSchemaDecryptResult {
   const { formObjectId, ciphertext } = input;
-  const suiClient = useSuiClient();
-  const seal = useSealClient();
+  const suiClient = useSuiGrpcClient();
+  const sealFor = useSealDecryptClient();
   const packageId = useActivePackageId();
   const allowlistQuery = useFormAllowlist(formObjectId);
   const sealSession = useSealSession();
@@ -45,6 +45,10 @@ export function useSealedSchemaDecrypt(
   const [error, setError] = useState<string | null>(null);
 
   const decrypt = async () => {
+    // Resolve the client from the ciphertext itself: a form sealed before the
+    // key-server migration must be opened by the server it names, not by
+    // whatever is configured today.
+    const seal = sealFor(ciphertext);
     if (!packageId || !seal) {
       toast.error('walform package or Seal not configured for this network.');
       return;

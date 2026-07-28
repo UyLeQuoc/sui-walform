@@ -408,20 +408,25 @@ function OnChainFields({
             active={access === 'private'}
             onClick={() => setAccess('private')}
           />
-          <AccessTile
-            icon={<Coins className="h-4 w-4" />}
-            title="Token-gated"
-            subtitle="Holders of Coin<T> only"
-            active={access === 'token'}
-            onClick={() => setAccess('token')}
-          />
-          <AccessTile
-            icon={<Wallet className="h-4 w-4" />}
-            title="Paid"
-            subtitle="Charge per submission"
-            active={access === 'paid'}
-            onClick={() => setAccess('paid')}
-          />
+          {/* Token-gated & Paid hidden for now — flip to true to restore. */}
+          {false && (
+            <>
+              <AccessTile
+                icon={<Coins className="h-4 w-4" />}
+                title="Token-gated"
+                subtitle="Holders of Coin<T> only"
+                active={access === 'token'}
+                onClick={() => setAccess('token')}
+              />
+              <AccessTile
+                icon={<Wallet className="h-4 w-4" />}
+                title="Paid"
+                subtitle="Charge per submission"
+                active={access === 'paid'}
+                onClick={() => setAccess('paid')}
+              />
+            </>
+          )}
         </div>
       </div>
 

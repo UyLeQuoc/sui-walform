@@ -19,10 +19,18 @@ declare const process: {
   env: {
     NEXT_PUBLIC_DEFAULT_NETWORK?: 'testnet' | 'mainnet';
 
-    // Optional Sui RPC override — falls back to the public fullnode when unset.
-    // Set to a dedicated / paid endpoint to avoid the public node's 429s.
-    NEXT_PUBLIC_SUI_RPC_TESTNET?: string;
-    NEXT_PUBLIC_SUI_RPC_MAINNET?: string;
+    // Optional Sui gRPC override — object/tx/balance reads. Falls back to the
+    // official fullnode (`https://fullnode.<net>.sui.io`) when unset; point it
+    // at a dedicated endpoint to avoid the public node's rate limits.
+    NEXT_PUBLIC_SUI_GRPC_TESTNET?: string;
+    NEXT_PUBLIC_SUI_GRPC_MAINNET?: string;
+
+    // Sui GraphQL endpoint — event + transaction-history scans only (gRPC has
+    // neither). MUST be a FULL-HISTORY indexer: the official GraphQL prunes to
+    // a rolling window (measured 2026-07-28: 155 of 247 SubmissionCreated
+    // events), which silently hides older submissions, templates and listings.
+    NEXT_PUBLIC_SUI_GRAPHQL_TESTNET?: string;
+    NEXT_PUBLIC_SUI_GRAPHQL_MAINNET?: string;
 
     // Sui core ids — per-network
     NEXT_PUBLIC_PACKAGE_ID_TESTNET?: string;
@@ -56,6 +64,11 @@ declare const process: {
     // Seal — per-network
     NEXT_PUBLIC_SEAL_KEY_SERVERS_TESTNET?: string;
     NEXT_PUBLIC_SEAL_KEY_SERVERS_MAINNET?: string;
+    // Retired key servers, kept ONLY so ciphertexts encrypted under them still
+    // decrypt. A Seal ciphertext names its key servers, so removing one without
+    // listing it here breaks every ciphertext it produced ("Not enough shares").
+    NEXT_PUBLIC_SEAL_LEGACY_KEY_SERVERS_TESTNET?: string;
+    NEXT_PUBLIC_SEAL_LEGACY_KEY_SERVERS_MAINNET?: string;
     NEXT_PUBLIC_SEAL_AGGREGATOR_URL_TESTNET?: string;
     NEXT_PUBLIC_SEAL_AGGREGATOR_URL_MAINNET?: string;
     NEXT_PUBLIC_SEAL_API_KEY_NAME_TESTNET?: string;

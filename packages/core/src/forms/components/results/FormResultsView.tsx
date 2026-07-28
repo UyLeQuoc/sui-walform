@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ChevronDown,
   Copy,
@@ -10,6 +10,7 @@ import {
   Lock,
   RefreshCw,
   Share2,
+  Unlock,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -47,6 +48,7 @@ import type { OnChainForm } from '../../hooks/use-on-chain-forms';
 import { useCloseForm } from '../../hooks/use-close-form';
 import { useSeededSubmissions } from '../../hooks/use-seeded-submissions';
 import { useFormReviewers } from '../../hooks/use-form-reviewers';
+import { useSealedSchemaDecrypt } from '../../hooks/use-sealed-schema-decrypt';
 import { useSubmissionDecryption } from '../../hooks/use-submission-decryption';
 import { useSubmissionTags } from '../../hooks/use-submission-tags';
 import {
@@ -80,6 +82,10 @@ import { SubmissionsDataTable } from './SubmissionsDataTable';
 interface FormResultsViewProps {
   formId: string;
 }
+
+/** Stable placeholder so the sealed-schema hook's input identity doesn't churn
+ *  every render for the (common) plaintext-schema case. */
+const EMPTY_CIPHERTEXT = new Uint8Array();
 
 type ResultsTab = 'summary' | 'by-question' | 'individual' | 'reviewers' | 'manage';
 
@@ -116,6 +122,19 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
   const decryption = useSubmissionDecryption({ formId });
   const tags = useSubmissionTags(formId);
   const reviewersState = useFormReviewers(formId);
+  // Private (allowlist) forms published with NEXT_PUBLIC_ENABLE_SEALED_SCHEMA
+  // store the schema itself as a Seal ciphertext, so `form.schema` is null and
+  // there are no questions to render until it's decrypted. Without this the
+  // dashboard shows "0 questions" and blank answer columns even after the
+  // response bodies decrypt fine.
+  const sealedCiphertext = useMemo(
+    () => (form?.schemaSealed ? form.schemaRaw : EMPTY_CIPHERTEXT),
+    [form?.schemaSealed, form?.schemaRaw],
+  );
+  const sealedSchema = useSealedSchemaDecrypt({
+    formObjectId: formId,
+    ciphertext: sealedCiphertext,
+  });
   const [tab, setTab] = useState<ResultsTab>('summary');
   const [shareOpen, setShareOpen] = useState(false);
   const [submissionFilters, setSubmissionFilters] = useState<SubmissionsFilterState>(
@@ -132,7 +151,20 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     ? (running.find((f) => f.formId === formId) ?? ended.find((f) => f.formId === formId) ?? null)
     : null;
 
-  const inputFields = (form?.schema?.fields ?? []).filter(isInputField);
+  // Plaintext schema when there is one, otherwise whatever the sealed-schema
+  // decrypt produced. Everything downstream (stats, charts, table columns,
+  // exports) reads its questions from here.
+  const effectiveSchema = form?.schema ?? sealedSchema.decrypted;
+  const inputFields = (effectiveSchema?.fields ?? []).filter(isInputField);
+  const schemaLocked = !!form?.schemaSealed && !sealedSchema.decrypted;
+
+  // One click unlocks both halves: the schema (questions) and the response
+  // bodies (answers). They share a single Seal SessionKey, so this is still one
+  // wallet signature.
+  const handleDecryptAll = async () => {
+    if (schemaLocked) await sealedSchema.decrypt();
+    await decryption.decryptAll(chainRows);
+  };
 
   // Merge real Seal-decrypted rows with the pre-decrypted seeded payloads so
   // every consumer downstream (CSV, stats, aggregates, individual cards) sees
@@ -260,7 +292,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       }, 0) / decryptedRows.length;
   const canDecrypt = !!activePackageId && !!originalPackageId;
   const isDecryptingAny =
-    decryption.isSessionInitializing || decryption.pendingIds.size > 0;
+    decryption.isSessionInitializing || decryption.pendingIds.size > 0 || sealedSchema.pending;
   const timestamps = rows.map((r) => r.submittedAtMs);
 
   return (
@@ -321,8 +353,8 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
           </Button>
           <Button
             size="sm"
-            onClick={() => void decryption.decryptAll(chainRows)}
-            disabled={!canDecrypt || isDecryptingAny || chainRows.length === 0}
+            onClick={() => void handleDecryptAll()}
+            disabled={!canDecrypt || isDecryptingAny || (chainRows.length === 0 && !schemaLocked)}
           >
             {isDecryptingAny ? (
               <Spinner className="mr-1.5 size-3.5" />
@@ -373,6 +405,15 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
         formId={formId}
         formTitle={form.title}
       />
+
+      {schemaLocked && (
+        <SealedSchemaCallout
+          canDecrypt={canDecrypt}
+          isDecrypting={sealedSchema.pending}
+          error={sealedSchema.error}
+          onUnlock={() => void sealedSchema.decrypt()}
+        />
+      )}
 
       <StatsSummary
         total={rows.length}
@@ -433,7 +474,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
                   total={rows.length}
                   canDecrypt={canDecrypt}
                   isDecrypting={isDecryptingAny}
-                  onDecrypt={() => void decryption.decryptAll(rows)}
+                  onDecrypt={() => void handleDecryptAll()}
                 />
               ) : (
                 <AggregateCharts
@@ -456,7 +497,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
               total={rows.length}
               canDecrypt={canDecrypt}
               isDecrypting={isDecryptingAny}
-              onDecrypt={() => void decryption.decryptAll(rows)}
+              onDecrypt={() => void handleDecryptAll()}
             />
           ) : (
             <ByQuestionPanel
@@ -520,6 +561,50 @@ function EmptyResponses({ formId }: { formId: string }) {
           No responses yet. Share <code className="font-mono">/f?formId={shortAddr(formId)}</code> to
           start collecting.
         </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface SealedSchemaCalloutProps {
+  canDecrypt: boolean;
+  isDecrypting: boolean;
+  error: string | null;
+  onUnlock: () => void;
+}
+
+/**
+ * Shown for Private forms whose schema is itself Seal-encrypted. Until it's
+ * decrypted the dashboard has no question list, so every answer column, chart
+ * and export comes out empty — this says so instead of silently rendering
+ * "0 questions".
+ */
+function SealedSchemaCallout({
+  canDecrypt,
+  isDecrypting,
+  error,
+  onUnlock,
+}: SealedSchemaCalloutProps) {
+  return (
+    <Card className="border-dashed">
+      <CardContent className="flex flex-wrap items-center gap-3 py-4">
+        <Lock className="text-muted-foreground h-4 w-4 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Questions are encrypted</p>
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            This form&apos;s schema is sealed to its allowlist. Unlock it to see the questions and
+            line responses up against them — the same signature also decrypts the answers.
+          </p>
+          {error && <p className="text-destructive mt-1 text-xs">{error}</p>}
+        </div>
+        <Button size="sm" variant="outline" onClick={onUnlock} disabled={!canDecrypt || isDecrypting}>
+          {isDecrypting ? (
+            <Spinner className="mr-1.5 size-3.5" />
+          ) : (
+            <Unlock className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          Unlock questions
+        </Button>
       </CardContent>
     </Card>
   );

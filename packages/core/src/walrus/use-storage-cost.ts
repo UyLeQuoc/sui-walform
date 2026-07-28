@@ -2,7 +2,8 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiClientContext } from '@mysten/dapp-kit';
+import { useSuiGrpcClient } from '../sui/grpc/use-grpc-client';
 import { WalrusClient } from '@mysten/walrus';
 
 /**
@@ -32,7 +33,7 @@ export interface UseStorageCostResult {
 }
 
 export function useStorageCost(sizeBytes: number, epochs: number = 15): UseStorageCostResult {
-  const suiClient = useSuiClient();
+  const suiClient = useSuiGrpcClient();
   const { network } = useSuiClientContext();
 
   // The Walrus SDK only knows about testnet/mainnet; if the user is on devnet

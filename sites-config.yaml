@@ -22,12 +22,21 @@ contexts:
     general:
        wallet_env: mainnet
        walrus_context: mainnet # Assumes a Walrus CLI setup with a multi-config containing the "mainnet" context.
-       walrus_package: 0xfa65cb2d62f4d39e60346fb7d501c12538ca2bbc646eaa37ece2aec5f897814e
+       walrus_package: 0x98da433aa0139512c210597b1c5e3df6cd121d8d77f8652691bb66fadfc8aa1b
        # wallet_address: 0x1234...
-       # rpc_url: https://fullnode.mainnet.sui.io:443
+       # Mysten's public fullnode serves STALE object state (public JSON-RPC is
+       # being decommissioned — mainnet week of 2026-07-20, off 2026-07-31), which
+       # fails the deploy with "asked version N is higher than the latest M".
+       # ZAN reads fresh. See docs/RPC_MIGRATION.md.
+       rpc_url: https://api.zan.top/node/v1/sui/mainnet/0dbc5a32c8e64375a953e92166361ee0
        # wallet: /path/to/.sui/sui_config/client.yaml
        # walrus_binary: /path/to/walrus
        # walrus_config: /path/to/mainnet/client_config.yaml
-       # gas_budget: 500000000
+       # site-builder needs ONE coin >= gas_budget to reserve. The default
+       # (500000000 = 0.5 SUI) exceeds the deploy wallet's balance now that the
+       # same key also sponsors uploads. A real deploy costs ~0.006 SUI, so 0.3
+       # SUI is ~50x headroom while still fitting the current balance. Raise it
+       # again once the wallet is topped up.
+       gas_budget: 300000000
 
 default_context: mainnet

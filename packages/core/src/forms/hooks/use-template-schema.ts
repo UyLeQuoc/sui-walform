@@ -1,7 +1,11 @@
 'use client';
 
-import { useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useSuiClientContext } from '@mysten/dapp-kit';
 import type { FormSchema } from '../../types';
+import { FormTemplate } from '../../sui/gen/walform/template';
+import { getMoveObject } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 
 export interface UseTemplateSchemaResult {
   schema: FormSchema | null;
@@ -21,26 +25,19 @@ export function useTemplateSchema(
   templateId: string | undefined,
   enabled = true,
 ): UseTemplateSchemaResult {
-  const query = useSuiClientQuery(
-    'getObject',
-    {
-      id: templateId ?? '',
-      options: { showContent: true },
-    },
-    { enabled: enabled && !!templateId },
-  );
+  const { network } = useSuiClientContext();
+  const client = useSuiGrpcClient();
 
-  const content = query.data?.data?.content as unknown as
-    | {
-        dataType: 'moveObject';
-        fields: { schema?: number[] };
-      }
-    | undefined;
+  const query = useQuery({
+    queryKey: [network, 'walform:template-schema', templateId ?? null],
+    enabled: enabled && !!templateId,
+    queryFn: ({ signal }) => getMoveObject(client, FormTemplate, templateId!, signal),
+  });
 
-  const schemaBytes = content?.fields?.schema;
+  const schemaBytes = query.data?.fields.schema;
   let schema: FormSchema | null = null;
   let schemaUnreadable = false;
-  if (Array.isArray(schemaBytes) && schemaBytes.length > 0) {
+  if (schemaBytes && schemaBytes.length > 0) {
     try {
       const decoded = new TextDecoder().decode(new Uint8Array(schemaBytes));
       schema = JSON.parse(decoded) as FormSchema;

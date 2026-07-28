@@ -1,17 +1,16 @@
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
-
-// Stub: returns a SuiJsonRpcClient configured for testnet.
-// Fleshed out in the Sui / dApp-Kit wiring plan.
-//
-// Note: as of @mysten/sui 2.x the old SuiClient / getFullnodeUrl names
-// were renamed to SuiJsonRpcClient / getJsonRpcFullnodeUrl and moved
-// from /client to /jsonRpc.
+import type { SuiGrpcClient } from '@mysten/sui/grpc';
+import { getSuiGrpcClient } from './grpc/client';
 
 export type SuiNetwork = 'testnet' | 'mainnet' | 'devnet' | 'localnet';
 
-export function getSuiClient(network: SuiNetwork = 'testnet'): SuiJsonRpcClient {
-  return new SuiJsonRpcClient({
-    url: getJsonRpcFullnodeUrl(network),
-    network,
-  });
+/**
+ * Standalone (non-React) Sui client for the given network.
+ *
+ * gRPC, not JSON-RPC: Sui decommissioned public JSON-RPC (testnet already
+ * 404s, mainnet off 2026-07-31). Inside React, prefer `useSuiGrpcClient()` —
+ * it resolves the active network from context and shares this same per-network
+ * instance.
+ */
+export function getSuiClient(network: SuiNetwork = 'testnet'): SuiGrpcClient {
+  return getSuiGrpcClient(network);
 }

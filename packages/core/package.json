@@ -88,6 +88,7 @@
     "@fontsource-variable/space-grotesk": "^5",
     "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^5.2.2",
+    "@mysten/bcs": "^2.1.0",
     "@mysten/dapp-kit": "latest",
     "@mysten/enoki": "latest",
     "@mysten/seal": "latest",

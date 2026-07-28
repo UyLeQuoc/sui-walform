@@ -1,80 +1,70 @@
 import { normalizeSuiAddress } from '@mysten/sui/utils';
-import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import type { ClientWithCoreApi } from '@mysten/sui/client';
 
-interface ObjectChangeLike {
-  type?: string;
-  objectId?: string;
-  objectType?: string;
+interface CreatedObject {
+  objectId: string;
+  objectType: string;
 }
 
 /**
  * After a Walrus Sites deploy tx executes, find the freshly-created Site
- * object id. Multiple strategies because indexers occasionally lag:
- *   1. Exact match on `${walrusSitePackageId}::site::Site` in objectChanges
- *   2. Loose match on any objectType ending in `::site::Site` (handles cases
- *      where the type prefix is the upstream package vs the env-configured
- *      one — Walrus Sites types preserve their declaration package across
- *      upgrades)
- *   3. Fallback to effects.created with type lookup via getObject
+ * object id. Two strategies because the type prefix isn't always what the env
+ * says:
+ *   1. Exact match on `${walrusSitePackageId}::site::Site`
+ *   2. Loose match on any created type ending in `::site::Site` — Walrus Sites
+ *      types keep their declaration package across upgrades, so the id in env
+ *      can be a later version than the one on the type
  *
- * Re-tries the whole search 3× with 1.5s delay between because the RPC
- * indexer sometimes returns empty objectChanges right after a tx settles.
+ * Re-tries the whole search 3× with a 1.5s delay because a node can briefly
+ * report a settled tx with no object types attached.
+ *
+ * The third JSON-RPC-era strategy (walk `effects.created` and `getObject` each
+ * id for its type) is gone: `objectTypes` already returns exactly that map in
+ * the same response, so the extra round-trips bought nothing.
  */
 export async function extractWalrusSiteId(
-  client: SuiJsonRpcClient,
+  client: ClientWithCoreApi,
   digest: string,
   walrusSitePackageId: string,
 ): Promise<string | null> {
-  await client.waitForTransaction({ digest });
   const pkgNormalized = normalizeSuiAddress(walrusSitePackageId);
+  let lastChanges: CreatedObject[] = [];
 
-  let lastBlock: Awaited<ReturnType<typeof client.getTransactionBlock>> | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const block = await client.getTransactionBlock({
+    const res = await client.core.waitForTransaction({
       digest,
-      options: { showEffects: true, showObjectChanges: true },
+      include: { effects: true, objectTypes: true },
     });
-    lastBlock = block;
-    const changes = (block.objectChanges ?? []) as ObjectChangeLike[];
+    const tx = res.Transaction ?? res.FailedTransaction;
+    const types = tx?.objectTypes ?? {};
+    const changes: CreatedObject[] = (tx?.effects?.changedObjects ?? [])
+      .filter((c) => c.idOperation === 'Created')
+      .map((c) => ({ objectId: c.objectId, objectType: types[c.objectId] ?? '' }));
+    lastChanges = changes;
 
     // Strategy 1: exact pkg + module + struct match.
     let match = changes.find((c) => isCreatedSite(c, pkgNormalized, true));
-    if (match?.objectId) return match.objectId;
+    if (match) return match.objectId;
 
-    // Strategy 2: loose — any `created` whose type ends in `::site::Site`.
-    // Walrus Sites types might come back under the original-publish package
-    // address when querying through certain indexer paths.
+    // Strategy 2: loose — any created object whose type ends in `::site::Site`.
     match = changes.find((c) => isCreatedSite(c, pkgNormalized, false));
-    if (match?.objectId) return match.objectId;
+    if (match) return match.objectId;
 
-    // Strategy 3: fallback to effects.created + per-id type lookup.
-    const fallback = await fallbackByEffects(client, block, pkgNormalized);
-    if (fallback) return fallback;
-
-    // Indexer might be lagging — wait + retry.
+    // Node might be lagging — wait + retry.
     if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
   }
 
-  // Give the caller something to debug with — log the raw objectChanges so
-  // the user can paste it back if extraction keeps failing.
+  // Give the caller something to debug with — log the created objects so the
+  // user can paste them back if extraction keeps failing.
   console.warn(
-    '[extractWalrusSiteId] no site::Site found in objectChanges',
-    JSON.stringify(
-      {
-        digest,
-        expectedPkg: pkgNormalized,
-        objectChanges: lastBlock?.objectChanges,
-        effectsCreated: lastBlock?.effects?.created,
-      },
-      null,
-      2,
-    ),
+    '[extractWalrusSiteId] no site::Site among the tx\'s created objects',
+    JSON.stringify({ digest, expectedPkg: pkgNormalized, created: lastChanges }, null, 2),
   );
   return null;
 }
 
-function isCreatedSite(change: ObjectChangeLike, pkgNormalized: string, exact: boolean): boolean {
-  if (change.type !== 'created' || !change.objectType) return false;
+function isCreatedSite(change: CreatedObject, pkgNormalized: string, exact: boolean): boolean {
+  if (!change.objectType) return false;
   const parts = change.objectType.split('::');
   if (parts.length < 3) return false;
   const typePkg = normalizeSuiAddress(parts[0]!);
@@ -82,36 +72,6 @@ function isCreatedSite(change: ObjectChangeLike, pkgNormalized: string, exact: b
   if (typeSuffix !== 'site::Site') return false;
   if (exact) return typePkg === pkgNormalized;
   return true;
-}
-
-async function fallbackByEffects(
-  client: SuiJsonRpcClient,
-  block: unknown,
-  pkgNormalized: string,
-): Promise<string | null> {
-  const effects = (block as { effects?: { created?: unknown[] } | null }).effects;
-  const created = (effects?.created ?? []) as Array<{
-    reference?: { objectId?: string };
-  }>;
-  for (const c of created) {
-    const id = c.reference?.objectId;
-    if (!id) continue;
-    try {
-      const obj = await client.getObject({ id, options: { showType: true } });
-      const type = obj.data?.type;
-      if (!type) continue;
-      const parts = type.split('::');
-      if (parts.length < 3) continue;
-      const typePkg = normalizeSuiAddress(parts[0]!);
-      const typeSuffix = parts.slice(1).join('::');
-      if (typeSuffix === 'site::Site' && typePkg === pkgNormalized) {
-        return id;
-      }
-    } catch {
-      // skip — keep checking other ids
-    }
-  }
-  return null;
 }
 
 const BASE36_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
@@ -199,15 +159,12 @@ export interface GasUsedSummary {
 }
 
 export async function getTxGasCost(
-  client: SuiJsonRpcClient,
+  client: ClientWithCoreApi,
   digest: string,
 ): Promise<GasUsedSummary | null> {
   try {
-    const block = await client.getTransactionBlock({
-      digest,
-      options: { showEffects: true },
-    });
-    const g = block.effects?.gasUsed;
+    const res = await client.core.getTransaction({ digest, include: { effects: true } });
+    const g = (res.Transaction ?? res.FailedTransaction)?.effects?.gasUsed;
     if (!g) return null;
     const computation = BigInt(g.computationCost ?? '0');
     const storage = BigInt(g.storageCost ?? '0');

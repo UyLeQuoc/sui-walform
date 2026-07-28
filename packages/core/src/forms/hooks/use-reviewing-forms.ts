@@ -1,9 +1,22 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useQuery } from '@tanstack/react-query';
+import { useCurrentAccount } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
-import { useReviewersEventPackageId } from '../../sui/env-network';
+import { Form } from '../../sui/gen/walform/form';
+import { FormReviewers } from '../../sui/gen/walform/reviewers';
+import { getMoveObjects } from '../../sui/grpc/objects';
+import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
+import { useActiveNetwork, useReviewersEventPackageId } from '../../sui/env-network';
+import { collectEventsGql } from '../../sui/graphql/events';
+
+/** Payload of `reviewers::ReviewerAdded` (GraphQL `contents.json`). */
+interface ReviewerAddedEvent {
+  form_id?: string;
+  reviewers_id?: string;
+  member?: string;
+}
 
 export interface ReviewingForm {
   formId: string;
@@ -42,28 +55,32 @@ export function useReviewingForms(): UseReviewingFormsResult {
   // querying the original id silently returns zero (empty "Reviewing" list).
   // See `useReviewersEventPackageId`.
   const reviewersPkg = useReviewersEventPackageId();
+  const activeNetwork = useActiveNetwork();
+  const client = useSuiGrpcClient();
   const me = account?.address ? normalizeSuiAddress(account.address) : null;
 
-  const eventsQuery = useSuiClientQuery(
-    'queryEvents',
-    {
-      query: reviewersPkg
-        ? { MoveEventType: `${reviewersPkg}::reviewers::ReviewerAdded` }
-        : ({} as never),
-      order: 'descending',
-      limit: 200,
+  // Full paginated scan. The old `limit: 200` single call was silently capped
+  // at 50 by the RPC, so a reviewer added earlier than the 50 most recent adds
+  // never saw their form in "Reviewing".
+  const eventsQuery = useQuery<ReviewerAddedEvent[]>({
+    queryKey: [activeNetwork, 'walform:reviewer-added-events', reviewersPkg],
+    enabled: !!reviewersPkg && !!me && !!activeNetwork,
+    staleTime: 10_000,
+    queryFn: async () => {
+      if (!reviewersPkg || !activeNetwork) return [];
+      return collectEventsGql<ReviewerAddedEvent>({
+        network: activeNetwork,
+        eventType: `${reviewersPkg}::reviewers::ReviewerAdded`,
+        order: 'descending',
+      });
     },
-    { enabled: !!reviewersPkg && !!me },
-  );
+  });
 
   // Build candidate (formId → reviewersId) map from events where member == me.
   const candidates = useMemo(() => {
     const map = new Map<string, string>(); // formId → reviewersId
     if (!me) return map;
-    for (const ev of eventsQuery.data?.data ?? []) {
-      const parsed = ev.parsedJson as
-        | { form_id?: string; reviewers_id?: string; member?: string }
-        | undefined;
+    for (const parsed of eventsQuery.data ?? []) {
       if (!parsed?.form_id || !parsed.reviewers_id || !parsed.member) continue;
       if (normalizeSuiAddress(parsed.member) !== me) continue;
       const fid = normalizeSuiAddress(parsed.form_id);
@@ -73,42 +90,37 @@ export function useReviewingForms(): UseReviewingFormsResult {
     return map;
   }, [eventsQuery.data, me]);
 
-  // Fetch both Form objects + FormReviewers objects in a single batch.
-  const objectIds = useMemo(() => {
-    const out: string[] = [];
-    for (const [formId, reviewersId] of candidates) {
-      out.push(formId);
-      out.push(reviewersId);
-    }
-    return out;
-  }, [candidates]);
+  // Two batches rather than one mixed read: BCS decoding needs the Move layout
+  // up front, so Forms and FormReviewers can't share a request the way an
+  // untyped `multiGetObjects` could.
+  const formIds = useMemo(() => [...candidates.keys()], [candidates]);
+  const reviewersIds = useMemo(() => [...candidates.values()], [candidates]);
 
-  const objectsQuery = useSuiClientQuery(
-    'multiGetObjects',
-    {
-      ids: objectIds,
-      options: { showContent: true, showType: true },
+  const objectsQuery = useQuery({
+    queryKey: [activeNetwork, 'walform:reviewing-objects', formIds, reviewersIds],
+    enabled: formIds.length > 0,
+    queryFn: async ({ signal }) => {
+      const [forms, trackers] = await Promise.all([
+        getMoveObjects(client, Form, formIds, signal),
+        getMoveObjects(client, FormReviewers, reviewersIds, signal),
+      ]);
+      return { forms, trackers };
     },
-    { enabled: objectIds.length > 0 },
-  );
+  });
 
   const reviewing = useMemo<ReviewingForm[]>(() => {
     if (!me) return [];
-    const objects = objectsQuery.data ?? [];
     const formInfoById = new Map<string, FormInfo>();
     const membersByFormId = new Map<string, string[]>();
 
-    for (const entry of objects) {
-      const obj = entry.data;
-      if (!obj?.objectId) continue;
-      const type = obj.type ?? '';
-      if (type.endsWith('::form::Form')) {
-        const info = parseFormInfo(obj);
-        if (info) formInfoById.set(normalizeSuiAddress(obj.objectId), info);
-      } else if (type.endsWith('::reviewers::FormReviewers')) {
-        const r = parseReviewersInfo(obj);
-        if (r) membersByFormId.set(r.formId, r.members);
-      }
+    for (const obj of objectsQuery.data?.forms ?? []) {
+      formInfoById.set(normalizeSuiAddress(obj.objectId), toFormInfo(obj.fields));
+    }
+    for (const obj of objectsQuery.data?.trackers ?? []) {
+      membersByFormId.set(
+        normalizeSuiAddress(obj.fields.form_id),
+        obj.fields.members.contents.map((m) => normalizeSuiAddress(m)),
+      );
     }
 
     const out: ReviewingForm[] = [];
@@ -135,7 +147,7 @@ export function useReviewingForms(): UseReviewingFormsResult {
 
   const isLoading =
     (!!reviewersPkg && !!me && eventsQuery.isPending) ||
-    (objectIds.length > 0 && objectsQuery.isPending);
+    (formIds.length > 0 && objectsQuery.isPending);
   const error = (eventsQuery.error as Error | null) ?? (objectsQuery.error as Error | null) ?? null;
 
   return { reviewing, isLoading, error };
@@ -152,34 +164,11 @@ interface FormInfo {
   coverImage: string | null;
 }
 
-function parseFormInfo(obj: { content?: unknown }): FormInfo | null {
-  const content = obj.content as
-    | {
-        dataType: 'moveObject';
-        fields: {
-          title?: string;
-          owner?: string;
-          closed?: boolean;
-          settings?: {
-            fields?: {
-              access_mode?: number | string;
-              closes_at_ms?: string | number;
-              max_submissions?: string | number;
-            };
-          };
-          stats?: { fields?: { submission_count?: string | number } };
-          schema?: number[];
-        };
-      }
-    | undefined;
-  if (!content?.fields) return null;
-  const f = content.fields;
-  const settings = f.settings?.fields ?? {};
-  const stats = f.stats?.fields ?? {};
+function toFormInfo(f: ReturnType<typeof Form.parse>): FormInfo {
   // Best-effort cover URL parse from schema JSON (same heuristic as
-  // useOnChainForms — non-fatal if it fails).
+  // useOnChainForms — non-fatal if it fails, e.g. a sealed schema).
   let cover: string | null = null;
-  if (Array.isArray(f.schema) && f.schema.length > 0) {
+  if (f.schema.length > 0) {
     try {
       const json = JSON.parse(new TextDecoder().decode(new Uint8Array(f.schema))) as {
         coverImage?: string;
@@ -190,35 +179,13 @@ function parseFormInfo(obj: { content?: unknown }): FormInfo | null {
     }
   }
   return {
-    title: f.title ?? 'Untitled form',
-    owner: f.owner ? normalizeSuiAddress(f.owner) : '',
-    closed: Boolean(f.closed),
-    closesAtMs: Number(settings.closes_at_ms ?? 0),
-    maxSubmissions: Number(settings.max_submissions ?? 0),
-    submissionCount: Number(stats.submission_count ?? 0),
-    accessMode: Number(settings.access_mode ?? 0),
+    title: f.title || 'Untitled form',
+    owner: normalizeSuiAddress(f.owner),
+    closed: f.closed,
+    closesAtMs: Number(f.settings.closes_at_ms),
+    maxSubmissions: Number(f.settings.max_submissions),
+    submissionCount: Number(f.stats.submission_count),
+    accessMode: Number(f.settings.access_mode),
     coverImage: cover,
   };
-}
-
-function parseReviewersInfo(obj: {
-  content?: unknown;
-}): { formId: string; members: string[] } | null {
-  const content = obj.content as
-    | {
-        dataType: 'moveObject';
-        fields: {
-          form_id?: string;
-          members?: { fields?: { contents?: string[] } } | string[];
-        };
-      }
-    | undefined;
-  if (!content?.fields) return null;
-  const formId = content.fields.form_id ? normalizeSuiAddress(content.fields.form_id) : null;
-  if (!formId) return null;
-  const rawContents = Array.isArray(content.fields.members)
-    ? content.fields.members
-    : (content.fields.members?.fields?.contents ?? []);
-  const members = rawContents.map((m) => normalizeSuiAddress(m));
-  return { formId, members };
 }

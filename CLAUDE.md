@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 WalForm — decentralized form builder on Sui. Stack runs on both mainnet (production at walform.wal.app) and testnet (selectable via env):
 
 - **Sui Move contracts** (`apps/contracts/sources/*.move`) own form schemas, submissions, allowlists, templates, Kiosk royalty, Seal policies.
-- **Seal** encrypts submission bodies + (post-upgrade) form schemas client-side; key servers via the Mysten testnet committee + aggregator.
+- **Seal** encrypts submission bodies + form schemas client-side, via Mysten's decentralized **committee** key servers behind a hosted aggregator (testnet 3-of-5, keyless; mainnet 5-of-8, **requires an Enoki-issued key sent as `X-API-Key`**). ⚠️ **A ciphertext is bound to the key servers it was encrypted under** — changing `NEXT_PUBLIC_SEAL_KEY_SERVERS_*` breaks every ciphertext written before the change ("Not enough shares"). Retired servers go in `NEXT_PUBLIC_SEAL_LEGACY_KEY_SERVERS_*`; `useSealClient()` encrypts (active only) and `useSealDecryptClient()` returns a **resolver** that picks the client matching each ciphertext. Never merge active + legacy into one `SealClient` — a mixed committee/V1 client decrypts neither.
 - **Wallet model** — every WalForm tx (creator publish/update/close, respondent submit, marketplace clone/buy, Mode B deploy) is signed and paid by the user's connected wallet via dApp Kit's `useSignAndExecuteTransaction`. No app-level transaction sponsorship; Enoki is used only for `registerEnokiWallets` (Google sign-in).
 - **Walrus** is opt-in only (cover images, FILE_UPLOAD, Mode B site shell) — base flow is zero WAL by storing schema + ciphertext inline in Sui objects.
 - **Frontend** — both apps are **Vite 7 + React 19 + react-router-dom v7 static SPAs** (no SSR, no API routes; everything ships static to Walrus Sites). Tailwind v4 via `@tailwindcss/vite`; fonts via `@fontsource-variable/*` loaded in `packages/core/src/ui/fonts.ts` (CSS vars in `ui/globals.css`); theme via `@teispace/next-themes/client`. `process.env.NEXT_PUBLIC_*` is kept in source and text-replaced at build by `packages/build-config :: nextPublicDefine` (so `core` stays bundler-agnostic). Migrated off Next.js 2026-06-02.
@@ -69,7 +69,11 @@ Sui Kiosk's `purchase` consumes the listed item — fine for NFTs, wrong for clo
 
 ### Seal flow
 
-Submission body encryption is wired and shipping. Identity layout = `form.id_address(32) || nonce(16)` = 48 bytes (matches `seal_policies.move`). Schema-level encryption (Seal v2) has on-chain entry fns + client helpers (`crypto/seal-schema.ts`) but the Publish flow doesn't invoke `sealEncryptSchema` yet — gated behind `NEXT_PUBLIC_ENABLE_SEALED_SCHEMA`. SessionKey lives in `useSealSession()` — first decrypt pops one `signPersonalMessage` prompt then caches for 30 min in component state (no persistence).
+Submission body encryption is wired and shipping. Identity layout = `form.id_address(32) || nonce(16)` = 48 bytes (matches `seal_policies.move`).
+
+**Schema-level encryption (Seal v2) is ACTIVE** when `NEXT_PUBLIC_ENABLE_SEALED_SCHEMA=true` — Private (allowlist) forms store the schema itself as a Seal ciphertext, so `useFormOnChain` returns `schema: null` + `schemaSealed: true`. Any view that renders questions must decrypt first via `useSealedSchemaDecrypt` (submit page, Results dashboard, editor all do). Forgetting this is what caused issue #12: Results showed "0 questions" and blank answers, and the editor bounced the owner to /results. Saving an edit re-encrypts (`useUpdateForm({ schemaSealed })`) so the form stays private.
+
+SessionKey lives in `useSealSession()` — first decrypt pops one `signPersonalMessage` prompt, then the key is cached **module-level** keyed by `address:packageId` so every consumer in a view (body decrypt + schema decrypt) shares one signature. Not persisted: a refresh or wallet switch re-signs.
 
 ### Mode A vs Mode B (PRD v1.0)
 
@@ -77,7 +81,14 @@ Submission body encryption is wired and shipping. Identity layout = `form.id_add
 
 ## Conventions baked into the codebase
 
-- **Sui SDK 2.0 names everywhere.** Use `SuiJsonRpcClient` / `getJsonRpcFullnodeUrl` from `@mysten/sui/jsonRpc`. The old `SuiClient` / `getFullnodeUrl` from `@mysten/sui/client` are the v1 names — only the codegen consumes `@mysten/sui/client` for type imports (`ClientWithCoreApi`, `SuiClientTypes`). Never import `SuiClient` for client construction.
+- **No JSON-RPC. Ever.** Sui decommissioned it (testnet's public endpoint 404s already, mainnet's is off 2026-07-31). Reads split three ways:
+  - **Objects / balances / coins / transactions / execution → gRPC.** `useSuiGrpcClient()` (`sui/grpc/use-grpc-client.ts`) + the helpers in `sui/grpc/objects.ts` (`getMoveObject(s)`, `listOwnedMoveObjects`, `listOwnedObjectIds`; `getJsonObject(s)` only for foreign types with no codegen). Decode with the checked-in `sui/gen/walform/*` MoveStructs — the gRPC `json` include renders `vector<u8>` as base64, indistinguishable from a Move `String`.
+  - **Events → GraphQL** (`sui/graphql/events.ts`). gRPC has no event query.
+  - **"Which txs called this Move function" → GraphQL** (`sui/graphql/transactions.ts`). gRPC only fetches a tx by digest.
+  - The GraphQL endpoint **must be a full-history indexer** — the official one prunes and silently hides older submissions/templates/listings.
+  - `useSuiClientQuery` is gone: it dispatches JSON-RPC method names. Use `useQuery` with a `[network, 'walform:…', …]` key so `useInvalidateChainQueries` still catches it.
+  - **Every `useSignAndExecuteTransaction` must pass `execute: useCoreTransactionExecutor()`.** dApp Kit's default calls `client.executeTransactionBlock` and blows up at signing time, not build time.
+  - Only the codegen and `providers.tsx` reference `@mysten/sui/jsonRpc`, and only for types (dApp Kit declares its context client as `SuiJsonRpcClient` while accepting any client at runtime).
 - **Sui addresses must be normalized before equality.** `0x2` and `0x0000…0002` look different to a naive string comparison — `normalizeSuiAddress` from `@mysten/sui/utils` handles this. Apply it on both sides of any address comparison (object types, package ids, owner addresses).
 - **Pass a `Transaction` instance to wallet-signing hooks** (not a base64 string) so dApp Kit can serialise the full tx including any gas overrides. `useExecuteTransaction` already does this.
 - **Wallet UI is shadcn-native, not dApp Kit's defaults.** `<WalletButton>`, `<WalletConnectModal>`, `<WalletDropdown>`, `<WalletChip>` live under `packages/core/src/sui/wallet-ui/`. Dropdown is intentionally minimal: address + Copy, Disconnect. No network switcher in the dropdown — network is env-driven.

@@ -37,6 +37,12 @@ interface FormBuilderProps {
    * so writing to their IDB would pollute their Drafts list (see COLLAB_DESIGN §6).
    */
   autoSave?: boolean;
+  /**
+   * Present when editing an already-published on-chain form. Swaps the header's
+   * Publish button for an Update button (writes via `update_schema`) and shows a
+   * banner. Auto-save is off in this mode — chain is the source of truth.
+   */
+  onChainEdit?: { formObjectId: string; submissionCount: number; schemaSealed?: boolean };
 }
 
 export function FormBuilder({
@@ -45,6 +51,7 @@ export function FormBuilder({
   initialRev,
   sourceTemplate,
   autoSave = true,
+  onChainEdit,
 }: FormBuilderProps) {
   const title = useFormBuilderStore((s) => s.schema.title);
   useDocumentTitle(title || 'Untitled form');
@@ -114,7 +121,16 @@ export function FormBuilder({
         onToggleSettings={handleToggleSettings}
         onToggleCollab={handleToggleCollab}
         onOpenAiGenerate={handleOpenAiGenerate}
+        onChainEdit={onChainEdit}
       />
+
+      {onChainEdit && onChainEdit.submissionCount > 0 && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-xs text-amber-700 dark:text-amber-400">
+          Editing a published form with {onChainEdit.submissionCount}{' '}
+          {onChainEdit.submissionCount === 1 ? 'response' : 'responses'} — removing or retyping
+          existing fields can orphan response data in Results. Adding new fields is safe.
+        </div>
+      )}
 
       {sourceTemplate && (
         <ClonedFromBanner formId={formId} sourceTemplate={sourceTemplate} />

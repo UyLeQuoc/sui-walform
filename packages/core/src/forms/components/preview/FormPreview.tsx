@@ -33,6 +33,10 @@ export interface FormPreviewProps {
    *  non-interactive, page navigation works without validation, and the final
    *  submit is hidden. */
   preview?: boolean;
+  /** When set, the respondent's answers auto-save to localStorage under this
+   *  key and restore on mount (survives refresh / wallet-connect / errors).
+   *  Only the live submit flow passes it; builder preview / browse don't. */
+  persistKey?: string;
 }
 
 export function FormPreview({
@@ -41,6 +45,7 @@ export function FormPreview({
   prefill,
   isSubmitting,
   preview,
+  persistKey,
 }: FormPreviewProps) {
   const {
     form,
@@ -54,7 +59,7 @@ export function FormPreview({
     goNext,
     goPrevious,
     pageError,
-  } = useFormPreview({ schema, onSubmit, prefill, preview });
+  } = useFormPreview({ schema, onSubmit, prefill, preview, persistKey });
 
   // Slide direction: 1 = went forward (Next), -1 = went back (Previous).
   // Used to flip the page-content animation between slide-in-from-right

@@ -157,6 +157,7 @@ export function SubmitForm({ form }: SubmitFormProps) {
                 onSubmit={submission.submit}
                 prefill={prefill ?? undefined}
                 isSubmitting={isSubmitting}
+                persistKey={form.formObjectId}
               />
             </>
           )}
