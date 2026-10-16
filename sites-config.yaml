@@ -24,19 +24,34 @@ contexts:
        walrus_context: mainnet # Assumes a Walrus CLI setup with a multi-config containing the "mainnet" context.
        walrus_package: 0x98da433aa0139512c210597b1c5e3df6cd121d8d77f8652691bb66fadfc8aa1b
        # wallet_address: 0x1234...
-       # Mysten's public fullnode serves STALE object state (public JSON-RPC is
-       # being decommissioned — mainnet week of 2026-07-20, off 2026-07-31), which
-       # fails the deploy with "asked version N is higher than the latest M".
-       # ZAN reads fresh. See docs/RPC_MIGRATION.md.
-       rpc_url: https://api.zan.top/node/v1/sui/mainnet/0dbc5a32c8e64375a953e92166361ee0
+       # NOTE: site-builder and walrus need DIFFERENT endpoints — do not unify.
+       #   * site-builder's own Sui client (gas estimation, the site PTB) still
+       #     speaks JSON-RPC, which Mysten's public fullnode turned off
+       #     2026-07-31 -> "Method not found ... deprecated". ZAN still serves it.
+       #   * the walrus subprocess (>=1.55) is gRPC-only and 404s on ZAN
+       #     ("invalid compression flag") -> it points at Mysten via
+       #     ~/.config/walrus/client_config.yaml :: contexts.mainnet.rpc_urls.
+       # See docs/RPC_MIGRATION.md + docs/HOW_TO_DEPLOY_WALRUS_SITE.md.
+       # MUST be a gRPC fullnode. This URL feeds site-builder's retriable client
+       # AND is forwarded to the walrus subprocess as --rpc-url (overriding
+       # ~/.config/walrus/client_config.yaml), and walrus >=1.55 is gRPC-only.
+       # JSON-RPC-only providers (ZAN, blockvision, publicnode) 404 here with
+       # "invalid compression flag".
+       #
+       # The ONE remaining JSON-RPC caller is site_manager::dry_run_ptb (the
+       # --dry-run SUI gas estimate; site-builder 2.12 still marks it
+       # "TODO(grpc-migration)"). It ignores this URL and builds its client from
+       # the WALLET env instead, so ~/.sui/sui_config/client.yaml :: mainnet must
+       # point at a JSON-RPC provider (ZAN) or --dry-run fails with
+       # "Method not found ... deprecated". Real deploys never touch that path.
+       # See docs/RPC_MIGRATION.md + docs/HOW_TO_DEPLOY_WALRUS_SITE.md.
+       rpc_url: https://fullnode.mainnet.sui.io:443
        # wallet: /path/to/.sui/sui_config/client.yaml
        # walrus_binary: /path/to/walrus
        # walrus_config: /path/to/mainnet/client_config.yaml
-       # site-builder needs ONE coin >= gas_budget to reserve. The default
-       # (500000000 = 0.5 SUI) exceeds the deploy wallet's balance now that the
-       # same key also sponsors uploads. A real deploy costs ~0.006 SUI, so 0.3
-       # SUI is ~50x headroom while still fitting the current balance. Raise it
-       # again once the wallet is topped up.
-       gas_budget: 300000000
+       # site-builder needs ONE coin >= gas_budget to reserve. Real deploys cost
+       # ~0.0085 SUI; 0.05 SUI keeps ~6x headroom and fits the deployer's single
+       # ~0.095 SUI coin (2026-10-02). Raise it once the wallet is topped up.
+       gas_budget: 50000000
 
 default_context: mainnet

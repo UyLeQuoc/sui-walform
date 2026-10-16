@@ -1,6 +1,6 @@
 {
   "network": "testnet",
-  "packageId": "0x61074d22c927255c82ba5e54c3a30ffb25a2dd3d2ceb8edf874de820a2ff1fa7",
+  "packageId": "0x506b81ee7b86fc937bdcd9d719c6ed6dfd8e4acea157191245a9267d9b666536",
   "originalPackageId": "0x2d8b918defc43b3b72afe63364f9b974c636b5820082d9a64b031e5e6d977289",
   "publishedAt": "2026-04-26T08:49:54.366Z",
   "publishTxDigest": "7RH64djFLMT9R3jCiS8anMASPp8SoYzs1LnGKqu6w2Po",
@@ -12,7 +12,98 @@
   "platformTreasury": "0xfea2d0b3f4d87ec5ad0bbf6326295b2002d5a35f011e908e9d426446eca8fac6",
   "platformAdminCap": "0x65aa51347e74496d4a239aa6548facc585b401beb7005fd7d84f0a55dd496f87",
   "notes": "Written by scripts/publish.ts. originalPackageId MUST stay stable across upgrades (Seal identity prefix).",
-  "previousPackageId": "0x83993865d4dc92d2e4c08d25320ac0b593cacca9fc1971893400bf33d63b7bd6",
-  "lastUpgradeAt": "2026-05-16T13:56:09.797Z",
-  "lastUpgradeTxDigest": "A9i6WZ11RrjrmG66jwmqE5o9jpwAabd9PVNx1qDLBSCS"
+  "previousPackageId": "0x3246afeaca7a3bd45c03c36061ca68e572f0544150740c3bd90402d13c02db43",
+  "lastUpgradeAt": "2026-10-16T12:53:43.247Z",
+  "lastUpgradeTxDigest": "6hrtx911NSRXVxYKWqWskZhVqZ54h7KqLswQWQARHLjh",
+  "packageHistory": [
+    {
+      "version": 1,
+      "packageId": "0x2d8b918defc43b3b72afe63364f9b974c636b5820082d9a64b031e5e6d977289",
+      "txDigest": "7RH64djFLMT9R3jCiS8anMASPp8SoYzs1LnGKqu6w2Po",
+      "at": "2026-04-26T08:49:54.121Z",
+      "modulesAdded": [
+        "allowlist",
+        "events",
+        "form",
+        "form_owner_cap",
+        "payment",
+        "seal_policies",
+        "submission",
+        "template"
+      ],
+      "note": "Initial publish"
+    },
+    {
+      "version": 2,
+      "packageId": "0xf56a0285f01c6c56f10b0e33ff6b9a0e8594ec916ab89286ee3ae7cc62b2cbda",
+      "txDigest": "FkSbSLRjMxWwhifsNcqm5Ya83phWKfVXFkTKQTkkiy6C",
+      "at": "2026-04-27T06:40:43.953Z",
+      "modulesAdded": []
+    },
+    {
+      "version": 3,
+      "packageId": "0xb7f027d93a45d1d633daafbfd0a098f18b4e47790c9ad98caf9e8902ae45903d",
+      "txDigest": "56v5tcLPyCce6bpC3aWqECpFLBnvpzHtvBECR7Yv84Rq",
+      "at": "2026-05-12T17:44:22.063Z",
+      "modulesAdded": [
+        "voting"
+      ]
+    },
+    {
+      "version": 4,
+      "packageId": "0x83993865d4dc92d2e4c08d25320ac0b593cacca9fc1971893400bf33d63b7bd6",
+      "txDigest": "6uf4rSpVPb2R2U3JVkFPVsz363Uf3eeqqKnwDEGRfmXn",
+      "at": "2026-05-12T18:43:05.280Z",
+      "modulesAdded": [
+        "reviewers"
+      ]
+    },
+    {
+      "version": 5,
+      "packageId": "0x61074d22c927255c82ba5e54c3a30ffb25a2dd3d2ceb8edf874de820a2ff1fa7",
+      "txDigest": "A9i6WZ11RrjrmG66jwmqE5o9jpwAabd9PVNx1qDLBSCS",
+      "at": "2026-05-16T13:56:09.581Z",
+      "modulesAdded": []
+    },
+    {
+      "version": 6,
+      "packageId": "0x3246afeaca7a3bd45c03c36061ca68e572f0544150740c3bd90402d13c02db43",
+      "txDigest": "H8xjcTETwViXd65SU76XGhk1Z7heYjcmccmQvNRUWX59",
+      "at": "2026-09-29T19:05:09.147Z",
+      "modulesAdded": [
+        "sponsor_pool"
+      ],
+      "note": "Add sponsor_pool (creator-funded Walrus storage for respondents; links walrus+wal). Also ships 9597143 input caps + template-schema Seal == check."
+    },
+    {
+      "version": 7,
+      "packageId": "0x506b81ee7b86fc937bdcd9d719c6ed6dfd8e4acea157191245a9267d9b666536",
+      "txDigest": "6hrtx911NSRXVxYKWqWskZhVqZ54h7KqLswQWQARHLjh",
+      "at": "2026-10-16T12:53:41.387Z",
+      "modulesAdded": [
+        "referral"
+      ],
+      "note": "referral module: on-chain referral links"
+    }
+  ],
+  "walrusDependency": {
+    "walrus": "0x849e95d2718938d66c37fb91df76d72f78526c1864c339bac415ce8ecda2d8cc",
+    "wal": "0x8270feb7375eee355e64fdb69c50abb6b5f9393a722883c1cf45f8e26048810a",
+    "gitRev": "c8061f22c892f013f43d30c89485c8fa0682bffb"
+  },
+  "sponsorTypesPackageId": "0x3246afeaca7a3bd45c03c36061ca68e572f0544150740c3bd90402d13c02db43",
+  "sponsorConfig": {
+    "objectId": "0x58c9964e46620a73570bc45262071772b69361412cb6c419f64d6719c43acfc2",
+    "createdAt": "2026-09-29T19:06:43.324Z",
+    "txDigest": "78FHtPVqdVS93fnKAvQ1JqSevyZmsft8TrzqNFCQQNb9",
+    "packageId": "0x3246afeaca7a3bd45c03c36061ca68e572f0544150740c3bd90402d13c02db43",
+    "feeBps": 500,
+    "maxStoragePricePerUnit": "3785",
+    "maxWritePricePerUnit": "7552",
+    "walrusPricesAtCreation": {
+      "storagePerUnitPerEpoch": "3028",
+      "writePerUnit": "6041"
+    }
+  },
+  "referralTypesPackageId": "0x506b81ee7b86fc937bdcd9d719c6ed6dfd8e4acea157191245a9267d9b666536"
 }

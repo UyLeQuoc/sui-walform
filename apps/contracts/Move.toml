@@ -4,14 +4,22 @@ edition = "2024"
 license = "Apache-2.0"
 authors = ["Uy Le <lequocuyit@gmail.com>"]
 
+# New-style manifest (no [addresses]): required to depend on Walrus's
+# new-style packages. The migration is bytecode-neutral — the package still
+# compiles at 0x0, which `scripts/upgrade.ts` relies on.
+#
+# Sui framework is auto-resolved from the locally-installed `sui` binary.
+#
+# Walrus publishes separate package lineages per network. `walrus` and `wal`
+# must BOTH be direct deps (transitive deps aren't in scope under the new
+# package system). Pin `rev` to a commit; each subdir's Published.toml carries
+# that network's `published-at`, which becomes our linkage. Building for
+# mainnet resolves mainnet object ids, so `sui client` must be on the matching
+# env when you build (scripts/upgrade.ts enforces this).
 [dependencies]
-# Sui framework is auto-resolved from the locally-installed `sui` binary
-# (Move 2024 package-management). Pin an explicit revision here later if
-# we ever need reproducible builds across machines.
+walrus = { git = "https://github.com/MystenLabs/walrus.git", subdir = "mainnet-contracts/walrus", rev = "c8061f22c892f013f43d30c89485c8fa0682bffb" }
+wal = { git = "https://github.com/MystenLabs/walrus.git", subdir = "mainnet-contracts/wal", rev = "c8061f22c892f013f43d30c89485c8fa0682bffb" }
 
-[addresses]
-walform = "0x0"
-
-[dev-dependencies]
-
-[dev-addresses]
+[dep-replacements.testnet]
+walrus = { git = "https://github.com/MystenLabs/walrus.git", subdir = "testnet-contracts/walrus", rev = "c8061f22c892f013f43d30c89485c8fa0682bffb" }
+wal = { git = "https://github.com/MystenLabs/walrus.git", subdir = "testnet-contracts/wal", rev = "c8061f22c892f013f43d30c89485c8fa0682bffb" }

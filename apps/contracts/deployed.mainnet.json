@@ -1,6 +1,6 @@
 {
   "network": "mainnet",
-  "packageId": "0xb0268669794e23d88eb07370735edcf6e70a0618fd31409834b1cd665d9c5303",
+  "packageId": "0x221ecc1e966e81225e1becc6fb720ba3a34612c6b5dc3b0c33ad589794330277",
   "originalPackageId": "0x0128bec074eff2c7ad03b52f45321c529958f75633d74668373e890d23fb64bb",
   "publishedAt": "2026-05-13T16:16:26.915Z",
   "publishTxDigest": "4XVTL8RMnMLnabZqyBAkNTM379YYtEJnw2Vc6vXWEu69",
@@ -12,7 +12,75 @@
   "platformTreasury": "0xd3576e1e42ab8dbccfe23c43b9e8b6da78daabd010d2a069809d1277da41530d",
   "platformAdminCap": "0xda3c4f70fb9011a6c890366bdc530e0cee24e05219b5bbab45cd256090356361",
   "notes": "Written by scripts/publish.ts. originalPackageId MUST stay stable across upgrades (Seal identity prefix).",
-  "previousPackageId": "0x0128bec074eff2c7ad03b52f45321c529958f75633d74668373e890d23fb64bb",
-  "lastUpgradeAt": "2026-05-16T13:56:29.696Z",
-  "lastUpgradeTxDigest": "BuJbQN2d3xAd37c8bx4szreJ1UeQjY3dfeDE7XVpwz4P"
+  "previousPackageId": "0xeddb1e70fa8bc39c39afb2974f1335db66f08ff28054b8f6bc9a915bcaad7213",
+  "lastUpgradeAt": "2026-10-16T13:06:53.454Z",
+  "lastUpgradeTxDigest": "Cvg66TCq3RRPeUDq3iwJhoP9uuokHRtStt7ytyeCTvcd",
+  "packageHistory": [
+    {
+      "version": 1,
+      "packageId": "0x0128bec074eff2c7ad03b52f45321c529958f75633d74668373e890d23fb64bb",
+      "txDigest": "4XVTL8RMnMLnabZqyBAkNTM379YYtEJnw2Vc6vXWEu69",
+      "at": "2026-05-13T16:16:26.560Z",
+      "modulesAdded": [
+        "allowlist",
+        "events",
+        "form",
+        "form_owner_cap",
+        "payment",
+        "reviewers",
+        "seal_policies",
+        "submission",
+        "template",
+        "voting"
+      ],
+      "note": "Initial publish"
+    },
+    {
+      "version": 2,
+      "packageId": "0xb0268669794e23d88eb07370735edcf6e70a0618fd31409834b1cd665d9c5303",
+      "txDigest": "BuJbQN2d3xAd37c8bx4szreJ1UeQjY3dfeDE7XVpwz4P",
+      "at": "2026-05-16T13:56:29.265Z",
+      "modulesAdded": []
+    },
+    {
+      "version": 3,
+      "packageId": "0xeddb1e70fa8bc39c39afb2974f1335db66f08ff28054b8f6bc9a915bcaad7213",
+      "txDigest": "2GkxL2hsLbcZx65W1ru1zB5hFFrg1ffApn7k9CPR3c4p",
+      "at": "2026-10-01T16:03:42.871Z",
+      "modulesAdded": [
+        "sponsor_pool"
+      ],
+      "note": "Add sponsor_pool (creator-funded Walrus storage for respondents; links walrus+wal). Also ships 9597143 input caps + template-schema Seal == check."
+    },
+    {
+      "version": 4,
+      "packageId": "0x221ecc1e966e81225e1becc6fb720ba3a34612c6b5dc3b0c33ad589794330277",
+      "txDigest": "Cvg66TCq3RRPeUDq3iwJhoP9uuokHRtStt7ytyeCTvcd",
+      "at": "2026-10-16T13:06:51.631Z",
+      "modulesAdded": [
+        "referral"
+      ],
+      "note": "referral module: on-chain referral links"
+    }
+  ],
+  "walrusDependency": {
+    "walrus": "0x98da433aa0139512c210597b1c5e3df6cd121d8d77f8652691bb66fadfc8aa1b",
+    "wal": "0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59",
+    "gitRev": "c8061f22c892f013f43d30c89485c8fa0682bffb"
+  },
+  "sponsorTypesPackageId": "0xeddb1e70fa8bc39c39afb2974f1335db66f08ff28054b8f6bc9a915bcaad7213",
+  "sponsorConfig": {
+    "objectId": "0x8af42c6f6b8ca07ceb09e406662bc29f632b08db31a9aa1a6b956dc4ac506262",
+    "createdAt": "2026-10-01T16:04:05.287Z",
+    "txDigest": "HqF6LwpPrQar18e2HMNRfTD2b4UJsPV54VZuMcTNgdba",
+    "packageId": "0xeddb1e70fa8bc39c39afb2974f1335db66f08ff28054b8f6bc9a915bcaad7213",
+    "feeBps": 500,
+    "maxStoragePricePerUnit": "83063",
+    "maxWritePricePerUnit": "150570",
+    "walrusPricesAtCreation": {
+      "storagePerUnitPerEpoch": "66450",
+      "writePerUnit": "120456"
+    }
+  },
+  "referralTypesPackageId": "0x221ecc1e966e81225e1becc6fb720ba3a34612c6b5dc3b0c33ad589794330277"
 }

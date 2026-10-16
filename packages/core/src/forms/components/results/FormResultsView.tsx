@@ -51,6 +51,7 @@ import { useFormReviewers } from '../../hooks/use-form-reviewers';
 import { useSealedSchemaDecrypt } from '../../hooks/use-sealed-schema-decrypt';
 import { useSubmissionDecryption } from '../../hooks/use-submission-decryption';
 import { useSubmissionTags } from '../../hooks/use-submission-tags';
+import { useFormReferrals } from '../../hooks/use-form-referrals';
 import {
   DEFAULT_SUBMISSION_FILTERS,
   SubmissionsFilterBar,
@@ -64,6 +65,7 @@ import {
   type ExportFormat,
 } from '../../lib/export-submissions-csv';
 import { deriveOnChainStatus } from '../../lib/form-status';
+import { referrerBySubmission } from '../../lib/referrals';
 import { formsRoute } from '../../lib/routes';
 import { copyFormShareLink } from '../../lib/share-link';
 import { DeployToWalrusSiteButton } from '../list/DeployToWalrusSiteButton';
@@ -73,6 +75,9 @@ import { AggregateCharts } from './AggregateCharts';
 import { ByQuestionPanel } from './ByQuestionPanel';
 import { ResponseTimeline } from './ResponseTimeline';
 import { AllowlistPanel } from './AllowlistPanel';
+import { FormStoragePanel } from './FormStoragePanel';
+import { ReferralsPanel } from './ReferralsPanel';
+import { SponsorPoolPanel } from './SponsorPoolPanel';
 import { ReviewersPanel } from './ReviewersPanel';
 import { SeedResponsesButton } from './SeedResponsesButton';
 import { ShareFormDialog } from './ShareFormDialog';
@@ -87,7 +92,7 @@ interface FormResultsViewProps {
  *  every render for the (common) plaintext-schema case. */
 const EMPTY_CIPHERTEXT = new Uint8Array();
 
-type ResultsTab = 'summary' | 'by-question' | 'individual' | 'reviewers' | 'manage';
+type ResultsTab = 'summary' | 'by-question' | 'individual' | 'reviewers' | 'referrals' | 'manage';
 
 /**
  * Creator's Results dashboard.
@@ -156,6 +161,16 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
   // exports) reads its questions from here.
   const effectiveSchema = form?.schema ?? sealedSchema.decrypted;
   const inputFields = (effectiveSchema?.fields ?? []).filter(isInputField);
+  const referrals = useFormReferrals(formId);
+  const referralSettings = effectiveSchema?.settings.referrals ?? {
+    enabled: false,
+    publicLeaderboard: false,
+  };
+  const referredBy = referrals.status === 'success' ? referrerBySubmission(referrals.records) : {};
+  // Keep the tab after referrals are switched off if some were already recorded.
+  const showReferrals =
+    referrals.status !== 'unavailable' &&
+    (referralSettings.enabled || Object.keys(referredBy).length > 0);
   const schemaLocked = !!form?.schemaSealed && !sealedSchema.decrypted;
 
   // One click unlocks both halves: the schema (questions) and the response
@@ -180,6 +195,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       rows,
       decryptedById,
       fields: inputFields,
+      referredBy,
     });
     downloadExport(content, `${form.title}-responses`, format);
   };
@@ -259,9 +275,9 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
       const decrypted = decryptedById[row.submissionId];
       const bodyMatch = decrypted
         ? Object.values(decrypted).some((v) => {
-          if (v === null || v === undefined) return false;
-          return String(v).toLowerCase().includes(needle);
-        })
+            if (v === null || v === undefined) return false;
+            return String(v).toLowerCase().includes(needle);
+          })
         : false;
       if (!submitterMatch && !idMatch && !bodyMatch) return false;
     }
@@ -278,18 +294,18 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
     inputFields.length === 0 || decryptedRows.length === 0
       ? Number.NaN
       : decryptedRows.reduce((sum, row) => {
-        let answered = 0;
-        for (const f of inputFields) {
-          const v = row[f.id];
-          const empty =
-            v === null ||
-            v === undefined ||
-            (typeof v === 'string' && v.trim() === '') ||
-            (Array.isArray(v) && v.length === 0);
-          if (!empty) answered++;
-        }
-        return sum + (answered / inputFields.length) * 100;
-      }, 0) / decryptedRows.length;
+          let answered = 0;
+          for (const f of inputFields) {
+            const v = row[f.id];
+            const empty =
+              v === null ||
+              v === undefined ||
+              (typeof v === 'string' && v.trim() === '') ||
+              (Array.isArray(v) && v.length === 0);
+            if (!empty) answered++;
+          }
+          return sum + (answered / inputFields.length) * 100;
+        }, 0) / decryptedRows.length;
   const canDecrypt = !!activePackageId && !!originalPackageId;
   const isDecryptingAny =
     decryption.isSessionInitializing || decryption.pendingIds.size > 0 || sealedSchema.pending;
@@ -449,6 +465,14 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
           >
             Reviewers ({reviewersState.members.length})
           </TabsTrigger>
+          {showReferrals && (
+            <TabsTrigger
+              value="referrals"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground rounded-none dark:data-[state=active]:border-transparent"
+            >
+              Referrals{referrals.status === 'success' ? ` (${referrals.records.length})` : ''}
+            </TabsTrigger>
+          )}
           {ownerForm && (
             <TabsTrigger
               value="manage"
@@ -529,6 +553,7 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
               canDecrypt={canDecrypt}
               pendingIds={decryption.pendingIds}
               onDecrypt={(row) => void decryption.decryptOne(row)}
+              referredBy={referredBy}
               tagFor={(id) => tags.tagFor(id)}
               onStatusChange={(id, next) => void tags.setStatus(id, next)}
               onPriorityChange={(id, next) => void tags.setPriority(id, next)}
@@ -540,12 +565,28 @@ export function FormResultsView({ formId }: FormResultsViewProps) {
           <ReviewersPanel formId={formId} capId={ownerForm?.capId} />
         </TabsContent>
 
+        {showReferrals && (
+          <TabsContent value="referrals" className="mt-4">
+            <ReferralsPanel
+              referrals={referrals}
+              enabled={referralSettings.enabled}
+              isPublic={referralSettings.enabled && referralSettings.publicLeaderboard}
+              totalSubmissions={rows.length}
+            />
+          </TabsContent>
+        )}
+
         {ownerForm && (
           <TabsContent value="manage" className="mt-4 flex flex-col gap-4">
             <ManagePanel form={ownerForm} />
             {ownerForm.accessMode === 1 && (
               <AllowlistPanel formId={ownerForm.formId} capId={ownerForm.capId} />
             )}
+            {/* Paid forms charge SUI at submit, so respondents need a funded wallet anyway. */}
+            {ownerForm.accessMode !== 3 && (
+              <SponsorPoolPanel formId={ownerForm.formId} capId={ownerForm.capId} />
+            )}
+            <FormStoragePanel formId={ownerForm.formId} />
           </TabsContent>
         )}
       </Tabs>
@@ -558,8 +599,8 @@ function EmptyResponses({ formId }: { formId: string }) {
     <Card>
       <CardContent className="py-12 text-center">
         <p className="text-muted-foreground text-sm">
-          No responses yet. Share <code className="font-mono">/f?formId={shortAddr(formId)}</code> to
-          start collecting.
+          No responses yet. Share <code className="font-mono">/f?formId={shortAddr(formId)}</code>{' '}
+          to start collecting.
         </p>
       </CardContent>
     </Card>
@@ -597,7 +638,12 @@ function SealedSchemaCallout({
           </p>
           {error && <p className="text-destructive mt-1 text-xs">{error}</p>}
         </div>
-        <Button size="sm" variant="outline" onClick={onUnlock} disabled={!canDecrypt || isDecrypting}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onUnlock}
+          disabled={!canDecrypt || isDecrypting}
+        >
           {isDecrypting ? (
             <Spinner className="mr-1.5 size-3.5" />
           ) : (

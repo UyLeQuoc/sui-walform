@@ -1,23 +1,33 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FilePlus, Receipt } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  FilePlus,
+  Receipt,
+} from 'lucide-react';
 import { Button } from '../../../ui/button';
 import { suivisionUrl, type ExplorerNetwork } from '../../../sui/explorer';
 import type { FormOnChainDetail } from '../../hooks/use-form-on-chain';
 import type { SubmissionRow } from '../../hooks/use-form-submissions';
 import { shortAddr } from '../../lib/format-address';
 import { isInputField } from '../../lib/field-types';
+import { referralsEnabled } from '../../lib/referrals';
 import { InlineReceipt } from './InlineReceipt';
+import { ReferralLinkCard } from './ReferralLinkCard';
 
 type Variant =
-  | { kind: 'just-submitted'; digest: string }
-  | { kind: 'already-submitted'; submissionId: string };
+  { kind: 'just-submitted'; digest: string } | { kind: 'already-submitted'; submissionId: string };
 
 interface ThankYouScreenProps {
   form: FormOnChainDetail & { schema: NonNullable<FormOnChainDetail['schema']> };
   network: ExplorerNetwork;
   variant: Variant;
+  /** The respondent's Submission, when known — keys their referral link. */
+  submissionId: string | null;
   submitter: string;
   submittedAtMs: number;
   /** The on-chain submission row for the connected wallet. Required to power
@@ -47,14 +57,14 @@ export function ThankYouScreen({
   form,
   network,
   variant,
+  submissionId,
   submitter,
   submittedAtMs,
   myRow,
   onSubmitAnother,
 }: ThankYouScreenProps) {
   const message = form.schema.settings.successMessage?.trim() || DEFAULT_MESSAGE;
-  const capReached =
-    form.maxSubmissions > 0 && form.submissionCount + 1 >= form.maxSubmissions;
+  const capReached = form.maxSubmissions > 0 && form.submissionCount + 1 >= form.maxSubmissions;
   const isJustSubmitted = variant.kind === 'just-submitted';
   const receiptHref = isJustSubmitted
     ? suivisionUrl(network, 'txblock', variant.digest)
@@ -132,6 +142,14 @@ export function ThankYouScreen({
           </Button>
         )}
       </div>
+
+      {submissionId && referralsEnabled(form.schema.settings) && (
+        <ReferralLinkCard
+          formId={form.formObjectId}
+          submissionId={submissionId}
+          submitter={submitter}
+        />
+      )}
 
       {receiptOpen && myRow && (
         <div className="flex flex-col gap-2 border-t pt-4">

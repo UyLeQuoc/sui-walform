@@ -20,6 +20,7 @@ import { deriveOnChainStatus, type FormStatus } from '../../lib/form-status';
 import { formsRoute } from '../../lib/routes';
 import type { OnChainForm } from '../../hooks/use-on-chain-forms';
 import { FormStatusBadge } from './FormStatusBadge';
+import { SponsoredPoolChip } from './SponsoredPoolChip';
 
 interface OnChainFormCardProps {
   form: OnChainForm;
@@ -134,6 +135,7 @@ export function OnChainFormCard({ form }: OnChainFormCardProps) {
               <CalendarClock className="h-3 w-3" />
               {deadline}
             </Badge>
+            <SponsoredPoolChip formId={form.formId} />
           </div>
           <div className="flex items-center justify-between gap-2 pt-1">
             <FormStatusBadge status={status} />

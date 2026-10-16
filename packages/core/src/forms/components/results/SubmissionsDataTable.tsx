@@ -27,6 +27,7 @@ import {
   User,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { Badge } from '../../../ui/badge';
 import { Button } from '../../../ui/button';
 import { Card, CardContent } from '../../../ui/card';
@@ -47,6 +48,7 @@ import type { DecryptedRow } from '../../hooks/use-submission-decryption';
 import type { SubmissionPriority, SubmissionStatus } from '../../services/submission-tags-db';
 import type { FormField } from '../../../types';
 import { QuestionCard } from './QuestionCard';
+import { ReferrerName } from '../referrals/ReferrerName';
 import { PriorityPill, StatusPill } from './SubmissionTagPills';
 
 interface SubmissionsDataTableProps {
@@ -61,6 +63,8 @@ interface SubmissionsDataTableProps {
   tagFor: (id: string) => { status: SubmissionStatus; priority: SubmissionPriority };
   onStatusChange: (id: string, next: SubmissionStatus) => void;
   onPriorityChange: (id: string, next: SubmissionPriority) => void;
+  /** Submission id → referrer address; adds a "Referred by" column when non-empty. */
+  referredBy?: Record<string, string>;
 }
 
 export function SubmissionsDataTable({
@@ -75,6 +79,7 @@ export function SubmissionsDataTable({
   tagFor,
   onStatusChange,
   onPriorityChange,
+  referredBy,
 }: SubmissionsDataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'submittedAtMs', desc: true }]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -99,6 +104,22 @@ export function SubmissionsDataTable({
         ),
         sortingFn: 'basic',
       },
+      ...(referredBy && Object.keys(referredBy).length > 0
+        ? [
+            {
+              id: 'referredBy',
+              header: 'Referred by',
+              cell: ({ row }) => {
+                const referrer = referredBy[normalizeSuiAddress(row.original.submissionId)];
+                return referrer ? (
+                  <ReferrerName address={referrer} className="text-xs" />
+                ) : (
+                  <span className="text-muted-foreground text-xs">-</span>
+                );
+              },
+            } satisfies ColumnDef<SubmissionRow>,
+          ]
+        : []),
       {
         id: 'priority',
         header: 'Priority',
@@ -151,7 +172,7 @@ export function SubmissionsDataTable({
         enableSorting: false,
       },
     ],
-    [decryptedById, errorById, onPriorityChange, onStatusChange, tagFor],
+    [decryptedById, errorById, onPriorityChange, onStatusChange, referredBy, tagFor],
   );
 
   const table = useReactTable({
@@ -500,12 +521,7 @@ function SubmissionDetail({
         {decrypted && (
           <div className="flex min-w-0 flex-col gap-3">
             {inputFields.map((f, i) => (
-              <QuestionCard
-                key={f.id}
-                index={i + 1}
-                field={f}
-                value={decrypted[f.id]}
-              />
+              <QuestionCard key={f.id} index={i + 1} field={f} value={decrypted[f.id]} />
             ))}
             {inputFields.length === 0 && (
               <p className="text-muted-foreground py-6 text-center text-sm">
@@ -538,4 +554,3 @@ function MetaItem({
     </div>
   );
 }
-

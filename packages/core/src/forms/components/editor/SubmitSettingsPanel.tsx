@@ -8,6 +8,7 @@ import { Textarea } from '../../../ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '../../../ui/toggle-group';
 import { cn } from '../../../lib/utils';
 import { useFormBuilderStore } from '../../store/form-builder-store';
+import { ReferralSettingsField } from './ReferralSettingsField';
 
 interface SubmitSettingsPanelProps {
   className?: string;
@@ -121,6 +122,8 @@ export function SubmitSettingsPanel({ className }: SubmitSettingsPanelProps) {
               Shown to respondents after they submit. Line breaks are preserved.
             </span>
           </Field>
+
+          <ReferralSettingsField />
         </FieldGroup>
       </div>
     </div>

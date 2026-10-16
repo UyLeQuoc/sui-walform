@@ -19,6 +19,8 @@ import {
 export interface WalletUploadResult {
   blobId: string;
   url: string;
+  /** The certified `walrus::blob::Blob`, owned by the connected wallet. */
+  blobObjectId: string;
 }
 
 export interface QuiltFileInput {
@@ -42,6 +44,8 @@ export interface QuiltUploadResult {
   quiltBlobId: string;
   /** Per-file results in INPUT order. */
   files: QuiltFileResult[];
+  /** The quilt's `walrus::blob::Blob`, when the uploader owns it (null via the platform sponsor). */
+  blobObjectId: string | null;
 }
 
 export interface UseWalrusWalletUploadResult {
@@ -159,7 +163,7 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
       options: { epochs?: number; deletable?: boolean } = {},
     ): Promise<WalletUploadResult> => {
       const { client, signer, walrusNet } = await ensureClient();
-      const { blobId } = await client.writeBlob({
+      const { blobId, blobObject } = await client.writeBlob({
         blob: bytes,
         deletable: options.deletable ?? false,
         epochs: options.epochs ?? 15,
@@ -168,6 +172,7 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
       return {
         blobId,
         url: `${getWalrusAggregatorUrl(walrusNet)}/v1/blobs/${blobId}`,
+        blobObjectId: blobObject.id,
       };
     },
     [ensureClient],
@@ -191,7 +196,11 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
       const ordered = files
         .map((f, i) => ({ original: i, file: f }))
         .sort((a, b) =>
-          a.file.identifier < b.file.identifier ? -1 : a.file.identifier > b.file.identifier ? 1 : 0,
+          a.file.identifier < b.file.identifier
+            ? -1
+            : a.file.identifier > b.file.identifier
+              ? 1
+              : 0,
         );
 
       const walrusFiles = ordered.map(({ file }) =>
@@ -226,7 +235,7 @@ export function useWalrusWalletUpload(): UseWalrusWalletUploadResult {
         };
       });
 
-      return { quiltBlobId, files: outFiles };
+      return { quiltBlobId, files: outFiles, blobObjectId: results[0]?.blobObject.id ?? null };
     },
     [ensureClient],
   );

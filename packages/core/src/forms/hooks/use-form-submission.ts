@@ -10,20 +10,31 @@ import type { FieldValues } from 'react-hook-form';
 import { sealEncryptSubmission, useSealClient } from '../../crypto';
 import { useSuiGrpcClient } from '../../sui/grpc/use-grpc-client';
 import { useActivePackageId, useOriginalPackageId } from '../../sui/package-id';
-import { useActivePublicAllowlistId } from '../../sui/env-network';
+import {
+  getWalCoinType,
+  useActivePublicAllowlistId,
+  useSponsorConfigId,
+} from '../../sui/env-network';
+import { extractSubmissionId } from '../../sui/tx/extract-submission-id';
 import { buildSubmitTx } from '../../sui/tx/submit';
 import { buildPaidSubmitTx, InsufficientSuiError } from '../../sui/tx/submit-paid';
-import { useExecuteTransaction } from '../../sui/use-execute-transaction';
+import { addShareBlobs } from '../../sui/tx/share-blobs';
+import { isGasSponsored, useExecuteTransaction } from '../../sui/use-execute-transaction';
 import { useInvalidateChainQueries } from '../../sui/use-invalidate-chain';
 import {
   canSponsorUpload,
   encodeBodyPointer,
+  getWalrusClient,
   sponsoredQuiltUpload,
   useWalrusWalletUpload,
   type QuiltUploadResult,
 } from '../../walrus';
 import { formatSui } from '../lib/sui-amount';
+import { SUBMISSION_STORAGE_EPOCHS } from '../lib/walrus-storage';
+import { isGasShortage, noGasMessage } from '../lib/tx-errors';
+import { submitSponsored } from '../services/sponsored-submission';
 import { useFormAllowlist } from './use-form-allowlist';
+import { useFormSponsorPool, useSponsorConfig } from './use-form-sponsor-pool';
 import { useFormTreasury } from './use-form-treasury';
 import { useTxSteps, type UseTxStepsResult } from './use-tx-steps';
 import type { FormOnChainDetail } from './use-form-on-chain';
@@ -43,6 +54,8 @@ export interface TokenGateState {
 export interface SubmittedSummary {
   /** Sui tx digest of the on-chain submission. */
   digest: string;
+  /** The Submission it created — keys the respondent's referral link. Null if it couldn't be read back. */
+  submissionId: string | null;
   /** Submitter address that signed the tx. */
   submitter: string;
   /** When the success state was set (client clock). */
@@ -87,7 +100,16 @@ export interface UseFormSubmissionResult {
  * query invalidation. The view component is left with banners + FormPreview
  * wiring.
  */
-export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionResult {
+export interface UseFormSubmissionOptions {
+  /** Referrer Submission to credit (from a validated referral link). */
+  referrerSubmissionId?: string | null;
+}
+
+export function useFormSubmission(
+  form: FormOnChainDetail,
+  options: UseFormSubmissionOptions = {},
+): UseFormSubmissionResult {
+  const referrerSubmissionId = options.referrerSubmissionId ?? undefined;
   const { isConnected } = useCurrentWallet();
   const account = useCurrentAccount();
   const { network } = useSuiClientContext();
@@ -113,6 +135,15 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
 
   const { execute } = useExecuteTransaction();
   const invalidateChain = useInvalidateChainQueries();
+  const sponsorPool = useFormSponsorPool(form.formObjectId);
+  const sponsorConfig = useSponsorConfig();
+  const sponsorConfigId = useSponsorConfigId();
+  const pool = sponsorPool.status === 'success' ? sponsorPool.pool : null;
+  const poolConfig = sponsorConfig.status === 'success' ? sponsorConfig.config : null;
+  // Candidate only — `submitSponsored` re-checks the pool can pay before
+  // spending anything. Paid forms charge SUI at submit, so they never qualify.
+  const sponsorCandidate =
+    form.accessMode !== 3 && !!pool?.enabled && !!poolConfig && !!sponsorConfigId;
   const { uploadBlob, uploadQuilt, isReady: walrusReady } = useWalrusWalletUpload();
 
   const [connectOpen, setConnectOpen] = useState(false);
@@ -146,11 +177,15 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       // submit tx, not the wallet-signed body upload), so a zero-SUI wallet is
       // blocked here with a friendly message instead of the low-level
       // "No valid gas coins found" error.
-      const suiBalance = await suiClient.core.getBalance({
-        owner: account.address,
-        coinType: '0x2::sui::SUI',
-      });
-      if (BigInt(suiBalance.balance.balance) === 0n) {
+      // A funded sponsor pool + gas sponsor means a zero-SUI wallet can submit.
+      const suiBalance =
+        sponsorCandidate && isGasSponsored(network)
+          ? null
+          : await suiClient.core.getBalance({
+              owner: account.address,
+              coinType: '0x2::sui::SUI',
+            });
+      if (suiBalance && BigInt(suiBalance.balance.balance) === 0n) {
         toast.error(
           network === 'testnet'
             ? 'Your wallet has no SUI to pay gas. Fund it from the testnet faucet and try again.'
@@ -216,8 +251,124 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         { id: 'broadcast', label: 'Broadcasting to Sui' },
         { id: 'confirm', label: 'Confirming on-chain' },
       );
-      steps.start(flow);
       try {
+        if (
+          sponsorCandidate &&
+          pool &&
+          poolConfig &&
+          sponsorConfigId &&
+          (network === 'testnet' || network === 'mainnet')
+        ) {
+          steps.start([
+            { id: 'prepare', label: 'Encrypting your response and preparing storage' },
+            { id: 'register', label: "Sign to store it on Walrus - the form's sponsor pays" },
+            { id: 'certify', label: 'Sign to confirm and submit' },
+            { id: 'confirm', label: 'Confirming on-chain' },
+          ]);
+          const files = await Promise.all(
+            pendingFiles.map(async ({ fieldId, file }, i) => ({
+              fieldId,
+              file,
+              identifier: `/${i}-${fieldId}-${file.name}`,
+              bytes: new Uint8Array(await file.arrayBuffer()),
+            })),
+          );
+          const result = await submitSponsored({
+            suiClient,
+            network,
+            execute: (transaction) => execute({ transaction }),
+            target: {
+              packageId,
+              poolId: pool.poolId,
+              configId: sponsorConfigId,
+              formId: form.formObjectId,
+              allowlistId,
+            },
+            pool,
+            config: poolConfig,
+            owner: account.address,
+            epochs: SUBMISSION_STORAGE_EPOCHS,
+            files,
+            encryptBody: async (urls) => {
+              const values: FieldValues = { ...submitValues };
+              for (const f of files) {
+                const url = urls.get(f.identifier);
+                if (!url) throw new Error(`No storage slot for ${f.file.name}`);
+                const attachment: FileAttachmentValue = {
+                  url,
+                  name: f.file.name,
+                  size: f.file.size,
+                  type: f.file.type || '',
+                };
+                (values as Record<string, unknown>)[f.fieldId] = attachment;
+              }
+              return sealEncryptSubmission({
+                seal,
+                packageId: originalPackageId,
+                formObjectId: form.formObjectId,
+                plaintext: new TextEncoder().encode(JSON.stringify(values)),
+              });
+            },
+            appendSubmit: (tx, body) => {
+              buildSubmitTx({
+                packageId,
+                formObjectId: form.formObjectId,
+                allowlistObjectId: allowlistId,
+                encryptedBody: body.pointer,
+                fileBlobIds: [],
+                nonce: body.nonce,
+                share: true,
+                referrerSubmissionId,
+                transaction: tx,
+              });
+            },
+            onStep: (step, detail) => steps.advance(step, detail),
+          });
+          if (result.kind === 'submitted') {
+            steps.advance('confirm');
+            await invalidateChain(result.digest);
+            const submissionId = await extractSubmissionId(
+              suiClient,
+              result.digest,
+              originalPackageId,
+            ).catch(() => null);
+            steps.finishOk();
+            setPendingSubmission(null);
+            setSubmitted({
+              digest: result.digest,
+              submissionId,
+              submitter: account.address,
+              submittedAtMs: Date.now(),
+            });
+            return true;
+          }
+          // Falling back means the wallet pays storage AND gas. If it can't
+          // even pay gas, or holds no WAL, the fallback can only fail with a
+          // misleading error — stop here and say what's actually missing.
+          if (isGasShortage(result.reason)) {
+            steps.finishError();
+            toast.error(noGasMessage(network, true));
+            return false;
+          }
+          const wal = await suiClient.core.getBalance({
+            owner: account.address,
+            coinType: getWalCoinType(network),
+          });
+          if (BigInt(wal.balance.balance) === 0n) {
+            steps.finishError();
+            toast.error(
+              `Sponsored storage isn't available for this form right now (${result.reason}), and your wallet has no WAL to pay for storage itself.`,
+            );
+            return false;
+          }
+          toast.info(
+            `Sponsored storage unavailable (${result.reason}) - your wallet will pay instead.`,
+          );
+        }
+        steps.start(flow);
+        // Blobs this wallet now owns, shared in the submit tx so the creator can
+        // extend them later without the respondent.
+        const ownedBlobIds: string[] = [];
         // 1. Bundle ALL pending File attachments into a single Walrus Quilt —
         //    one registration tx, one wallet prompt, regardless of N. Replaces
         //    the previous N-writeBlob loop that prompted the wallet once per
@@ -241,7 +392,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           steps.advance(
             'files',
             willSponsor
-              ? 'Uploading attachments to Walrus (sponsored — no wallet prompt).'
+              ? 'Uploading attachments to Walrus (sponsored - no wallet prompt).'
               : pendingFiles.length === 1
                 ? 'Wallet will prompt to sign one Walrus storage tx.'
                 : `Wallet will prompt to sign ONE Walrus storage tx for all ${pendingFiles.length} files.`,
@@ -256,12 +407,13 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
             } catch (e) {
               // Sponsor down / over quota → fall back to wallet-paid upload.
               console.warn('Sponsored upload failed — falling back to wallet-paid.', e);
-              steps.advance('files', 'Sponsor unavailable — wallet will sign the Walrus tx.');
-              quilt = await uploadQuilt(quiltInputs, { epochs: 10 });
+              steps.advance('files', 'Sponsor unavailable - wallet will sign the Walrus tx.');
+              quilt = await uploadQuilt(quiltInputs, { epochs: SUBMISSION_STORAGE_EPOCHS });
             }
           } else {
-            quilt = await uploadQuilt(quiltInputs, { epochs: 10 });
+            quilt = await uploadQuilt(quiltInputs, { epochs: SUBMISSION_STORAGE_EPOCHS });
           }
+          if (quilt.blobObjectId) ownedBlobIds.push(quilt.blobObjectId);
           quilt.files.forEach((result, i) => {
             const { fieldId, file } = pendingFiles[i]!;
             const next: FileAttachmentValue = {
@@ -288,7 +440,10 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
         // 3. Walrus body pivot: Seal ciphertext goes to Walrus; the Sui
         //    Submission keeps only a short pointer in `encrypted_body`.
         steps.advance('walrus', 'Wallet may prompt to sign a Walrus storage tx.');
-        const { blobId } = await uploadBlob(ciphertext, { epochs: 10 });
+        const { blobId, blobObjectId } = await uploadBlob(ciphertext, {
+          epochs: SUBMISSION_STORAGE_EPOCHS,
+        });
+        ownedBlobIds.push(blobObjectId);
         const bodyPointer = encodeBodyPointer(blobId);
 
         // 4. Build + sign the Sui submission tx.
@@ -303,6 +458,7 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
                 nonce,
                 ownerAddress: account.address,
                 suiClient,
+                referrerSubmissionId,
               })
             : buildSubmitTx({
                 packageId,
@@ -312,16 +468,29 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
                 fileBlobIds: [],
                 nonce,
                 share: true,
+                referrerSubmissionId,
               });
+
+        if (network === 'testnet' || network === 'mainnet') {
+          const walrus = await getWalrusClient(suiClient, network);
+          addShareBlobs(tx, {
+            walrusPackageId: (await walrus.systemObject()).package_id,
+            blobObjectIds: ownedBlobIds,
+          });
+        }
 
         steps.advance('broadcast');
         const { digest } = await execute({ transaction: tx });
         steps.advance('confirm');
         await invalidateChain(digest);
+        const submissionId = await extractSubmissionId(suiClient, digest, originalPackageId).catch(
+          () => null,
+        );
         steps.finishOk();
         setPendingSubmission(null);
         setSubmitted({
           digest,
+          submissionId,
           submitter: account.address,
           submittedAtMs: Date.now(),
         });
@@ -337,10 +506,8 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
           // active network. Map it to a clearer hint — same root cause as
           // the pre-flight branch, but covers races where dust got spent
           // between the pre-flight and the signing prompt.
-          if (msg.includes('No valid gas coins') || msg.includes('GasBalanceTooLow')) {
-            toast.error(
-              'Your wallet has no SUI to pay gas. Fund it from the testnet faucet and try again.',
-            );
+          if (isGasShortage(msg)) {
+            toast.error(noGasMessage(network, false));
           } else {
             toast.error(`Submit failed: ${msg}`);
           }
@@ -369,6 +536,12 @@ export function useFormSubmission(form: FormOnChainDetail): UseFormSubmissionRes
       uploadQuilt,
       walrusReady,
       steps,
+      sponsorCandidate,
+      pool,
+      poolConfig,
+      sponsorConfigId,
+      network,
+      referrerSubmissionId,
     ],
   );
 
@@ -477,6 +650,7 @@ interface BuildPaidInput {
   nonce: Uint8Array;
   ownerAddress: string;
   suiClient: SuiGrpcClient;
+  referrerSubmissionId?: string;
 }
 
 async function buildPaid(input: BuildPaidInput) {
@@ -494,6 +668,7 @@ async function buildPaid(input: BuildPaidInput) {
     feeMist: form.submissionFeeMist,
     encryptedBody: ciphertext,
     nonce,
+    referrerSubmissionId: input.referrerSubmissionId,
   });
   return tx;
 }

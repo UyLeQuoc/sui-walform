@@ -12,7 +12,10 @@
     "setup-public-allowlist": "bun run scripts/setup-public-allowlist.ts",
     "codegen": "sui-ts-codegen generate",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'noop — add eslint later'"
+    "lint": "echo 'noop — add eslint later'",
+    "package-log": "bun run scripts/package-log.ts",
+    "sponsor-config": "bun run scripts/sponsor-config.ts",
+    "referral-config": "bun run scripts/referral-config.ts"
   },
   "dependencies": {
     "@mysten/bcs": "^2",

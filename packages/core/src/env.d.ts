@@ -42,6 +42,13 @@ declare const process: {
     // back to the original package id otherwise (mainnet).
     NEXT_PUBLIC_REVIEWERS_PACKAGE_ID_TESTNET?: string;
     NEXT_PUBLIC_REVIEWERS_PACKAGE_ID_MAINNET?: string;
+    // Type-origin package ids of modules added by later upgrades.
+    NEXT_PUBLIC_SPONSOR_TYPES_PACKAGE_ID_TESTNET?: string;
+    NEXT_PUBLIC_SPONSOR_TYPES_PACKAGE_ID_MAINNET?: string;
+    NEXT_PUBLIC_SPONSOR_CONFIG_ID_TESTNET?: string;
+    NEXT_PUBLIC_SPONSOR_CONFIG_ID_MAINNET?: string;
+    NEXT_PUBLIC_REFERRAL_TYPES_PACKAGE_ID_TESTNET?: string;
+    NEXT_PUBLIC_REFERRAL_TYPES_PACKAGE_ID_MAINNET?: string;
     NEXT_PUBLIC_TRANSFER_POLICY_ID_TESTNET?: string;
     NEXT_PUBLIC_TRANSFER_POLICY_ID_MAINNET?: string;
     NEXT_PUBLIC_PLATFORM_TREASURY_ID_TESTNET?: string;

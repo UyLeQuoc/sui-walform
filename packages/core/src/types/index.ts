@@ -96,6 +96,13 @@ export interface NavigationSettings {
   showProgress: boolean;
 }
 
+export interface ReferralSettings {
+  /** After submitting, respondents get a personal link that credits them on-chain. */
+  enabled: boolean;
+  /** Show the top referrers on the public form page (creator always sees them in Results). */
+  publicLeaderboard: boolean;
+}
+
 export interface FormSettings {
   submitLabel: string;
   /** Label for the Next button shown on multi-page forms. Defaults to "Next". */
@@ -130,6 +137,8 @@ export interface FormSettings {
    * Only consulted by renderers when `schema.pages.length > 1`.
    */
   navigation?: NavigationSettings;
+  /** Referral links. Absent → off. */
+  referrals?: ReferralSettings;
 }
 
 export interface HistoryEntry {
@@ -302,4 +311,74 @@ export interface PresencePeer {
   user: PresenceUser;
   selectedFieldId: string | null;
   cursor: PresenceCursor | null;
+}
+
+/** A form's creator-funded Walrus sponsorship pool (`sponsor_pool::SponsorPool`). */
+export interface SponsorPoolState {
+  poolId: string;
+  formId: string;
+  walFrost: bigint;
+  suiMist: bigint;
+  /** Platform fees accrued but not yet swept to the platform. */
+  platformFeesFrost: bigint;
+  enabled: boolean;
+  maxWalPerUpload: bigint;
+  maxTipPerUpload: bigint;
+  /** 0 = unlimited. */
+  maxUploadsPerAddress: bigint;
+  totalUploads: bigint;
+  totalWalSpent: bigint;
+}
+
+/** Platform sponsorship settings (`sponsor_pool::SponsorConfig`). */
+export interface SponsorConfigState {
+  configId: string;
+  feeBps: bigint;
+  /** FROST per 1 MiB storage unit per epoch — a ceiling, not the live price. */
+  maxStoragePricePerUnit: bigint;
+  maxWritePricePerUnit: bigint;
+}
+
+/** One `referral::ReferralRecorded` event: `submitter` arrived through `referrer`'s link. */
+export interface ReferralRecord {
+  submissionId: string;
+  submitter: string;
+  referrer: string;
+  referrerSubmissionId: string;
+  submittedAtMs: number;
+}
+
+/** Someone a referrer brought in, with how many times they submitted through referral links. */
+export interface ReferredPerson {
+  address: string;
+  submissions: number;
+  firstReferredAtMs: number;
+  lastReferredAtMs: number;
+}
+
+/** A referrer's standing on a form's leaderboard. */
+export interface ReferrerStanding {
+  referrer: string;
+  /** Distinct people they brought in — what the leaderboard ranks by. */
+  people: number;
+  /** Submissions through their links (≥ people when a form allows resubmitting). */
+  submissions: number;
+  lastReferredAtMs: number;
+  /** Most recent first. */
+  invited: ReferredPerson[];
+}
+
+/**
+ * A submission's Walrus blob, wrapped as a `walrus::shared_blob::SharedBlob` at
+ * submit time so the form's creator (or anyone) can extend it.
+ */
+export interface StoredBlobState {
+  sharedBlobId: string;
+  /** The wrapped Blob's own id. */
+  blobObjectId: string;
+  /** Reserved (encoded) bytes — what Walrus prices storage on. */
+  encodedSize: bigint;
+  endEpoch: number;
+  /** WAL already sitting in the SharedBlob, spendable by any `extend`. */
+  fundsFrost: bigint;
 }

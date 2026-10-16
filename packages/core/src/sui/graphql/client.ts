@@ -8,21 +8,19 @@
  * every event scan MUST go through GraphQL. That makes GraphQL mandatory, not
  * a preference.
  *
- * ⚠️ ENDPOINT CHOICE IS LOAD-BEARING — it must be a FULL-HISTORY indexer.
- * Sui's official GraphQL serves fresh state (unlike its JSON-RPC fullnode:
- * verified 2026-07-17, object 0x661d2a50… at v939333850 with all 4 members
- * while JSON-RPC still returned v883961553) but it PRUNES event history to a
- * rolling window — measured the same day, it exposed `ReviewersCreated` only
- * back to 2026-06-29 (~18 days) where a full-history indexer returned all 35
- * events back to 2026-05-13. Both agreed on the newest event, so this is
- * pruning, not lag.
+ * ⚠️ ENDPOINT CHOICE IS LOAD-BEARING — it must serve FULL history. Every event
+ * scan in this app enumerates from the beginning of time (a reviewers tracker
+ * or marketplace template can be months old), so a pruning endpoint silently
+ * drops old templates, submissions and trackers.
  *
- * Every event scan in this app enumerates from the beginning of time (a
- * reviewers tracker or marketplace template can be months old), so a pruning
- * endpoint silently drops old templates, submissions and trackers. Point
- * `NEXT_PUBLIC_SUI_GRAPHQL_{TESTNET,MAINNET}` at a full-history indexer; the
- * official default below is a key-free fallback that is only correct for
- * recent data.
+ * Which provider keeps full history has flipped, so measure, don't assume:
+ * - 2026-07-17/28: official pruned to a rolling window (`ReviewersCreated` only
+ *   back ~18 days; 155/247 `SubmissionCreated`) while ZAN had everything.
+ * - 2026-10-01: official returned all 381 mainnet `SubmissionCreated` back to
+ *   2026-05-13, while ZAN started at 2026-07-11 (missing 105 submissions, 36
+ *   forms, 7 of 9 templates, all 3 paid listings).
+ * Both agreed on the newest events each time, so it's retention, not lag.
+ * `NEXT_PUBLIC_SUI_GRAPHQL_{TESTNET,MAINNET}` overrides the official default.
  *
  * Note the trade-off being made: a managed indexer's key ships in the public
  * JS bundle (as any `NEXT_PUBLIC_*` does) and must be origin-restricted in
