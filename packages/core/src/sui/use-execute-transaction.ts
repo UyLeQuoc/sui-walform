@@ -21,6 +21,14 @@ export interface ExecuteTransactionInput {
    * retry after a wallet rejection, re-run the tx builder.
    */
   transaction: Transaction;
+  /**
+   * Variant to send if the gas sponsor declines and the wallet pays gas.
+   * Needed when the tx spends SUI: sponsored txs can't touch the gas coin
+   * (it's the sponsor's), so they pay from owned coins — but that pulls in
+   * every owned SUI coin, leaving none for gas when the wallet pays. The
+   * wallet variant splits from the gas coin instead. Defaults to `transaction`.
+   */
+  walletTransaction?: Transaction;
 }
 
 export interface ExecuteTransactionResult {
@@ -114,7 +122,10 @@ export function useExecuteTransaction(): UseExecuteTransactionResult {
       }
 
       // ── Wallet-paid fallback ─────────────────────────────────────────────
-      const result = await signAndExecuteTransaction({ transaction: input.transaction, chain });
+      const result = await signAndExecuteTransaction({
+        transaction: input.walletTransaction ?? input.transaction,
+        chain,
+      });
       return { digest: result.digest, via: 'wallet' };
     },
     [account?.address, network, suiClient, signAndExecuteTransaction, signTransaction],

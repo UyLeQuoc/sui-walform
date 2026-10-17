@@ -1,5 +1,6 @@
 import { Transaction } from '@mysten/sui/transactions';
 import type { SuiClientTypes } from '@mysten/sui/client';
+import { submitPaidAndShare as referralSubmitPaidAndShare } from '../gen/walform/referral';
 import { submitPaidAndShare } from '../gen/walform/submission';
 
 export interface BuildPaidSubmitTxInput {
@@ -11,6 +12,8 @@ export interface BuildPaidSubmitTxInput {
   feeMist: bigint;
   encryptedBody: Uint8Array;
   nonce: Uint8Array;
+  /** Submission whose referral link brought this respondent (`referral::submit_paid_and_share`). */
+  referrerSubmissionId?: string;
 }
 
 export interface BuildPaidSubmitTxResult {
@@ -33,6 +36,7 @@ export interface BuildPaidSubmitTxResult {
  */
 export function buildPaidSubmitTx(input: BuildPaidSubmitTxInput): BuildPaidSubmitTxResult {
   const { packageId, formObjectId, treasuryId, coins, feeMist, encryptedBody, nonce } = input;
+  const { referrerSubmissionId } = input;
   const total = coins.reduce((s, c) => s + BigInt(c.balance), 0n);
   if (total < feeMist) {
     throw new InsufficientSuiError(feeMist, total);
@@ -58,21 +62,24 @@ export function buildPaidSubmitTx(input: BuildPaidSubmitTxInput): BuildPaidSubmi
     }
   }
   const [feeCoin] = tx.splitCoins(tx.object(chosen.objectId), [tx.pure.u64(feeMist)]);
+  const args = {
+    form: formObjectId,
+    treasury: treasuryId,
+    // Codegen types feeCoin as `string` (object id) but the
+    // normalizeMoveArguments runtime accepts TransactionArgument —
+    // splitCoins returns one. Cast to satisfy TS.
+    feeCoin: feeCoin as unknown as string,
+    encryptedBody: Array.from(encryptedBody),
+    fileBlobIds: [],
+    nonce: Array.from(nonce),
+  };
   tx.add(
-    submitPaidAndShare({
-      package: packageId,
-      arguments: {
-        form: formObjectId,
-        treasury: treasuryId,
-        // Codegen types feeCoin as `string` (object id) but the
-        // normalizeMoveArguments runtime accepts TransactionArgument —
-        // splitCoins returns one. Cast to satisfy TS.
-        feeCoin: feeCoin as unknown as string,
-        encryptedBody: Array.from(encryptedBody),
-        fileBlobIds: [],
-        nonce: Array.from(nonce),
-      },
-    }),
+    referrerSubmissionId
+      ? referralSubmitPaidAndShare({
+          package: packageId,
+          arguments: { ...args, referrer: referrerSubmissionId },
+        })
+      : submitPaidAndShare({ package: packageId, arguments: args }),
   );
   return { tx, coverage: total };
 }

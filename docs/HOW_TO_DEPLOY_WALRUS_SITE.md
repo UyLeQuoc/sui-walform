@@ -9,8 +9,8 @@ same with `--context testnet` and a faucet-funded wallet.
 
 | Thing | Value / location |
 | --- | --- |
-| `site-builder` CLI | `~/.local/bin/site-builder` (v2.8.0+) |
-| `walrus` CLI + config | `~/.local/bin/walrus`, config `~/.config/walrus/client_config.yaml` |
+| `site-builder` CLI | `~/.local/bin/site-builder` — **v2.12.0+** |
+| `walrus` CLI + config | `~/.local/bin/walrus` — **v1.55.2+**, config `~/.config/walrus/client_config.yaml` |
 | `sui` CLI | must have a `mainnet` env and the **owner wallet** in the keystore |
 | `sites-config.yaml` | repo root (`contexts: testnet/mainnet`, `default_context: mainnet`) |
 | **Site object id** | `0x3e0573ec782ce73c50126e9e315473a09d8eef4dbcaa12ea27d8ac1a5b82f05e` |
@@ -49,7 +49,7 @@ Note your previous active address/env so you can switch back afterwards.
 
 ```bash
 site-builder --context mainnet --config ./sites-config.yaml \
-  deploy ./apps/builder/out --epochs 4 \
+  deploy ./apps/builder/out --epochs 10 \
   --object-id 0x3e0573ec782ce73c50126e9e315473a09d8eef4dbcaa12ea27d8ac1a5b82f05e
 ```
 
@@ -57,7 +57,24 @@ site-builder --context mainnet --config ./sites-config.yaml \
 - `deploy` is the unified command: it publishes if the site is new, or **updates** the object given
   by `--object-id`. Do **not** mix `update … deploy` (two subcommands → error).
 - `deploy` diffs against the live site and only re-uploads **changed** blobs.
-- `--epochs 4` = storage duration (1 mainnet epoch ≈ 14 days, so ~8 weeks).
+- `--epochs 10` = storage duration (1 mainnet epoch ≈ 14 days, so ~4.6 months). A **shorter**
+  `--epochs` never shortens already-paid resources — it just declines to pay for an extension — so
+  the flag only ever costs you the gap between a blob's current expiry and the requested one.
+  Check the runway before picking a number:
+
+  ```bash
+  walrus --context mainnet info      | grep "Current epoch"   # e.g. 39
+  walrus --context mainnet list-blobs | grep -v expired       # "Exp. epoch" column
+  ```
+- **`--object-id` is mandatory, not optional.** `site-builder` normally reads `object_id` from the
+  deploy directory's `ws-resources.json`, but `apps/builder/out/ws-resources.json` is a *build
+  artifact* copied from `apps/builder/public/ws-resources.json`, which has no `object_id`. Every
+  rebuild (including a Turborepo cache restore) therefore wipes it. Omit the flag and site-builder
+  **publishes a brand-new site** — burning WAL and orphaning the `walform.wal.app` SuiNS record.
+  Verify with `grep object_id apps/builder/out/ws-resources.json` before deploying; on success
+  site-builder writes it back.
+- Do not pass `--ws-resources`: the default (`ws-resources.json` inside the deploy directory) is
+  correct, and `apps/builder/walrus/ws-resources.mainnet.json` does not exist.
 
 ### 4. Switch your wallet back
 
@@ -72,7 +89,89 @@ On success the CLI prints `Execution completed`, a list of created/deleted resou
 object id. Browse via `walform.wal.app` (a SuiNS name pointing at the Site object) or the base36
 `*.localhost` portal URL printed by the tool.
 
-Cost per update is small (only changed blobs) — a typical run is ≈ **0.005 SUI + 0.09 WAL**.
+Cost per update is small (only changed blobs). Measured on 2026-09-09 (23 MB `out/`, 133 files,
+25.9 MiB quilt), both runs from epoch 39 — in each case the Walrus estimate matched the charge
+**to the FROST**:
+
+| Run | SUI gas | WAL |
+| --- | --- | --- |
+| Content deploy, `--epochs 2` (re-stored 3 expired blobs) | 0.008450 | 0.056025 |
+| `--epochs 10` on the *same* content — 0 new storage, extended 1 blob by 8 epochs | 0.001300 | 0.117533 |
+| 2026-10-02 sponsorship release, `--epochs 9` from epoch 40 (= the site's existing expiry, 49) — no extensions | 0.005871 | 0.088376 |
+| 2026-10-02 standalone storage-extend release, `--epochs 9` from epoch 40 — no extensions | 0.009362 | 0.086939 |
+| 2026-10-16 referral release, `--epochs 8` from epoch 41 — no extensions | −0.007873 (net: storage rebate from 10 deleted resources > gas) | 0.056838 |
+| 2026-10-16 invite-hint release, `--epochs 8` from epoch 41 — estimate said 0.055914 WAL, actual far lower (freed storage reused) | 0.002905 | 0.010351 |
+
+Note the shape: **extending storage costs more than uploading the content did**. Pick the epoch
+count you actually want on the first run rather than bumping it afterwards.
+
+Rule of thumb for updates: `--epochs = <site's current expiry epoch> − <current epoch>`. New
+resources then expire with the old ones and nothing gets extended. Read both with
+`walrus --context mainnet info` and `walrus --context mainnet list-blobs`.
+
+The site is currently paid through **epoch 49 (~2027-01-26)**.
+
+## Gotcha: RPC — everything must be gRPC, and `--dry-run` is broken on mainnet
+
+Sui turned **JSON-RPC off on public fullnodes** (mainnet 2026-07-31). `walrus` ≥1.55 and
+`site-builder` ≥2.12 are gRPC clients, so all three configs must point at a **gRPC-capable**
+fullnode — `https://fullnode.mainnet.sui.io:443`:
+
+| Config | Field | Used by |
+| --- | --- | --- |
+| `sites-config.yaml` | `contexts.mainnet.general.rpc_url` | forwarded to the `walrus` subprocess as `--rpc-url` (it **overrides** walrus's own config) |
+| `~/.sui/sui_config/client.yaml` | `envs[alias: mainnet].rpc` | site-builder's own `RetriableSuiClient` (`SiteManager::new`) |
+| `~/.config/walrus/client_config.yaml` | `contexts.mainnet.rpc_urls` | `walrus` when site-builder forwards nothing |
+
+**Do not point these at a JSON-RPC-only provider** (ZAN, BlockVision, PublicNode — none of them
+serve Sui gRPC). The symptom is a gRPC framing error, because the client is parsing an HTTP 404
+JSON body as a gRPC frame:
+
+```
+protocol error: received message with invalid compression flag: 123
+(valid flags are 0 and 1) while receiving response with status: 404 Not Found
+```
+
+(`123` is `{` — the start of the 404's JSON body.) The mirror-image symptom, from pointing a
+JSON-RPC call at Mysten's fullnode, is:
+
+```
+Method not found. JSON-RPC on public fullnodes has been deprecated.
+```
+
+**`--dry-run` cannot work on mainnet right now.** It is the one code path that still needs
+JSON-RPC: `SiteManager::dry_run_ptb` calls `dev_inspect_transaction_block` over JSON-RPC and is
+still marked `TODO(grpc-migration)` in site-builder 2.12. It builds that client from the *same*
+wallet env URL that `SiteManager::new` uses for gRPC, so one URL would have to serve both
+protocols — and no public endpoint does. `--dry-run` therefore dies right after printing the
+Walrus estimate:
+
+```
+Estimated Walrus Storage Cost for this publish/update:
+56024966 FROST
+Error during execution: ErrorObject { code: MethodNotFound, ... }
+```
+
+That Walrus number is still trustworthy — it is the storage cost, and it matched the real deploy
+to the FROST. Only the SUI-gas half of the estimate is lost, and gas is bounded by `gas_budget`
+(0.3 SUI) and has run ~0.008 SUI in practice. **Real deploys are unaffected** — they never call
+`dry_run_ptb`.
+
+## Gotcha: "could not find WAL/SUI coins with sufficient balance" while the wallet has funds
+
+Sui can hold funds as an **address balance** instead of coin objects (wallets and exchanges increasingly
+send that way). `getBalance` reports both (`coinBalance` + `addressBalance`), but the `walrus` CLI (1.55)
+behind `site-builder` only spends **coin objects**, so "Storing quilts to Walrus" fails even with plenty
+of funds — for WAL (storage), and for SUI too: it reserves **one SUI coin ≥ `gas_budget`** (0.05 SUI)
+and errors with `could not find SUI coins with sufficient balance [requested_amount=Some(50000000)]`.
+Nothing on-chain has changed at that point — the Site object is untouched.
+
+Move some of each from the address balance into a coin object, then re-run the deploy:
+
+```bash
+SUI_NETWORK=mainnet bun run apps/contracts/scripts/balance-to-coin.ts --coin WAL --amount 1     # --dry-run to simulate
+SUI_NETWORK=mainnet bun run apps/contracts/scripts/balance-to-coin.ts --coin SUI --amount 0.3
+```
 
 ## Gotcha: `MoveAbort` in `walrus … system::inner_mut`
 

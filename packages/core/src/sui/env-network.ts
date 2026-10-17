@@ -91,6 +91,60 @@ export function useReviewersEventPackageId(): string | null {
   return null;
 }
 
+/**
+ * Package id that tags `sponsor_pool` object + event types. The module was
+ * added in an upgrade, so like `reviewers` on testnet its types live under the
+ * version that introduced it, not originalPackageId. Only for event queries
+ * and type matching — MoveCall targets use the active package.
+ */
+export function getSponsorTypesPackageId(network: WalformNetwork): string | null {
+  return network === 'mainnet'
+    ? (process.env.NEXT_PUBLIC_SPONSOR_TYPES_PACKAGE_ID_MAINNET ?? null)
+    : (process.env.NEXT_PUBLIC_SPONSOR_TYPES_PACKAGE_ID_TESTNET ?? null);
+}
+
+export function useSponsorTypesPackageId(): string | null {
+  const net = useActiveNetwork();
+  return net ? getSponsorTypesPackageId(net) : null;
+}
+
+/**
+ * Package id that tags `referral::ReferralRecorded` — the version that added
+ * the `referral` module. Null until that upgrade is live on the network, which
+ * hides referral links there.
+ */
+export function getReferralTypesPackageId(network: WalformNetwork): string | null {
+  return network === 'mainnet'
+    ? (process.env.NEXT_PUBLIC_REFERRAL_TYPES_PACKAGE_ID_MAINNET ?? null)
+    : (process.env.NEXT_PUBLIC_REFERRAL_TYPES_PACKAGE_ID_TESTNET ?? null);
+}
+
+export function useReferralTypesPackageId(): string | null {
+  const net = useActiveNetwork();
+  return net ? getReferralTypesPackageId(net) : null;
+}
+
+/** Platform `SponsorConfig` (fee + Walrus price ceilings) every pool is opened against. */
+export function getSponsorConfigId(network: WalformNetwork): string | null {
+  return network === 'mainnet'
+    ? (process.env.NEXT_PUBLIC_SPONSOR_CONFIG_ID_MAINNET ?? null)
+    : (process.env.NEXT_PUBLIC_SPONSOR_CONFIG_ID_TESTNET ?? null);
+}
+
+export function useSponsorConfigId(): string | null {
+  const net = useActiveNetwork();
+  return net ? getSponsorConfigId(net) : null;
+}
+
+const WAL_COIN_TYPE = {
+  testnet: '0x8270feb7375eee355e64fdb69c50abb6b5f9393a722883c1cf45f8e26048810a::wal::WAL',
+  mainnet: '0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL',
+} as const;
+
+export function getWalCoinType(network: WalformNetwork): string {
+  return WAL_COIN_TYPE[network];
+}
+
 export function useActiveTransferPolicyId(): string | null {
   const net = useActiveNetwork();
   if (net === 'testnet') return process.env.NEXT_PUBLIC_TRANSFER_POLICY_ID_TESTNET ?? null;
@@ -121,9 +175,13 @@ const DEFAULT_WALRUS_UPLOAD_RELAY_MAINNET = 'https://upload-relay.mainnet.walrus
 const DEFAULT_WALRUS_SITE_PACKAGE_TESTNET =
   '0x22b8c1496650eb45fbcca0f8f37fae77ed33b7d4eaab4da5f0bb9b62a8708dcb';
 
-export function getWalrusAggregatorUrl(network: WalformNetwork | string | null | undefined): string {
+export function getWalrusAggregatorUrl(
+  network: WalformNetwork | string | null | undefined,
+): string {
   if (network === 'mainnet') {
-    return process.env.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL_MAINNET || DEFAULT_WALRUS_AGGREGATOR_MAINNET;
+    return (
+      process.env.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL_MAINNET || DEFAULT_WALRUS_AGGREGATOR_MAINNET
+    );
   }
   return process.env.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL_TESTNET || DEFAULT_WALRUS_AGGREGATOR_TESTNET;
 }
@@ -131,7 +189,8 @@ export function getWalrusAggregatorUrl(network: WalformNetwork | string | null |
 export function getWalrusUploadRelayHost(network: WalformNetwork): string {
   if (network === 'mainnet') {
     return (
-      process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_HOST_MAINNET || DEFAULT_WALRUS_UPLOAD_RELAY_MAINNET
+      process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_HOST_MAINNET ||
+      DEFAULT_WALRUS_UPLOAD_RELAY_MAINNET
     );
   }
   return (

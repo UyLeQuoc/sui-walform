@@ -1,85 +1,92 @@
 /**
- * Upgrade the deployed walform package, preserving `originalPackageId`
- * (critical — Seal identities are keyed on the original).
+ * Upgrade the walform package on one network, preserving `originalPackageId`
+ * (Seal identities and every object type are keyed on it).
  *
- *   bun run upgrade
+ *   SUI_NETWORK=testnet bun run upgrade --dry-run          # simulate, print cost, stop
+ *   SUI_NETWORK=testnet bun run upgrade --note "why"       # execute
  *
- * Reads ids from `deployed.json`, compiles current Move sources, submits an
- * upgrade tx using the saved UpgradeCap, writes the NEW packageId back.
+ * - Reads and writes ONLY `deployed.<network>.json` (mainnet also mirrors to
+ *   the legacy `deployed.json`).
+ * - Refuses to run if that file disagrees with the chain about the current
+ *   version.
+ * - `compatible` policy: old versions stay on-chain and callable; existing
+ *   objects are untouched.
+ * - Signs with the keystore key of the UpgradeCap owner via `sui keytool
+ *   sign` — no private key in env or on disk.
+ * - Appends the new version to `packageHistory` and re-renders PACKAGES.md.
  */
-import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { config as loadEnv } from "dotenv";
+import { execFileSync } from "node:child_process";
 
-import { GrpcWebFetchTransport, SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction, UpgradePolicy } from "@mysten/sui/transactions";
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
 
-// -----------------------------------------------------------------------------
+import {
+  BUILDER_ENV,
+  CONTRACTS_DIR,
+  formatMist,
+  grpcClient,
+  readDeployment,
+  renderPackageLog,
+  resolveNetwork,
+  signWithKeystore,
+  syncPackageHistory,
+  upsertEnvVar,
+  withActiveEnv,
+  writeDeployment,
+  type Deployment,
+  type Network,
+} from "./lib/deployments";
 
-loadEnv({ path: resolve(import.meta.dir, "../.env.local") });
+const WALRUS_GIT_REV = "c8061f22c892f013f43d30c89485c8fa0682bffb";
+const FRAMEWORK = new Set([
+  "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "0x0000000000000000000000000000000000000000000000000000000000000002",
+]);
 
-const NETWORK = (process.env.SUI_NETWORK ?? "testnet") as
-  | "testnet"
-  | "mainnet"
-  | "devnet"
-  | "localnet";
-
-const DEPLOYED_JSON = resolve(import.meta.dir, "../deployed.json");
-
-// -----------------------------------------------------------------------------
+function arg(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
 
 async function main() {
-  const deployed = JSON.parse(readFileSync(DEPLOYED_JSON, "utf-8"));
-  if (!deployed.packageId || !deployed.upgradeCap) {
-    throw new Error(
-      "deployed.json missing packageId or upgradeCap. Run publish first.",
-    );
-  }
+  const network = resolveNetwork();
+  const dryRun = process.argv.includes("--dry-run");
+  const note = arg("note");
 
-  const keypair = loadDeployerKeypair();
-  const address = keypair.toSuiAddress();
-  // gRPC, not JSON-RPC: Sui decommissioned public JSON-RPC (testnet's endpoint
-  // already answers 404, mainnet's switches off 2026-07-31). `SUI_GRPC_URL`
-  // overrides the official fullnode.
-  const client = new SuiGrpcClient({
-    network: NETWORK,
-    transport: new GrpcWebFetchTransport({
-      baseUrl: process.env.SUI_GRPC_URL ?? `https://fullnode.${NETWORK}.sui.io`,
-    }),
-  });
+  const deployed = await syncPackageHistory(readDeployment(network));
+  const client = grpcClient(network);
+  const sender = deployed.publisherAddress;
+  const current = deployed.packageHistory?.at(-1);
 
-  console.log(`Deployer:             ${address}`);
-  console.log(`Network:              ${NETWORK}`);
-  console.log(`Current packageId:    ${deployed.packageId}`);
-  console.log(`Original packageId:   ${deployed.originalPackageId}`);
+  console.log(`Network:            ${network}${dryRun ? "  (DRY RUN)" : ""}`);
+  console.log(`Signer:             ${sender} (keystore)`);
+  console.log(`Original package:   ${deployed.originalPackageId}`);
+  console.log(`Current package:    ${deployed.packageId} (v${current?.version})`);
 
-  // 1. Compile.
-  const buildOutput = JSON.parse(
-    execSync("sui move build --dump-bytecode-as-base64 --path .", {
-      cwd: resolve(import.meta.dir, ".."),
-    }).toString(),
-  ) as { modules: string[]; dependencies: string[]; digest: number[] };
-
-  console.log(
-    `Compiled ${buildOutput.modules.length} modules, ${buildOutput.dependencies.length} deps`,
+  const build = await withActiveEnv(network, async () =>
+    JSON.parse(
+      execFileSync(
+        "sui",
+        ["move", "build", "-e", network, "--dump-bytecode-as-base64", "--path", "."],
+        { cwd: CONTRACTS_DIR, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
+      ),
+    ) as { modules: string[]; dependencies: string[]; digest: number[] },
   );
+  const externalDeps = build.dependencies.filter((d) => !FRAMEWORK.has(d));
+  console.log(`Compiled:           ${build.modules.length} modules`);
+  console.log(`Linked deps:        ${externalDeps.join(", ") || "(framework only)"}`);
 
-  // 2. Build upgrade tx.
   const tx = new Transaction();
   const ticket = tx.moveCall({
     target: "0x2::package::authorize_upgrade",
     arguments: [
       tx.object(deployed.upgradeCap),
       tx.pure.u8(UpgradePolicy.COMPATIBLE),
-      tx.pure.vector("u8", buildOutput.digest),
+      tx.pure.vector("u8", build.digest),
     ],
   });
   const receipt = tx.upgrade({
-    modules: buildOutput.modules,
-    dependencies: buildOutput.dependencies,
+    modules: build.modules,
+    dependencies: build.dependencies,
     package: deployed.packageId,
     ticket,
   });
@@ -87,86 +94,112 @@ async function main() {
     target: "0x2::package::commit_upgrade",
     arguments: [tx.object(deployed.upgradeCap), receipt],
   });
-  tx.setSender(address);
+  tx.setSender(sender);
+  const bytes = await tx.build({ client });
 
-  // 3. Execute.
-  const executed = await client.signAndExecuteTransaction({
-    transaction: tx,
-    signer: keypair,
+  const simulated = await client.simulateTransaction({
+    transaction: bytes,
+    include: { effects: true },
+  });
+  const sim = simulated.Transaction ?? simulated.FailedTransaction;
+  if (!sim?.effects?.status.success) {
+    console.error("Simulation failed:", JSON.stringify(sim?.effects?.status.error, null, 2));
+    process.exit(1);
+  }
+  const gas = sim.effects.gasUsed;
+  const net =
+    BigInt(gas.computationCost) + BigInt(gas.storageCost) - BigInt(gas.storageRebate);
+  console.log(
+    `Estimated cost:     ${formatMist(net)}  (compute ${gas.computationCost}, storage ${gas.storageCost}, rebate ${gas.storageRebate} MIST)`,
+  );
+  if (dryRun) {
+    console.log("\nDry run only — nothing was sent.");
+    return;
+  }
+
+  const executed = await client.executeTransaction({
+    transaction: bytes,
+    signatures: [signWithKeystore(sender, bytes)],
     include: { effects: true },
   });
   const result = executed.Transaction ?? executed.FailedTransaction;
-
-  if (!result?.status.success) {
-    console.error("Upgrade failed:", result?.status.error);
+  if (!result?.effects?.status.success) {
+    console.error("Upgrade failed:", JSON.stringify(result?.effects?.status.error, null, 2));
     process.exit(1);
   }
+  await client.waitForTransaction({ digest: result.digest });
 
-  // 4. Extract the new packageId. Over gRPC a published package shows up in
-  // effects as a created `PackageWrite` — the gRPC counterpart of JSON-RPC's
-  // `objectChanges` entry with `type: "published"`.
-  const newPackageId = (result.effects?.changedObjects ?? []).find(
+  // Over gRPC a published package appears in effects as a created PackageWrite.
+  const newPackageId = result.effects.changedObjects.find(
     (c) => c.idOperation === "Created" && c.outputState === "PackageWrite",
   )?.objectId;
   if (!newPackageId) {
-    console.error("No new package id among the tx's created objects — aborting.");
+    console.error(`No new package among the created objects of ${result.digest} — aborting.`);
     process.exit(1);
   }
 
-  const updated = {
+  const upgraded: Deployment = {
     ...deployed,
     packageId: newPackageId,
-    // originalPackageId is preserved verbatim from the existing file.
     previousPackageId: deployed.packageId,
     lastUpgradeAt: new Date().toISOString(),
     lastUpgradeTxDigest: result.digest,
+    ...(externalDeps.length
+      ? { walrusDependency: await labelWalrusDeps(network, externalDeps) }
+      : {}),
   };
+  const logged = await syncWhenIndexed(upgraded);
+  const latest = logged.packageHistory?.at(-1);
+  if (latest && note) latest.note = note;
+  writeDeployment(logged);
+  renderPackageLog();
 
-  writeFileSync(DEPLOYED_JSON, JSON.stringify(updated, null, 2) + "\n");
-  console.log(`\nUpgraded. New packageId: ${newPackageId}`);
-  console.log(`Original (stable):       ${deployed.originalPackageId}`);
-  console.log(`Wrote ${DEPLOYED_JSON}`);
-
-  // Mirror packageId into apps/builder/.env.local so the dev server picks up
-  // the new id without a manual paste step. originalPackageId never changes
-  // — only the bumped packageId is written here.
-  const envPath = resolve(import.meta.dir, "../../../apps/builder/.env.local");
-  const envKey = `NEXT_PUBLIC_PACKAGE_ID_${NETWORK.toUpperCase()}`;
-  const wrote = upsertEnvVar(envPath, envKey, newPackageId);
-  console.log(`Wrote env:               ${envPath} :: ${envKey} (${wrote})`);
+  const envKey = `NEXT_PUBLIC_PACKAGE_ID_${network.toUpperCase()}`;
+  console.log(`\nUpgraded to v${latest?.version}: ${newPackageId}`);
+  console.log(`Tx:                 ${result.digest}`);
+  console.log(`Modules added:      ${latest?.modulesAdded?.join(", ") || "—"}`);
+  console.log(`Wrote deployed.${network}.json, PACKAGES.md`);
+  console.log(`Env:                ${envKey} (${upsertEnvVar(BUILDER_ENV, envKey, newPackageId)})`);
 }
 
-function upsertEnvVar(envPath: string, key: string, value: string): string {
-  if (!existsSync(envPath)) {
-    writeFileSync(envPath, `${key}=${value}\n`);
-    return "missing-file → created";
+/** The GraphQL indexer trails execution by a few seconds. */
+async function syncWhenIndexed(d: Deployment): Promise<Deployment> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      return await syncPackageHistory(d);
+    } catch (err) {
+      if (attempt === 19) throw err;
+      await new Promise((r) => setTimeout(r, 3_000));
+    }
   }
-  const original = readFileSync(envPath, "utf-8");
-  const re = new RegExp(`^${key}=.*$`, "m");
-  if (re.test(original)) {
-    writeFileSync(envPath, original.replace(re, `${key}=${value}`));
-    return "updated";
-  }
-  const suffix = original.endsWith("\n") ? "" : "\n";
-  writeFileSync(envPath, `${original}${suffix}${key}=${value}\n`);
-  return "appended";
+  throw new Error("unreachable");
 }
 
-// -----------------------------------------------------------------------------
-
-function loadDeployerKeypair(): Ed25519Keypair {
-  const privKey = process.env.SUI_DEPLOYER_PRIVATE_KEY;
-  if (!privKey) {
-    console.error(
-      "SUI_DEPLOYER_PRIVATE_KEY required for upgrade (needs to own the UpgradeCap).",
-    );
-    process.exit(1);
+async function labelWalrusDeps(
+  network: Network,
+  ids: string[],
+): Promise<{ walrus: string; wal: string; gitRev: string }> {
+  let walrus = "";
+  let wal = "";
+  for (const id of ids) {
+    if (await hasModule(network, id, "wal")) wal = id;
+    else walrus = id;
   }
-  const { secretKey } = decodeSuiPrivateKey(privKey);
-  return Ed25519Keypair.fromSecretKey(secretKey);
+  return { walrus, wal, gitRev: WALRUS_GIT_REV };
 }
 
-// -----------------------------------------------------------------------------
+async function hasModule(network: Network, packageId: string, module: string): Promise<boolean> {
+  const res = await fetch(`https://graphql.${network}.sui.io/graphql`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      query: `query($id: SuiAddress!, $m: String!) { package(address: $id) { module(name: $m) { name } } }`,
+      variables: { id: packageId, m: module },
+    }),
+  });
+  const json = (await res.json()) as { data?: { package?: { module?: { name: string } | null } } };
+  return !!json.data?.package?.module;
+}
 
 main().catch((err) => {
   console.error(err);

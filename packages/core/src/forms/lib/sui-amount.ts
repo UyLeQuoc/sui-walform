@@ -21,3 +21,27 @@ export function formatSui(mist: bigint): string {
   const fracStr = frac.toString().padStart(9, '0').replace(/0+$/, '');
   return `${whole.toString()}.${fracStr}`;
 }
+
+/** WAL has the same 9 decimals as SUI (1 WAL = 1e9 FROST). */
+export function walToFrost(wal: number): bigint {
+  return suiToMist(wal);
+}
+
+export function formatWal(frost: bigint): string {
+  return formatSui(frost);
+}
+
+/**
+ * Compact display of a 9-decimal amount: at most `maxDecimals` decimals,
+ * trailing zeros trimmed (0.992792098 → 0.9928). Pair it with `formatSui` /
+ * `formatWal` in a title when the exact value matters.
+ */
+export function formatAmountShort(raw: bigint, maxDecimals = 4): string {
+  if (raw === 0n) return '0';
+  const unit = 10n ** BigInt(9 - maxDecimals);
+  const rounded = (raw + unit / 2n) / unit;
+  if (rounded === 0n) return `<${(1 / 10 ** maxDecimals).toFixed(maxDecimals)}`;
+  const scale = 10n ** BigInt(maxDecimals);
+  const frac = (rounded % scale).toString().padStart(maxDecimals, '0').replace(/0+$/, '');
+  return frac ? `${rounded / scale}.${frac}` : (rounded / scale).toString();
+}

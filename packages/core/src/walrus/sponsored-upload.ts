@@ -73,5 +73,6 @@ export async function sponsoredQuiltUpload(
     };
   });
 
-  return { quiltBlobId: data.quiltBlobId, files: outFiles };
+  // The sponsor endpoint doesn't report its Blob object, so it can't be shared later.
+  return { quiltBlobId: data.quiltBlobId, files: outFiles, blobObjectId: null };
 }

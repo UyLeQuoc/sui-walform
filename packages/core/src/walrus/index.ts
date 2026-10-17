@@ -4,3 +4,6 @@ export * from './wallet-upload';
 export * from './sponsored-upload';
 export * from './body-pointer';
 export * from './blob-fetch';
+export * from './sponsored-register';
+export * from './walrus-client';
+export * from './form-blobs';

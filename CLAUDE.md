@@ -8,8 +8,8 @@ WalForm — decentralized form builder on Sui. Stack runs on both mainnet (produ
 
 - **Sui Move contracts** (`apps/contracts/sources/*.move`) own form schemas, submissions, allowlists, templates, Kiosk royalty, Seal policies.
 - **Seal** encrypts submission bodies + form schemas client-side, via Mysten's decentralized **committee** key servers behind a hosted aggregator (testnet 3-of-5, keyless; mainnet 5-of-8, **requires an Enoki-issued key sent as `X-API-Key`**). ⚠️ **A ciphertext is bound to the key servers it was encrypted under** — changing `NEXT_PUBLIC_SEAL_KEY_SERVERS_*` breaks every ciphertext written before the change ("Not enough shares"). Retired servers go in `NEXT_PUBLIC_SEAL_LEGACY_KEY_SERVERS_*`; `useSealClient()` encrypts (active only) and `useSealDecryptClient()` returns a **resolver** that picks the client matching each ciphertext. Never merge active + legacy into one `SealClient` — a mixed committee/V1 client decrypts neither.
-- **Wallet model** — every WalForm tx (creator publish/update/close, respondent submit, marketplace clone/buy, Mode B deploy) is signed and paid by the user's connected wallet via dApp Kit's `useSignAndExecuteTransaction`. No app-level transaction sponsorship; Enoki is used only for `registerEnokiWallets` (Google sign-in).
-- **Walrus** is opt-in only (cover images, FILE_UPLOAD, Mode B site shell) — base flow is zero WAL by storing schema + ciphertext inline in Sui objects.
+- **Wallet model** — every WalForm tx (creator publish/update/close, respondent submit, marketplace clone/buy, Mode B deploy) is signed by the user's connected wallet, so the user is always the sender. `useExecuteTransaction` first asks the Enoki gas sponsor (`supabase/functions/sponsor-transaction`, allowlisted Move targets) to pay gas and falls back to wallet-paid gas. Enoki also powers `registerEnokiWallets` (Google sign-in).
+- **Walrus** holds every submission's Seal-encrypted body (the on-chain `Submission` keeps only a `WAL:` pointer) plus attachments, cover images and the Mode B shell. Wallet-paid by default; when the form's creator has funded a `sponsor_pool::SponsorPool`, the pool pays the WAL while the respondent stays the sender — see [`docs/SPONSORSHIP.md`](docs/SPONSORSHIP.md). Either way the submit tx wraps the submission's blobs as `walrus::shared_blob::SharedBlob`s so the creator can extend them (Results → Manage → Walrus storage), independent of any pool.
 - **Frontend** — both apps are **Vite 7 + React 19 + react-router-dom v7 static SPAs** (no SSR, no API routes; everything ships static to Walrus Sites). Tailwind v4 via `@tailwindcss/vite`; fonts via `@fontsource-variable/*` loaded in `packages/core/src/ui/fonts.ts` (CSS vars in `ui/globals.css`); theme via `@teispace/next-themes/client`. `process.env.NEXT_PUBLIC_*` is kept in source and text-replaced at build by `packages/build-config :: nextPublicDefine` (so `core` stays bundler-agnostic). Migrated off Next.js 2026-06-02.
 
 Read [`docs/PRD.md`](docs/PRD.md) for binding architectural decisions (Appendix A is the authoritative log) and [`docs/PROGRESS.md`](docs/PROGRESS.md) for current implementation state + ordered next-up queue.
@@ -21,7 +21,7 @@ Read [`docs/PRD.md`](docs/PRD.md) for binding architectural decisions (Appendix 
 | Workspace | What it is |
 | --- | --- |
 | `apps/builder` | **Vite 7 + react-router-dom v7 SPA** → static `out/` (deploys to Walrus Sites). Entry `index.html` + `src/main.tsx` → `src/router.tsx` (flat routes) → `src/routes/*`. Creator dashboard, authoring canvas, `/forms` list (Drafts / My Forms / Marketplace tabs), Mode A renderer at `/f?formId=…`, Results at `/forms/results?formId=…`. Query-string ids (no dynamic path segments). No server routes — fully static; Walrus writes run browser-side from the user's wallet. |
-| `apps/contracts` | Move 2024 package + publish/upgrade/codegen scripts. `deployed.json` tracks `packageId` (bumps on upgrade) and `originalPackageId` (stays stable — Seal identity namespace). |
+| `apps/contracts` | Move 2024 package (new-style `Move.toml`; depends on Walrus's per-network packages) + publish/upgrade/codegen scripts. `deployed.<network>.json` tracks `packageId` (bumps on upgrade), `originalPackageId` (stable — Seal identity namespace) and the full `packageHistory`, rendered to [`PACKAGES.md`](apps/contracts/PACKAGES.md). `deployed.json` is a legacy mainnet mirror — never read it to decide what to upgrade. |
 | `apps/portal` | Vendored from `MystenLabs/walrus-sites/portal`. **Local dev only** — production uses public `wal.app`. Resolves `{base36}.localhost:8080` to testnet Walrus blobs. |
 | `packages/core` | Single shared library. Imports from any app. Holds shadcn primitives (`src/ui/*`), all forms code (`src/forms/*` — components, hooks, IDB drafts, store), Sui wiring (`src/sui/*` — providers, `useExecuteTransaction` helper, wallet UI, codegen bindings, tx builders), Seal helpers (`src/crypto/*`). |
 | `packages/{eslint-config,prettier-config,tsconfig}` | Shared dev configs. `eslint-config/react` (used by both apps) pins `react.version` (not `'detect'`) — ESLint 10 + eslint-plugin-react 7.37 crash on auto-detect. |
@@ -44,24 +44,29 @@ bun run format                               # prettier write
 # Move contracts
 bun run contracts:test                       # sui move test
 bun run contracts:publish                    # first-time deploy → writes deployed.json
-bun run contracts:upgrade                    # subsequent upgrades — preserves originalPackageId
+SUI_NETWORK=testnet bun run contracts:upgrade --dry-run   # simulate + print cost; drop --dry-run to send (--note "why")
+bun run contracts:package-log                # rebuild packageHistory + PACKAGES.md from chain
+SUI_NETWORK=testnet bun run contracts:sponsor-config      # create/--update the platform SponsorConfig
+bun run packages/core/scripts/smoke-sponsored-upload.ts   # testnet e2e of pool-sponsored submissions (spends test WAL, self-refunds)
+SUI_NETWORK=testnet bun run contracts:referral-config     # after the upgrade adding `referral`: record its types package id
+bun run packages/core/scripts/smoke-referral.ts           # testnet e2e of referral links (see docs/REFERRALS.md)
 bun run contracts:codegen                    # regenerate TS bindings into packages/core/src/sui/gen/
 bun run contracts:setup-public-allowlist     # one-off: shares a global throwaway Allowlist for public submits
 
 # Lower-level Move
 cd apps/contracts && sui move build          # quick compile check (not part of turbo)
-cd apps/contracts && sui move test            # 40+ unit tests across modules
+cd apps/contracts && sui move test            # 83 unit tests across modules
 ```
 
 ## Big-picture architecture
 
 ### Three architectural pillars (they all interact)
 
-1. **User-paid transaction transport (every on-chain action)** — `packages/core/src/sui/use-execute-transaction.ts :: useExecuteTransaction` is the single hook every action goes through. It wraps dApp Kit's `useSignAndExecuteTransaction` with a pinned `chain: 'sui:${network}'`. The user's wallet signs and pays gas. There is NO server-side signing route. Adding a new MoveCall is purely a client-side change to a tx builder under `packages/core/src/sui/tx/*.ts` plus the hook that calls `execute({ transaction })`.
+1. **User-paid transaction transport (every on-chain action)** — `packages/core/src/sui/use-execute-transaction.ts :: useExecuteTransaction` is the single hook every action goes through. It wraps dApp Kit's `useSignAndExecuteTransaction` with a pinned `chain: 'sui:${network}'`. The user's wallet always signs; gas is paid by the Enoki sponsor when it accepts the tx, otherwise by the wallet. There is no server-side *signing* of user txs. Adding a new MoveCall = a tx builder under `packages/core/src/sui/tx/*.ts` + the hook that calls `execute({ transaction })` + **its target in the Enoki allowlist** (`supabase/functions/sponsor-transaction`) — without that it silently falls back to wallet-paid gas, which breaks zero-SUI users.
 
 2. **Source of truth split: IDB ↔ chain** — Drafts live in IndexedDB (`packages/core/src/forms/services/form-db.ts`), surfaced via `useForms()`. My Forms + Marketplace fetch from chain via `useOnChainForms()` / `useMarketplaceTemplates()` / `useFormOnChain()` / `useFormSubmissions()`. After every successful on-chain mutation, callers MUST `await invalidateChain(digest)` (`packages/core/src/sui/use-invalidate-chain.ts`) — it waits for finality then invalidates dApp Kit's `[network]` query key prefix. After publish, `formDb.delete(formId)` clears the draft so it disappears from the Drafts tab. `formDb` mutations dispatch a `walform:forms-changed` window event that `useForms()` listens for.
 
-3. **Two packageId concepts** — `packageId` (current, bumps on every `contracts:upgrade`) is for MoveCall targets. `originalPackageId` (stable across upgrades) is the Seal identity namespace AND the type prefix Sui uses in `objectType`. Use `useActivePackageId()` for tx builders, `useOriginalPackageId()` for `seal.encrypt({packageId})` and for matching object types in `extractPublishIds`. Object types in Sui RPC always use `originalPackageId`, regardless of which version performed the create.
+3. **Two packageId concepts** — `packageId` (current, bumps on every `contracts:upgrade`) is for MoveCall targets. `originalPackageId` (stable across upgrades) is the Seal identity namespace AND the type prefix Sui uses in `objectType`. Use `useActivePackageId()` for tx builders, `useOriginalPackageId()` for `seal.encrypt({packageId})` and for matching object types in `extractPublishIds`. Object types in Sui RPC use `originalPackageId` for types from the original publish, regardless of which version performed the create — but types a later upgrade INTRODUCED are prefixed by the version that introduced them (`sponsor_pool` and `referral` everywhere, `reviewers` on testnet): use `useSponsorTypesPackageId()` / `useReferralTypesPackageId()` / `useReviewersEventPackageId()` for those.
 
 ### Marketplace flow (multi-buyer paid templates)
 

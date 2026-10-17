@@ -1,3 +1,4 @@
+import { normalizeSuiAddress } from '@mysten/sui/utils';
 import type { FormField } from '../../types';
 import type { SubmissionRow } from '../hooks/use-form-submissions';
 import type { DecryptedRow } from '../hooks/use-submission-decryption';
@@ -13,6 +14,17 @@ export interface ExportInput {
   rows: SubmissionRow[];
   decryptedById: Record<string, DecryptedRow>;
   fields: FormField[];
+  /** Submission id → referrer address (normalized ids). */
+  referredBy?: Record<string, string>;
+}
+
+/** Exports gain a `referred_by` column only when the form has referrals. */
+function hasReferrals(input: ExportInput): boolean {
+  return Object.keys(input.referredBy ?? {}).length > 0;
+}
+
+function referrerOf(input: ExportInput, row: SubmissionRow): string | null {
+  return input.referredBy?.[normalizeSuiAddress(row.submissionId)] ?? null;
 }
 
 /**
@@ -36,6 +48,7 @@ export function buildSubmissionsCsv(input: ExportInput): string {
     'submission_id',
     'submitter',
     'submitted_at',
+    ...(hasReferrals(input) ? ['referred_by'] : []),
     ...fields.map((f) => f.label || f.id),
   ];
   const csvRows: string[][] = [header];
@@ -45,6 +58,7 @@ export function buildSubmissionsCsv(input: ExportInput): string {
       row.submissionId,
       row.submitter,
       new Date(row.submittedAtMs).toISOString(),
+      ...(hasReferrals(input) ? [referrerOf(input, row) ?? ''] : []),
       ...fields.map((f) => formatCell(decrypted?.[f.id] ?? ENCRYPTED_PLACEHOLDER)),
     ]);
   }
@@ -71,6 +85,7 @@ export function buildSubmissionsJson(input: ExportInput): string {
       submitter: row.submitter,
       submittedAt: new Date(row.submittedAtMs).toISOString(),
       submittedAtMs: row.submittedAtMs,
+      ...(hasReferrals(input) ? { referredBy: referrerOf(input, row) } : {}),
       encrypted: !decrypted,
       answers,
     };
@@ -95,6 +110,7 @@ export function buildSubmissionsNdjson(input: ExportInput): string {
         submissionId: row.submissionId,
         submitter: row.submitter,
         submittedAt: new Date(row.submittedAtMs).toISOString(),
+        ...(hasReferrals(input) ? { referredBy: referrerOf(input, row) } : {}),
         encrypted: !decrypted,
         answers,
       });
@@ -115,6 +131,7 @@ export function buildSubmissionsMarkdown(input: ExportInput): string {
     'submission_id',
     'submitter',
     'submitted_at',
+    ...(hasReferrals(input) ? ['referred_by'] : []),
     ...fields.map((f) => f.label || f.id),
   ];
   const lines: string[] = [];
@@ -126,6 +143,7 @@ export function buildSubmissionsMarkdown(input: ExportInput): string {
       row.submissionId,
       row.submitter,
       new Date(row.submittedAtMs).toISOString(),
+      ...(hasReferrals(input) ? [referrerOf(input, row) ?? ''] : []),
       ...fields.map((f) => formatCell(decrypted?.[f.id] ?? ENCRYPTED_PLACEHOLDER)),
     ];
     lines.push(`| ${cells.map((c) => escapeMarkdownCell(String(c))).join(' | ')} |`);

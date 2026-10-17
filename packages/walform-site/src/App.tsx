@@ -14,7 +14,8 @@ interface ShellConfig {
 }
 
 function readHashId(): string | null {
-  const m = /^#\/f\/(0x[0-9a-fA-F]+)\/?$/.exec(window.location.hash);
+  // `?ref=…` may follow the id (referral links on a hash route).
+  const m = /^#\/f\/(0x[0-9a-fA-F]+)\/?(?:\?.*)?$/.exec(window.location.hash);
   return m?.[1] ?? null;
 }
 

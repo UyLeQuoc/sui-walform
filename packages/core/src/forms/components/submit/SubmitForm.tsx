@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { useSuiClientContext } from '@mysten/dapp-kit';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { Logo } from '../../../ui/logo';
+import { useReferralTypesPackageId } from '../../../sui/env-network';
 import { NetworkBadge, WalletButton } from '../../../sui/wallet-ui';
 import { WalletConnectModal } from '../../../sui/wallet-ui/WalletConnectModal';
 import type { ExplorerNetwork } from '../../../sui/explorer';
@@ -15,13 +16,18 @@ import { TxSteps } from '../shared/TxSteps';
 import { useFormSubmission } from '../../hooks/use-form-submission';
 import { useFormSubmissions } from '../../hooks/use-form-submissions';
 import { usePrefillFromHash } from '../../hooks/use-prefill-from-hash';
+import { useReferral } from '../../hooks/use-referral';
 import { buildFormAreaStyle } from '../../lib/form-appearance';
 import { getFormFont } from '../../lib/form-fonts';
+import { publicLeaderboardEnabled, referralsEnabled } from '../../lib/referrals';
 import { formatSui } from '../../lib/sui-amount';
 import { cn } from '../../../lib/utils';
 import type { FormOnChainDetail } from '../../hooks/use-form-on-chain';
 import { AccessModeBanner } from './AccessModeBanner';
 import { PrefillBanner } from './PrefillBanner';
+import { PublicReferralLeaderboard } from './PublicReferralLeaderboard';
+import { ReferralBanner } from './ReferralBanner';
+import { SponsoredStorageBanner } from './SponsoredStorageBanner';
 import { ThankYouScreen } from './ThankYouScreen';
 
 interface SubmitFormProps {
@@ -43,7 +49,11 @@ const ACCESS_MODE_LABEL: Record<0 | 1 | 2 | 3, (form: FormOnChainDetail) => stri
  * sign-and-execute) lives in `useFormSubmission`.
  */
 export function SubmitForm({ form }: SubmitFormProps) {
-  const submission = useFormSubmission(form);
+  const referral = useReferral(form);
+  const invitesOn = !!useReferralTypesPackageId() && referralsEnabled(form.schema.settings);
+  const submission = useFormSubmission(form, {
+    referrerSubmissionId: referral.creditSubmissionId,
+  });
   const {
     account,
     allowlistQuery,
@@ -127,6 +137,7 @@ export function SubmitForm({ form }: SubmitFormProps) {
               form={form}
               network={network}
               variant={{ kind: 'just-submitted', digest: submitted.digest }}
+              submissionId={submitted.submissionId}
               submitter={submitted.submitter}
               submittedAtMs={submitted.submittedAtMs}
               myRow={myPriorRow}
@@ -137,6 +148,7 @@ export function SubmitForm({ form }: SubmitFormProps) {
               form={form}
               network={network}
               variant={{ kind: 'already-submitted', submissionId: myPriorRow.submissionId }}
+              submissionId={myPriorRow.submissionId}
               submitter={myPriorRow.submitter}
               submittedAtMs={myPriorRow.submittedAtMs}
               myRow={myPriorRow}
@@ -152,6 +164,8 @@ export function SubmitForm({ form }: SubmitFormProps) {
                 tokenGate={tokenGate}
                 accountAddress={account?.address}
               />
+              <SponsoredStorageBanner form={form} />
+              <ReferralBanner referral={referral} invitesOn={invitesOn} />
               <FormPreview
                 schema={form.schema}
                 onSubmit={submission.submit}
@@ -162,6 +176,9 @@ export function SubmitForm({ form }: SubmitFormProps) {
             </>
           )}
         </div>
+        {publicLeaderboardEnabled(form.schema.settings) && (
+          <PublicReferralLeaderboard formId={form.formObjectId} viewer={account?.address} />
+        )}
         {isSubmitting && !submitted && txSteps.steps.length > 0 && (
           <div className="bg-card mt-4 w-full max-w-2xl rounded-xl border p-4 shadow-sm">
             <p className="text-foreground mb-3 text-xs font-medium tracking-wide uppercase">
